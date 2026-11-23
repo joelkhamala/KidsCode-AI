@@ -95,7 +95,7 @@ export const socialAPI = {
   // Leaderboard
   getLeaderboard: (timeframe = 'all', limit = 50) => 
     api.get('/social/leaderboard', { params: { timeframe, limit } }),
-  getFriendsLeaderboard: () => api.get('/social/leaderboard/friends'),
+  getFriendsLeaderboard: (timeframe = 'all') => api.get('/social/leaderboard/friends', { params: { timeframe } }),
   updateLeaderboardCache: () => api.post('/social/leaderboard/update'),
   getUserRank: () => api.get('/social/rank'),
   

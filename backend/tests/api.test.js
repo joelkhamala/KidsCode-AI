@@ -588,3 +588,70 @@ test('journey: an earned stage or Legend level is not lost after one wrong answe
   assert.equal(j.rank, 'Legend 2');
   assert.equal(j.stages.every((s) => s.skills.every((k) => k.unlocked)), true);
 });
+
+// ---- Friends & leaderboard (Social page) -------------------------------------------
+
+test('social: friends, leaderboards and activity come from real learning records', async () => {
+  const dbRun = (sql, params = []) => new Promise((resolve, reject) => getDb().run(sql, params, (e) => (e ? reject(e) : resolve())));
+  const mk = async (username) => {
+    const r = await http('POST', '/api/register', { username, email: `${username}@example.com`, password: 'secret123', age: 14 });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    return { token: r.body.token, id: r.body.user.id };
+  };
+  const neema = await mk('neema_social');
+  const tumaini = await mk('tumaini_social');
+
+  // Real progress: Neema finishes a lesson today and earns AI Coach XP; Tumaini has older XP only.
+  const lesson = await dbGet('SELECT id, module_id, title FROM lessons ORDER BY id LIMIT 1');
+  await dbRun('INSERT INTO progress (user_id, module_id, lesson_id, completed, score) VALUES (?, ?, ?, 1, 80)', [neema.id, lesson.module_id, lesson.id]);
+  await dbRun("INSERT INTO progress (user_id, module_id, lesson_id, completed, score) VALUES (?, ?, 'quiz_1', 1, 100)", [neema.id, lesson.module_id]);
+  await dbRun("INSERT INTO ai_activities (user_id, language, concept_id, bloom_level, activity_type, content_json, source, status, correct, xp_earned, completed_at) VALUES (?, 'python', 'loops', 'apply', 'write_code', '{}', 'offline', 'done', 1, 40, datetime('now'))", [neema.id]);
+  await dbRun("INSERT INTO ai_mastery (user_id, language, concept_id, bloom_level, p_known, attempts, correct, mastered_at) VALUES (?, 'python', 'loops', 'apply', 0.95, 3, 3, datetime('now'))", [neema.id]);
+  await dbRun('UPDATE users SET xp = 160 WHERE id = ?', [neema.id]);
+  await dbRun('UPDATE users SET xp = 900 WHERE id = ?', [tumaini.id]);
+
+  // All time: Tumaini leads; lessons count ignores the quiz row.
+  const allTime = await http('GET', '/api/social/leaderboard?timeframe=all', null, neema.token);
+  assert.equal(allTime.status, 200, JSON.stringify(allTime.body));
+  const t = allTime.body.leaderboard.find((u) => u.id === tumaini.id);
+  const n = allTime.body.leaderboard.find((u) => u.id === neema.id);
+  assert.ok(t.rank < n.rank);
+  assert.equal(n.lessons, 1);
+  assert.equal(n.isYou, true);
+  assert.equal(n.level, 1);
+  assert.equal(allTime.body.you.rank, n.rank);
+  assert.equal(n.email, undefined, 'no personal data on the leaderboard');
+
+  // This week: only XP earned this week counts, so Neema is ahead of Tumaini (who is left out).
+  const week = await http('GET', '/api/social/leaderboard?timeframe=week', null, neema.token);
+  const nw = week.body.leaderboard.find((u) => u.id === neema.id);
+  assert.ok(nw.xp >= 40 + 120, `week XP ${nw.xp}`); // Coach answer + lesson score
+  assert.equal(week.body.leaderboard.some((u) => u.id === tumaini.id), false);
+
+  // Friend request -> accept -> both see each other; searching shows the right state.
+  const search = await http('GET', '/api/social/search?query=tumaini_soc', null, neema.token);
+  assert.equal(search.body.users[0].friendshipStatus, 'none');
+  assert.equal((await http('POST', '/api/social/friends/request', { friendId: tumaini.id }, neema.token)).body.status, 'pending');
+  const incoming = await http('GET', '/api/social/search?query=neema_soc', null, tumaini.token);
+  assert.equal(incoming.body.users[0].friendshipStatus, 'incoming');
+  const reqs = await http('GET', '/api/social/friends/requests', null, tumaini.token);
+  assert.equal(reqs.body.requests[0].from.id, neema.id);
+  assert.equal((await http('POST', `/api/social/friends/accept/${reqs.body.requests[0].id}`, null, tumaini.token)).status, 200);
+  const friends = await http('GET', '/api/social/friends', null, neema.token);
+  assert.equal(friends.body.friends[0].id, tumaini.id);
+  assert.ok(friends.body.friends[0].friendsSince);
+
+  // Friends leaderboard and feed show real events for me and my friend.
+  const fl = await http('GET', '/api/social/leaderboard/friends', null, tumaini.token);
+  assert.deepEqual(fl.body.leaderboard.map((u) => u.id).sort(), [neema.id, tumaini.id].sort());
+  const feed = await http('GET', '/api/social/feed', null, tumaini.token);
+  const types = feed.body.feed.filter((e) => e.userId === neema.id).map((e) => e.type);
+  assert.ok(types.includes('lesson'), JSON.stringify(feed.body.feed));
+  assert.ok(types.includes('skill'));
+
+  // Remove, then add again (used to fail because the old request row was still there).
+  assert.equal((await http('DELETE', `/api/social/friends/${tumaini.id}`, null, neema.token)).status, 200);
+  assert.equal((await http('POST', '/api/social/friends/request', { friendId: tumaini.id }, neema.token)).body.status, 'pending');
+  // If they also ask me, it simply becomes a friendship.
+  assert.equal((await http('POST', '/api/social/friends/request', { friendId: neema.id }, tumaini.token)).body.status, 'accepted');
+});
