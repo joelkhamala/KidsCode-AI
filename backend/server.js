@@ -10,6 +10,7 @@ const { getDb, initializeDatabase } = require('./database');
 const { runJavaScript } = require('./sandbox/runJs');
 const lessonChallenges = require('./lessonChallenges');
 const achievements = require('./achievements');
+const { createSocialRouter } = require('./social');
 const aiEngine = require('./ai');
 
 const app = express();
@@ -581,7 +582,7 @@ app.get('/api/parent/children', authenticateToken, requireParentAccount, (req, r
   db.all(
     `SELECT u.id, u.username, u.display_name as displayName, u.age, u.avatar_url as avatarUrl, 
             u.xp, u.streak, u.last_active as lastActive, u.created_at as createdAt,
-            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1) as completedLessons
+            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedLessons
      FROM users u
      INNER JOIN parent_child_relationships pcr ON u.id = pcr.child_id
      WHERE pcr.parent_id = ?
@@ -605,7 +606,7 @@ app.get('/api/parent/children/:childId', authenticateToken, requireParentAccount
 
   db.get(
     `SELECT u.*, 
-            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1) as completedLessons,
+            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedLessons,
             (SELECT COUNT(*) FROM lessons) as totalLessons
      FROM users u
      WHERE u.id = ?`,
@@ -830,8 +831,8 @@ app.get('/api/parent/dashboard', authenticateToken, requireParentAccount, (req, 
   // Get all children with their stats
   db.all(
     `SELECT u.id, u.username, u.display_name as displayName, u.xp, u.streak, u.last_active as lastActive,
-            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1) as completedLessons,
-            (SELECT AVG(score) FROM progress WHERE user_id = u.id AND completed = 1) as avgScore
+            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedLessons,
+            (SELECT AVG(score) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as avgScore
      FROM users u
      INNER JOIN parent_child_relationships pcr ON u.id = pcr.child_id
      WHERE pcr.parent_id = ?`,
@@ -939,7 +940,7 @@ app.get('/api/teacher/students', authenticateToken, requireTeacherAccount, (req,
     `SELECT u.id, u.username, u.display_name as displayName, u.age, u.avatar_url as avatarUrl, 
             u.xp, u.streak, u.last_active as lastActive, u.created_at as createdAt,
             tsr.class_name as className, tsr.enrollment_date as enrollmentDate,
-            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1) as completedLessons
+            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedLessons
      FROM users u
      INNER JOIN teacher_student_relationships tsr ON u.id = tsr.student_id
      WHERE tsr.teacher_id = ? AND tsr.status = 'active'
@@ -963,7 +964,7 @@ app.get('/api/teacher/students/:studentId', authenticateToken, requireTeacherAcc
 
   db.get(
     `SELECT u.*, 
-            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1) as completedLessons,
+            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedLessons,
             (SELECT COUNT(*) FROM lessons) as totalLessons
      FROM users u
      WHERE u.id = ?`,
@@ -1071,8 +1072,8 @@ app.get('/api/teacher/dashboard', authenticateToken, requireTeacherAccount, (req
   // Get all students with their stats
   db.all(
     `SELECT u.id, u.username, u.display_name as displayName, u.xp, u.streak, u.last_active as lastActive,
-            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1) as completedLessons,
-            (SELECT AVG(score) FROM progress WHERE user_id = u.id AND completed = 1) as avgScore
+            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedLessons,
+            (SELECT AVG(score) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as avgScore
      FROM users u
      INNER JOIN teacher_student_relationships tsr ON u.id = tsr.student_id
      WHERE tsr.teacher_id = ? AND tsr.status = 'active'`,
@@ -1393,9 +1394,9 @@ app.get('/api/adult/curriculum', authenticateToken, requireAdultLearnerAccount, 
           // Get user stats
           db.get(
             `SELECT 
-              (SELECT COUNT(*) FROM progress WHERE user_id = ? AND completed = 1) as completedLessons,
+              (SELECT COUNT(*) FROM progress WHERE user_id = ? AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedLessons,
               (SELECT COUNT(*) FROM lessons WHERE module_id IN (${moduleIds})) as totalLessons,
-              (SELECT AVG(score) FROM progress WHERE user_id = ? AND completed = 1) as averageScore,
+              (SELECT AVG(score) FROM progress WHERE user_id = ? AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as averageScore,
               (SELECT total_hours_logged FROM adult_learner_profiles WHERE user_id = ?) as hoursLogged
             `,
             [userId, userId, userId],
@@ -1530,10 +1531,10 @@ app.get('/api/adult/progress', authenticateToken, requireAdultLearnerAccount, (r
 
   db.get(
     `SELECT 
-      (SELECT COUNT(*) FROM progress WHERE user_id = ? AND completed = 1) as completedLessons,
+      (SELECT COUNT(*) FROM progress WHERE user_id = ? AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedLessons,
       (SELECT COUNT(*) FROM lessons WHERE module_id >= 101) as totalLessons,
-      (SELECT AVG(score) FROM progress WHERE user_id = ? AND completed = 1) as averageScore,
-      (SELECT COUNT(DISTINCT module_id) FROM progress WHERE user_id = ? AND completed = 1) as completedModules,
+      (SELECT AVG(score) FROM progress WHERE user_id = ? AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as averageScore,
+      (SELECT COUNT(DISTINCT module_id) FROM progress WHERE user_id = ? AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedModules,
       (SELECT total_hours_logged FROM adult_learner_profiles WHERE user_id = ?) as hoursLogged,
       (SELECT certification_eligible FROM adult_learner_profiles WHERE user_id = ?) as certificationEligible
     `,
@@ -1580,7 +1581,7 @@ app.get('/api/adult/certificate/eligibility', authenticateToken, requireAdultLea
 
   db.get(
     `SELECT 
-      (SELECT COUNT(*) FROM progress WHERE user_id = ? AND completed = 1) as completedLessons,
+      (SELECT COUNT(*) FROM progress WHERE user_id = ? AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedLessons,
       (SELECT COUNT(*) FROM lessons WHERE module_id >= 101) as totalLessons,
       (SELECT AVG(percentage) FROM assessment_results WHERE user_id = ?) as averageScore,
       (SELECT total_hours_logged FROM adult_learner_profiles WHERE user_id = ?) as hoursLogged
@@ -1629,7 +1630,7 @@ app.post('/api/adult/certificate', authenticateToken, requireAdultLearnerAccount
   // Check eligibility first
   db.get(
     `SELECT 
-      (SELECT COUNT(*) FROM progress WHERE user_id = ? AND completed = 1) as completedLessons,
+      (SELECT COUNT(*) FROM progress WHERE user_id = ? AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedLessons,
       (SELECT COUNT(*) FROM lessons WHERE module_id >= 101) as totalLessons,
       (SELECT AVG(percentage) FROM assessment_results WHERE user_id = ?) as averageScore,
       (SELECT total_hours_logged FROM adult_learner_profiles WHERE user_id = ?) as hoursLogged
@@ -1984,7 +1985,7 @@ app.post('/api/quiz/submit', authenticateToken, (req, res) => {
       
       db.get(
         `SELECT COUNT(*) as completed FROM progress 
-         WHERE user_id = ? AND module_id = ? AND completed = 1`,
+         WHERE user_id = ? AND module_id = ? AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%'`,
         [userId, moduleId],
         (err, completedResult) => {
           if (err) return res.status(500).json({ error: 'Failed to validate quiz eligibility' });
@@ -2222,7 +2223,7 @@ function updateModuleCompletion(userId, moduleId, db) {
       
       db.get(
         `SELECT COUNT(*) as completed FROM progress 
-         WHERE user_id = ? AND module_id = ? AND completed = 1`,
+         WHERE user_id = ? AND module_id = ? AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%'`,
         [userId, moduleId],
         (err, completedResult) => {
           if (err) return;
@@ -2268,7 +2269,7 @@ function updateModuleCompletion(userId, moduleId, db) {
 function updateLeaderboardCache(userId, db) {
   db.get(
     `SELECT u.*, 
-            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1) as lessons_completed,
+            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as lessons_completed,
             (SELECT COUNT(*) FROM user_achievements WHERE user_id = u.id) as achievements_count
      FROM users u WHERE u.id = ?`,
     [userId],
@@ -2831,532 +2832,10 @@ app.get('/api/leaderboard', (req, res) => {
 
 
 // =====================
-// SOCIAL FEATURES - FRIENDS SYSTEM
+// SOCIAL FEATURES - friends, leaderboards and activity feed (see social.js)
+// Built from the real learning records so the numbers match the rest of KidsCode.
 // =====================
-
-// Search for users to add as friends
-app.get('/api/social/search', authenticateToken, (req, res) => {
-  const { query } = req.query;
-  const currentUserId = req.user.id;
-  
-  if (!query || query.length < 2) {
-    return res.status(400).json({ error: 'Search query must be at least 2 characters' });
-  }
-
-  const db = getDb();
-  
-  // Search for child accounts only (not parents or teachers)
-  db.all(
-    `SELECT id, username, display_name as displayName, avatar_url as avatarUrl, xp, streak
-     FROM users 
-     WHERE account_type = 'child' 
-     AND id != ? 
-     AND (username LIKE ? OR display_name LIKE ?)
-     LIMIT 20`,
-    [currentUserId, `%${query}%`, `%${query}%`],
-    (err, users) => {
-      if (err) {
-        console.error('Search error:', err);
-        return res.status(500).json({ error: 'Search failed' });
-      }
-
-      // Check friendship status for each user
-      const userIds = users.map(u => u.id);
-      if (userIds.length === 0) {
-        return res.json({ users: [] });
-      }
-
-      db.all(
-        `SELECT friend_id, status FROM friendships 
-         WHERE user_id = ? AND friend_id IN (${userIds.join(',')})`,
-        [currentUserId],
-        (err, friendships) => {
-          const friendshipMap = {};
-          (friendships || []).forEach(f => {
-            friendshipMap[f.friend_id] = f.status;
-          });
-
-          const results = users.map(user => ({
-            ...user,
-            friendshipStatus: friendshipMap[user.id] || 'none'
-          }));
-
-          res.json({ users: results });
-        }
-      );
-    }
-  );
-});
-
-// Send friend request
-app.post('/api/social/friends/request', authenticateToken, (req, res) => {
-  const { friendId } = req.body;
-  const userId = req.user.id;
-
-  if (!friendId) {
-    return res.status(400).json({ error: 'Friend ID required' });
-  }
-
-  if (friendId === userId) {
-    return res.status(400).json({ error: 'Cannot add yourself as a friend' });
-  }
-
-  const db = getDb();
-
-  // Check if friend exists and is a child account
-  db.get('SELECT id, account_type FROM users WHERE id = ?', [friendId], (err, friend) => {
-    if (err || !friend) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    if (friend.account_type !== 'child') {
-      return res.status(400).json({ error: 'Can only add child accounts as friends' });
-    }
-
-    // Check if friendship already exists
-    db.get(
-      'SELECT * FROM friendships WHERE user_id = ? AND friend_id = ?',
-      [userId, friendId],
-      (err, existing) => {
-        if (existing) {
-          return res.status(400).json({ error: 'Friend request already sent or friendship exists' });
-        }
-
-        // Create friend request
-        db.run(
-          'INSERT INTO friend_requests (from_user_id, to_user_id, status) VALUES (?, ?, ?)',
-          [userId, friendId, 'pending'],
-          function(err) {
-            if (err) {
-              console.error('Failed to create friend request:', err);
-              return res.status(500).json({ error: 'Failed to send friend request' });
-            }
-
-            // Also create pending friendship entry
-            db.run(
-              'INSERT INTO friendships (user_id, friend_id, status) VALUES (?, ?, ?)',
-              [userId, friendId, 'pending'],
-              (err) => {
-                if (err) {
-                  console.error('Failed to create friendship:', err);
-                }
-
-                res.json({ 
-                  success: true, 
-                  message: 'Friend request sent!',
-                  requestId: this.lastID
-                });
-              }
-            );
-          }
-        );
-      }
-    );
-  });
-});
-
-// Get friend requests (received)
-app.get('/api/social/friends/requests', authenticateToken, (req, res) => {
-  const userId = req.user.id;
-  const db = getDb();
-
-  db.all(
-    `SELECT fr.id, fr.from_user_id as fromUserId, fr.message, fr.created_at as createdAt,
-            u.username, u.display_name as displayName, u.avatar_url as avatarUrl, u.xp, u.streak
-     FROM friend_requests fr
-     INNER JOIN users u ON fr.from_user_id = u.id
-     WHERE fr.to_user_id = ? AND fr.status = 'pending'
-     ORDER BY fr.created_at DESC`,
-    [userId],
-    (err, requests) => {
-      if (err) {
-        console.error('Failed to fetch friend requests:', err);
-        return res.status(500).json({ error: 'Failed to load friend requests' });
-      }
-
-      res.json({ requests: requests || [] });
-    }
-  );
-});
-
-// Accept friend request
-app.post('/api/social/friends/accept/:requestId', authenticateToken, (req, res) => {
-  const requestId = req.params.requestId;
-  const userId = req.user.id;
-  const db = getDb();
-
-  // Get the friend request
-  db.get(
-    'SELECT * FROM friend_requests WHERE id = ? AND to_user_id = ? AND status = ?',
-    [requestId, userId, 'pending'],
-    (err, request) => {
-      if (err || !request) {
-        return res.status(404).json({ error: 'Friend request not found' });
-      }
-
-      const fromUserId = request.from_user_id;
-
-      // Update friend request status
-      db.run(
-        'UPDATE friend_requests SET status = ?, responded_at = datetime("now") WHERE id = ?',
-        ['accepted', requestId],
-        (err) => {
-          if (err) {
-            console.error('Failed to update friend request:', err);
-            return res.status(500).json({ error: 'Failed to accept friend request' });
-          }
-
-          // Update friendship status (from sender's side)
-          db.run(
-            'UPDATE friendships SET status = ?, accepted_at = datetime("now") WHERE user_id = ? AND friend_id = ?',
-            ['accepted', fromUserId, userId],
-            (err) => {
-              // Create reciprocal friendship (receiver's side)
-              db.run(
-                'INSERT INTO friendships (user_id, friend_id, status, accepted_at) VALUES (?, ?, ?, datetime("now"))',
-                [userId, fromUserId, 'accepted'],
-                (err) => {
-                  if (err) {
-                    console.error('Failed to create reciprocal friendship:', err);
-                  }
-
-                  // Create social activity for both users
-                  db.run(
-                    'INSERT INTO social_activities (user_id, activity_type, activity_data) VALUES (?, ?, ?)',
-                    [userId, 'friend_added', JSON.stringify({ friendId: fromUserId })],
-                    () => {}
-                  );
-
-                  db.run(
-                    'INSERT INTO social_activities (user_id, activity_type, activity_data) VALUES (?, ?, ?)',
-                    [fromUserId, 'friend_added', JSON.stringify({ friendId: userId })],
-                    () => {}
-                  );
-
-                  res.json({ 
-                    success: true, 
-                    message: 'Friend request accepted!' 
-                  });
-                }
-              );
-            }
-          );
-        }
-      );
-    }
-  );
-});
-
-// Reject friend request
-app.post('/api/social/friends/reject/:requestId', authenticateToken, (req, res) => {
-  const requestId = req.params.requestId;
-  const userId = req.user.id;
-  const db = getDb();
-
-  db.run(
-    'UPDATE friend_requests SET status = ?, responded_at = datetime("now") WHERE id = ? AND to_user_id = ?',
-    ['rejected', requestId, userId],
-    function(err) {
-      if (err || this.changes === 0) {
-        return res.status(404).json({ error: 'Friend request not found' });
-      }
-
-      // Delete the pending friendship entry
-      db.run(
-        'DELETE FROM friendships WHERE user_id IN (SELECT from_user_id FROM friend_requests WHERE id = ?) AND friend_id = ? AND status = ?',
-        [requestId, userId, 'pending'],
-        () => {}
-      );
-
-      res.json({ success: true, message: 'Friend request rejected' });
-    }
-  );
-});
-
-// Get friends list
-app.get('/api/social/friends', authenticateToken, (req, res) => {
-  const userId = req.user.id;
-  const db = getDb();
-
-  db.all(
-    `SELECT u.id, u.username, u.display_name as displayName, u.avatar_url as avatarUrl, 
-            u.xp, u.streak, u.last_active as lastActive,
-            f.accepted_at as friendsSince,
-            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1) as completedLessons
-     FROM friendships f
-     INNER JOIN users u ON f.friend_id = u.id
-     WHERE f.user_id = ? AND f.status = 'accepted'
-     ORDER BY f.accepted_at DESC`,
-    [userId],
-    (err, friends) => {
-      if (err) {
-        console.error('Failed to fetch friends:', err);
-        return res.status(500).json({ error: 'Failed to load friends' });
-      }
-
-      res.json({ friends: friends || [] });
-    }
-  );
-});
-
-// Remove friend
-app.delete('/api/social/friends/:friendId', authenticateToken, (req, res) => {
-  const friendId = req.params.friendId;
-  const userId = req.user.id;
-  const db = getDb();
-
-  // Delete both sides of the friendship
-  db.run(
-    'DELETE FROM friendships WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)',
-    [userId, friendId, friendId, userId],
-    function(err) {
-      if (err) {
-        console.error('Failed to remove friend:', err);
-        return res.status(500).json({ error: 'Failed to remove friend' });
-      }
-
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Friendship not found' });
-      }
-
-      res.json({ success: true, message: 'Friend removed' });
-    }
-  );
-});
-
-// Get friend's activity feed
-app.get('/api/social/friends/:friendId/activity', authenticateToken, (req, res) => {
-  const friendId = req.params.friendId;
-  const userId = req.user.id;
-  const db = getDb();
-
-  // Verify friendship
-  db.get(
-    'SELECT * FROM friendships WHERE user_id = ? AND friend_id = ? AND status = ?',
-    [userId, friendId, 'accepted'],
-    (err, friendship) => {
-      if (err || !friendship) {
-        return res.status(403).json({ error: 'Not friends with this user' });
-      }
-
-      // Get friend's recent activities
-      db.all(
-        `SELECT sa.*, u.username, u.display_name as displayName, u.avatar_url as avatarUrl
-         FROM social_activities sa
-         INNER JOIN users u ON sa.user_id = u.id
-         WHERE sa.user_id = ? AND sa.is_public = 1
-         ORDER BY sa.created_at DESC
-         LIMIT 20`,
-        [friendId],
-        (err, activities) => {
-          if (err) {
-            console.error('Failed to fetch activities:', err);
-            return res.status(500).json({ error: 'Failed to load activities' });
-          }
-
-          res.json({ activities: activities || [] });
-        }
-      );
-    }
-  );
-});
-
-// =====================
-// SOCIAL FEATURES - LEADERBOARD
-// =====================
-
-// Get global leaderboard
-app.get('/api/social/leaderboard', authenticateToken, (req, res) => {
-  const { timeframe = 'all', limit = 50 } = req.query;
-  const db = getDb();
-
-  let query = `
-    SELECT u.id, u.username, u.display_name as displayName, u.avatar_url as avatarUrl,
-           u.xp, u.streak, u.last_active as lastActive,
-           (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1) as completedLessons,
-           (SELECT COUNT(*) FROM user_achievements WHERE user_id = u.id) as achievementsCount
-    FROM users u
-    WHERE u.account_type = 'child'
-  `;
-
-  // Add timeframe filter
-  if (timeframe === 'week') {
-    query += ` AND u.last_active >= date('now', '-7 days')`;
-  } else if (timeframe === 'month') {
-    query += ` AND u.last_active >= date('now', '-30 days')`;
-  }
-
-  query += ` ORDER BY u.xp DESC LIMIT ?`;
-
-  db.all(query, [parseInt(limit)], (err, users) => {
-    if (err) {
-      console.error('Failed to fetch leaderboard:', err);
-      return res.status(500).json({ error: 'Failed to load leaderboard' });
-    }
-
-    // Add rank positions
-    const leaderboard = users.map((user, index) => ({
-      ...user,
-      rank: index + 1
-    }));
-
-    res.json({ leaderboard });
-  });
-});
-
-// Get friends leaderboard
-app.get('/api/social/leaderboard/friends', authenticateToken, (req, res) => {
-  const userId = req.user.id;
-  const db = getDb();
-
-  // Get user's friends and their stats
-  db.all(
-    `SELECT u.id, u.username, u.display_name as displayName, u.avatar_url as avatarUrl,
-            u.xp, u.streak, u.last_active as lastActive,
-            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1) as completedLessons,
-            (SELECT COUNT(*) FROM user_achievements WHERE user_id = u.id) as achievementsCount
-     FROM users u
-     INNER JOIN friendships f ON u.id = f.friend_id
-     WHERE f.user_id = ? AND f.status = 'accepted'
-     ORDER BY u.xp DESC`,
-    [userId],
-    (err, friends) => {
-      if (err) {
-        console.error('Failed to fetch friends leaderboard:', err);
-        return res.status(500).json({ error: 'Failed to load friends leaderboard' });
-      }
-
-      // Get current user's stats
-      db.get(
-        `SELECT u.id, u.username, u.display_name as displayName, u.avatar_url as avatarUrl,
-                u.xp, u.streak, u.last_active as lastActive,
-                (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1) as completedLessons,
-                (SELECT COUNT(*) FROM user_achievements WHERE user_id = u.id) as achievementsCount
-         FROM users u
-         WHERE u.id = ?`,
-        [userId],
-        (err, currentUser) => {
-          // Combine and sort
-          const allUsers = [...friends, currentUser].sort((a, b) => b.xp - a.xp);
-          
-          // Add rank positions
-          const leaderboard = allUsers.map((user, index) => ({
-            ...user,
-            rank: index + 1,
-            isCurrentUser: user.id === userId
-          }));
-
-          res.json({ leaderboard });
-        }
-      );
-    }
-  );
-});
-
-// Update leaderboard cache (called periodically or after XP changes)
-app.post('/api/social/leaderboard/update', authenticateToken, (req, res) => {
-  const db = getDb();
-
-  // Clear old cache
-  db.run('DELETE FROM leaderboard_cache', (err) => {
-    // Rebuild cache
-    db.all(
-      `SELECT u.id, u.username, u.display_name, u.avatar_url, u.xp, u.streak,
-              (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1) as lessons_completed,
-              (SELECT COUNT(*) FROM user_achievements WHERE user_id = u.id) as achievements_count
-       FROM users u
-       WHERE u.account_type = 'child'
-       ORDER BY u.xp DESC`,
-      (err, users) => {
-        if (err) {
-          return res.status(500).json({ error: 'Failed to update leaderboard cache' });
-        }
-
-        const stmt = db.prepare(
-          `INSERT INTO leaderboard_cache 
-           (user_id, username, display_name, avatar_url, total_xp, lessons_completed, achievements_count, current_streak, rank_position) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        );
-
-        users.forEach((user, index) => {
-          stmt.run(
-            user.id,
-            user.username,
-            user.display_name,
-            user.avatar_url,
-            user.xp,
-            user.lessons_completed,
-            user.achievements_count,
-            user.streak,
-            index + 1
-          );
-        });
-
-        stmt.finalize();
-
-        res.json({ success: true, message: 'Leaderboard cache updated', userCount: users.length });
-      }
-    );
-  });
-});
-
-// Get user's rank
-app.get('/api/social/rank', authenticateToken, (req, res) => {
-  const userId = req.user.id;
-  const db = getDb();
-
-  db.get(
-    `SELECT COUNT(*) + 1 as rank
-     FROM users
-     WHERE account_type = 'child' AND xp > (SELECT xp FROM users WHERE id = ?)`,
-    [userId],
-    (err, result) => {
-      if (err) {
-        return res.status(500).json({ error: 'Failed to get rank' });
-      }
-
-      db.get('SELECT COUNT(*) as total FROM users WHERE account_type = ?', ['child'], (err, total) => {
-        res.json({
-          rank: result.rank,
-          totalUsers: total.total,
-          percentile: Math.round((1 - (result.rank / total.total)) * 100)
-        });
-      });
-    }
-  );
-});
-
-// Get activity feed (friends' recent activities)
-app.get('/api/social/feed', authenticateToken, (req, res) => {
-  const userId = req.user.id;
-  const { limit = 20 } = req.query;
-  const db = getDb();
-
-  db.all(
-    `SELECT sa.*, u.username, u.display_name as displayName, u.avatar_url as avatarUrl
-     FROM social_activities sa
-     INNER JOIN users u ON sa.user_id = u.id
-     INNER JOIN friendships f ON sa.user_id = f.friend_id
-     WHERE f.user_id = ? AND f.status = 'accepted' AND sa.is_public = 1
-     ORDER BY sa.created_at DESC
-     LIMIT ?`,
-    [userId, parseInt(limit)],
-    (err, activities) => {
-      if (err) {
-        console.error('Failed to fetch activity feed:', err);
-        return res.status(500).json({ error: 'Failed to load activity feed' });
-      }
-
-      // Parse activity_data JSON
-      const feed = activities.map(activity => ({
-        ...activity,
-        activityData: activity.activity_data ? JSON.parse(activity.activity_data) : null
-      }));
-
-      res.json({ feed });
-    }
-  );
-});
+app.use('/api/social', createSocialRouter({ authenticateToken }));
 
 // Create social activity (called when user completes lesson, unlocks achievement, etc.)
 function createSocialActivity(userId, activityType, activityData, isPublic = true) {

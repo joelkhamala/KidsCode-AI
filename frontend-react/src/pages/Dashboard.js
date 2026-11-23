@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import api, { curriculumAPI, aiAPI } from '../services/api';
 import { getTranslatedLesson, getTranslatedModule } from '../translations/lessons';
-import { isDone } from '../utils/learningPath';
+import { isDone, mapProgress } from '../utils/learningPath';
 
 
 // Friendly display name from the child's username ("amina_2015" -> "Amina")
@@ -79,8 +79,9 @@ const Dashboard = () => {
   const moduleTitle = (m) => getTranslatedModule(m.id, lang)?.title || m.title;
   const lessonTitle = (l) => getTranslatedLesson(l.id, lang)?.title || l.title;
 
-  const completedCount = Object.values(userProgress).filter(isDone).length;
-  const totalLessons = curriculum.reduce((sum, m) => sum + m.lessons.length, 0);
+  // Same numbers as the learning map: finished lessons out of the lessons on the map.
+  const { done: mapDone, total: totalLessons } = mapProgress(curriculum, userProgress);
+  const completedCount = totalLessons ? mapDone : Object.values(userProgress).filter(isDone).length;
   const isFirstVisit = completedCount === 0 && !userXP;
   const level = Math.floor((userXP || 0) / 200) + 1;
   const name = friendlyName(currentUser);

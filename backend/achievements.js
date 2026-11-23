@@ -88,7 +88,7 @@ async function evaluateAchievements(userId, ctx = {}) {
   await ensureTables();
   const code = typeof ctx.code === 'string' ? ctx.code : '';
 
-  const { n: completed } = await get('SELECT COUNT(*) AS n FROM progress WHERE user_id = ? AND completed = 1', [userId]);
+  const { n: completed } = await get("SELECT COUNT(*) AS n FROM progress WHERE user_id = ? AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%'", [userId]); // quiz results are not lessons
   if (completed >= 1) await award(userId, BADGE.FIRST);
   if (completed >= 5) await award(userId, BADGE.FIVE);
 

@@ -49,9 +49,11 @@ const Profile = () => {
   const xpInLevel = xp % 200;
 
   const completed = useMemo(
+    // Only lessons on the child's map (once it has loaded), so this matches the home page and map.
     () => Object.values(userProgress).filter(isDone)
+      .filter(p => !Object.keys(lessonsById).length || lessonsById[p.lesson_id])
       .sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0)),
-    [userProgress]
+    [userProgress, lessonsById]
   );
 
   const sortedBadges = useMemo(

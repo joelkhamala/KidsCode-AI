@@ -6,6 +6,13 @@ export const isDone = (p) => !!(p && (p.completed === 1 || p.completed === true)
 export const playableModules = (curriculum = []) =>
   curriculum.filter(m => Array.isArray(m.lessons) && m.lessons.length > 0);
 
+// Lessons finished vs lessons on the child's map. Both numbers come from the same map,
+// so the count can never say e.g. "15 of 14" (progress from lessons not on the map is ignored).
+export const mapProgress = (curriculum = [], userProgress = {}) => {
+  const lessons = playableModules(curriculum).flatMap(m => m.lessons);
+  return { done: lessons.filter(l => isDone(userProgress[l.id])).length, total: lessons.length };
+};
+
 // Where to go after finishing a lesson: the next lesson in the module, otherwise the module quiz.
 export const nextAfterLesson = (curriculum, moduleId, lessonId) => {
   const module = curriculum.find(m => m.id === Number(moduleId));

@@ -5,7 +5,7 @@ import api, { curriculumAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { getTranslatedModule, getTranslatedLesson } from '../translations/lessons';
-import { isDone, playableModules } from '../utils/learningPath';
+import { isDone, playableModules, mapProgress } from '../utils/learningPath';
 import JourneyStrip from '../components/JourneyStrip';
 
 const difficultyClass = {
@@ -105,8 +105,7 @@ const Curriculum = () => {
     );
   }
 
-  const totalLessons = modules.reduce((s, m) => s + m.lessons.length, 0);
-  const totalDone = modules.reduce((s, m) => s + m.lessons.filter(l => isDone(userProgress[l.id])).length, 0);
+  const { done: totalDone, total: totalLessons } = mapProgress(curriculum, userProgress);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 md:py-8">
