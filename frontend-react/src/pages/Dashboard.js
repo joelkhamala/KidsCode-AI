@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
-import api, { curriculumAPI } from '../services/api';
+import api, { curriculumAPI, aiAPI } from '../services/api';
 import { getTranslatedLesson, getTranslatedModule } from '../translations/lessons';
 import { isDone } from '../utils/learningPath';
 
@@ -29,6 +29,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [quizPassed, setQuizPassed] = useState({}); // moduleId -> bool
+  const [journey, setJourney] = useState(null); // life-long Coding Journey summary
 
   const loadCurriculum = useCallback(async () => {
     try {
@@ -46,6 +47,14 @@ const Dashboard = () => {
   useEffect(() => {
     loadCurriculum();
   }, [loadCurriculum]);
+
+  useEffect(() => {
+    let cancelled = false;
+    aiAPI.journey(undefined, i18n.language === 'sw' ? 'sw' : 'en')
+      .then((res) => { if (!cancelled) setJourney(res.data); })
+      .catch(() => {}); // the home page works without it
+    return () => { cancelled = true; };
+  }, [i18n.language, userXP]);
 
   // For modules whose lessons are all finished, ask the server whether the quiz is passed.
   useEffect(() => {
@@ -293,6 +302,19 @@ const Dashboard = () => {
 
         {/* ===== More fun things ===== */}
         <aside className="space-y-6">
+          {journey && (() => {
+            const stage = journey.stages.find((s) => s.id === journey.currentStage);
+            const pct = Math.round((100 * journey.stagesDone) / Math.max(1, journey.totalStages));
+            return (
+              <Link to="/journey" className="card p-5 block bg-gradient-to-br from-indigo-50 to-sky-50 hover:no-underline" aria-labelledby="journey-home-title">
+                <h2 id="journey-home-title" className="font-extrabold text-indigo-800 mb-1">🗺️ {t('journey.homeCard')}</h2>
+                <p className="font-display text-2xl text-slate-800">{journey.legend.unlocked ? '🏆' : (stage?.icon || '🐣')} {journey.rank}</p>
+                {stage && <p className="text-sm font-semibold text-slate-600 mb-2">{t('journey.homeNext', { stage: stage.name })}</p>}
+                <div className="kid-bar mb-2" style={{ height: 8 }}><div className="kid-bar-fill" style={{ width: `${pct}%` }} /></div>
+                <span className="text-sm font-extrabold text-indigo-600">{t('journey.stageOf', { n: journey.stagesDone, total: journey.totalStages })} · {t('journey.seeMap')} →</span>
+              </Link>
+            );
+          })()}
           <section aria-labelledby="fun-title">
             <h2 id="fun-title" className="font-display text-2xl text-slate-800 mb-3">🎈 {t('kidHome.moreFun')}</h2>
             <div className="grid grid-cols-2 gap-3">

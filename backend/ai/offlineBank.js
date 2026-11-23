@@ -23,6 +23,7 @@ const { interpret } = require('./program/interpret');
 const A = require('./program/ast');
 const { mulberry32, shuffle, shuffleOptions, hashString } = require('./random');
 const { rememberPool, createPool } = require('./moreContent');
+const { PRO_BANK } = require('./proContent');
 
 const tr = (obj, loc) => (obj ? obj[loc] || obj.en : '');
 
@@ -253,7 +254,7 @@ WEB.html_structure.understand.push(
   { code: '<a href="https://kidscode.example">Start coding</a>', correct: t('A link that says "Start coding"', 'Kiungo kinachosema "Start coding"'), wrong: [t('A heading that says "Start coding"', 'Kichwa kinachosema "Start coding"'), t('A picture of a computer', 'Picha ya kompyuta'), t('A list with one item', 'Orodha yenye kipengele kimoja')] },
 );
 WEB.html_structure.apply.push(
-  { prompt: t('Write HTML for a bulleted list (ul) of 3 fruits.', 'Andika HTML ya orodha ya vitone (ul) ya matunda 3.'), patterns: ['<ul[^>]*>[\s\S]*<\/ul>', '(<li[^>]*>[\s\S]*?<\/li>[\s\S]*){3}'], start: '<ul>', solution: '<ul>\n  <li>Mango</li>\n  <li>Banana</li>\n  <li>Pawpaw</li>\n</ul>' },
+  { prompt: t('Write HTML for a bulleted list (ul) of 3 fruits.', 'Andika HTML ya orodha ya vitone (ul) ya matunda 3.'), patterns: [/<ul[^>]*>[\s\S]*<\/ul>/.source, /(<li[^>]*>[\s\S]*?<\/li>[\s\S]*){3}/.source], start: '<ul>', solution: '<ul>\n  <li>Mango</li>\n  <li>Banana</li>\n  <li>Pawpaw</li>\n</ul>' },
 );
 WEB.html_structure.analyze.push(
   { code: '<ul>\n  <li>Nairobi</li>\n  <li>Mombasa</li>\n  <li>Kisumu</li>\n</ul>', q: t('How many items will this list show?', 'Orodha hii itaonyesha vipengele vingapi?'), correct: '3', wrong: ['1', '2', '4'] },
@@ -272,7 +273,7 @@ WEB.css_styling.understand.push(
   { code: 'body {\n  background-color: lightblue;\n}', correct: t('Gives the whole page a light blue background', 'Inaupa ukurasa mzima rangi ya nyuma ya bluu hafifu'), wrong: [t('Makes all the text light blue', 'Inafanya maandishi yote kuwa bluu hafifu'), t('Adds a light blue border', 'Inaongeza mpaka wa bluu hafifu'), t('Makes only headings light blue', 'Inafanya vichwa tu kuwa bluu hafifu')] },
 );
 WEB.css_styling.apply.push(
-  { prompt: t('Write a CSS rule that makes all h1 headings 40px big.', 'Andika kanuni ya CSS inayofanya vichwa vyote vya h1 kuwa 40px.'), patterns: ['h1\s*\{[^}]*font-size\s*:\s*40px'], start: 'h1 {', solution: 'h1 {\n  font-size: 40px;\n}' },
+  { prompt: t('Write a CSS rule that makes all h1 headings 40px big.', 'Andika kanuni ya CSS inayofanya vichwa vyote vya h1 kuwa 40px.'), patterns: [/h1\s*\{[^}]*font-size\s*:\s*40px/.source], start: 'h1 {', solution: 'h1 {\n  font-size: 40px;\n}' },
 );
 WEB.css_styling.analyze.push(
   { code: 'h1 { color: green; }\np { color: orange; }', q: t('What colour will the paragraphs be?', 'Aya zitakuwa na rangi gani?'), correct: 'orange', wrong: ['green', 'black', 'green and orange'] },
@@ -396,6 +397,70 @@ function buildWebActivity({ concept, level, language, loc, rng }) {
     explanation: tr(c.explain, loc) };
 }
 
+// ---------------------------------------------------------------------------
+// Pro skills of the Coding Journey (strings ... data & APIs) - hand-written bank
+// ---------------------------------------------------------------------------
+
+/** Resolve a bank value for one language + locale: L(python, js), t(en, sw), arrays, plain values. */
+function pv(v, language, loc) {
+  if (v === null || v === undefined) return v;
+  if (v instanceof RegExp || typeof v !== 'object') return v;
+  if (Array.isArray(v)) return v.map((x) => pv(x, language, loc));
+  if ('python' in v || 'javascript' in v) return pv(v[language] !== undefined ? v[language] : v.python, language, loc);
+  if ('en' in v) return v[loc] || v.en;
+  return v;
+}
+const reSource = (r) => (r instanceof RegExp ? r.source : String(r));
+
+function buildProActivity({ concept, level, language, loc, rng }) {
+  const c = CONCEPTS[concept];
+  const base = { concept, bloom: level, language, locale: loc, title: title(c, level, loc), source: 'offline' };
+  const bank = PRO_BANK[concept];
+  const val = (v) => pv(v, language, loc);
+  const hintsBase = [tr(c.tip, loc), ui('hintMcq', loc)];
+
+  if (level === 'remember' || level === 'understand' || level === 'analyze') {
+    const ii = pickIndex(rng, bank[level]);
+    const item = bank[level][ii];
+    const { options, answerIndex } = shuffleOptions(rng, String(val(item.correct)), val(item.wrong).map(String));
+    const prompt = item.q ? val(item.q) : ui('understand', loc, { lang: LANGS[language].name });
+    return { ...base, type: 'mcq', variantKey: `${level}:${ii}`, prompt, code: item.code ? val(item.code) : undefined, options, answerIndex,
+      codeOptions: Boolean(item.codeOptions),
+      hints: [...hintsBase, ui('hintEliminate', loc, { option: options.find((o, i) => i !== answerIndex) })],
+      explanation: level === 'remember' ? tr(c.explain, loc) : `${options[answerIndex]} - ${tr(c.explain, loc)}` };
+  }
+  if (level === 'apply') {
+    const ii = pickIndex(rng, bank.apply);
+    const item = bank.apply[ii];
+    const patterns = val(item.patterns).map(reSource);
+    return { ...base, type: 'write_code', variantKey: `apply:${ii}`, prompt: val(item.prompt), starterCode: val(item.starter) || '', tests: { requiredPatterns: patterns },
+      hints: [tr(c.tip, loc), ui('hintWrite', loc), ui('hintWrite3', loc, { start: val(item.start) })], explanation: val(item.solution), solution: val(item.solution) };
+  }
+  if (level === 'evaluate') {
+    const ii = pickIndex(rng, bank.evaluate);
+    const item = bank.evaluate[ii];
+    const lines = val(item.lines);
+    const bug = val(item.bug);
+    const label = (n) => `${ui('line', loc)} ${n}: ${lines[n - 1].trim()}`;
+    const others = shuffle(rng, lines.map((_, i) => i + 1).filter((n) => n !== bug && lines[n - 1].trim())).slice(0, 3);
+    const options = [bug, ...others].sort((a, b) => a - b).map(label);
+    return { ...base, type: 'find_bug', variantKey: `evaluate:${ii}`, prompt: ui('findBug', loc, { what: val(item.what) }), code: lines.join('\n'), showLineNumbers: true,
+      options, answerIndex: options.indexOf(label(bug)), codeOptions: true, bugLine: bug,
+      hints: [tr(c.tip, loc), ui('hintBug', loc), ui('hintBug3', loc, { snippet: lines[bug - 1].trim().slice(0, 12) })],
+      explanation: `${ui('line', loc)} ${bug}: ${val(item.why)}` };
+  }
+  const pattern = constructPattern(concept, language);
+  const ideas = [c.create, ...(c.moreCreate || [])];
+  const ci = pickIndex(rng, ideas);
+  const name = tr(c.name, loc);
+  return { ...base, type: 'create', variantKey: `create:${ci}`, prompt: `${ui('create', loc)} ${tr(ideas[ci], loc)}`, starterCode: `${commentPrefix(language)}${ui('commentStart', loc)}\n`,
+    rubric: [{ id: 'uses_concept', label: ui('rubricConcept', loc, { concept: name }), pattern: pattern ? pattern.source : null },
+      { id: 'complete', label: ui('rubricRuns', loc) }, { id: 'original', label: ui('rubricOwn', loc) }],
+    tests: { requiredPattern: pattern ? pattern.source : null },
+    hints: [ui('createUse', loc, { concept: name }), ui('hintCreate', loc, { concept: name }), ui('hintCreate3', loc, { concept: name })],
+    explanation: tr(c.explain, loc) };
+}
+
 /**
  * @param {{concept: string, level: string, language: string, locale?: string, seed?: number}} req
  */
@@ -412,7 +477,7 @@ function generateOffline(req) {
 
   const build = (s) => {
     const args = { concept: req.concept, level: req.level, language: req.language, loc, rng: mulberry32(s) };
-    const activity = concept.webOnly ? buildWebActivity(args) : buildProgrammingActivity(args);
+    const activity = concept.webOnly ? buildWebActivity(args) : concept.pro ? buildProActivity(args) : buildProgrammingActivity(args);
     return { ...activity, seed: s, fingerprint: fingerprint(activity) };
   };
 

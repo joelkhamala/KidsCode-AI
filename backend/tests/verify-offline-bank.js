@@ -8,7 +8,7 @@ const { runJavaScript } = require('../sandbox/runJs');
 (async () => {
   let n = 0; const problems = [];
   const jsChecks = [];
-  for (const lang of LANGUAGES) for (const concept of lang.concepts) for (const level of IDS) for (const locale of ['en', 'sw']) for (const seed of [1, 2, 3, 99]) {
+  for (const lang of LANGUAGES) for (const concept of lang.concepts) for (const level of IDS) for (const locale of ['en', 'sw']) for (const seed of [1, 2, 3, 7, 13, 42, 99, 123]) {
     let a;
     try { a = generateOffline({ concept, level, language: lang.id, locale, seed }); } catch (e) { problems.push(`${lang.id}/${concept}/${level}: THROW ${e.message}`); continue; }
     n += 1;
@@ -22,7 +22,11 @@ const { runJavaScript } = require('../sandbox/runJs');
       if (!(a.answerIndex >= 0 && a.answerIndex < a.options.length)) problems.push(`${where}: bad answerIndex`);
     }
     if (a.type === 'predict_output' && !(a.expectedOutput && a.expectedOutput.length)) problems.push(`${where}: no expected output`);
-    if (a.type === 'write_code' && lang.id === 'javascript' && seed === 1) jsChecks.push({ where, a });
+    if (a.type === 'write_code' && a.tests.requiredPatterns) {
+      // Pattern-checked tasks (HTML/CSS and the pro skills): the model answer must pass its own checks.
+      const missing = a.tests.requiredPatterns.filter((p) => !new RegExp(p, 'i').test(a.solution || ''));
+      if (missing.length) problems.push(`${where}: solution fails ${missing.join(' | ')}`);
+    } else if (a.type === 'write_code' && lang.id === 'javascript' && seed === 1) jsChecks.push({ where, a });
   }
   // The JavaScript write_code solutions must really produce the expected output in the sandbox.
   for (const { where, a } of jsChecks) {

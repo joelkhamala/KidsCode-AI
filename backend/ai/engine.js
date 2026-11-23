@@ -9,6 +9,7 @@ const { LEVELS, BY_ID: BLOOM, levelIndex, nextLevel } = require('./bloom');
 const model = require('./learnerModel');
 const { grade, reviewCode } = require('./grader');
 const { learnerSummary, classSummary } = require('./insights');
+const { buildJourney } = require('./journey');
 
 const XP_BY_LEVEL = { remember: 10, understand: 15, apply: 20, analyze: 25, evaluate: 30, create: 40 };
 const MASTERY_BONUS = 25;
@@ -21,6 +22,7 @@ const REASONS = {
   scaffold_step_back: { en: 'Let\'s practise an easier step of {concept} first, then try again. You can do it!', sw: 'Tufanye mazoezi ya hatua rahisi ya {concept} kwanza, kisha tujaribu tena. Unaweza!' },
   retry_with_support: { en: 'Let\'s try {concept} again - read the mini-lesson first.', sw: 'Tujaribu {concept} tena - soma somo fupi kwanza.' },
   learner_choice: { en: 'You chose {concept}. Let\'s go!', sw: 'Umechagua {concept}. Twende!' },
+  legend_challenge: { en: 'Legend challenge! ⚡ Mixed practice to keep your skills sharp: {concept} - {level}.', sw: 'Changamoto ya Gwiji! ⚡ Mazoezi mchanganyiko kuweka ujuzi wako imara: {concept} - {level}.' },
   all_mastered: { en: 'You have mastered everything here! Build something amazing. 🏆', sw: 'Umemudu kila kitu hapa! Jenga kitu cha ajabu. 🏆' },
 };
 
@@ -100,6 +102,14 @@ class LearningEngine {
     summary.concepts = summary.concepts.map((c) => ({ ...c, name: c.name[l] }));
     const overview = LANGUAGES.map((x) => ({ id: x.id, percent: model.summarise(rows, x.id).percent })).filter((x) => x.percent > 0 || x.id === ctx.language);
     return { language: ctx.language, locale: l, age: ctx.age, summary, overview, ai: this.status() };
+  }
+
+  /** The life-long Coding Journey: stages from newbie to pro, then endless Legend levels. */
+  async journey(userId, { language, locale } = {}) {
+    const ctx = await this.learnerContext(userId, { language, locale });
+    const rows = await this.store.masteryRows(userId);
+    const wins = await this.store.legendWins(userId, ctx.language).catch(() => 0);
+    return buildJourney(rows, ctx.language, ctx.locale, wins);
   }
 
   status() {

@@ -12,6 +12,11 @@
  *   'none' - code is checked by structure (and by the AI model when available)
  */
 
+const { PRO_CONCEPTS, PRO_PATTERNS } = require('./proContent');
+
+// Pro skills of the life-long Coding Journey (taught in Python and JavaScript).
+const PRO_CONCEPT_IDS = PRO_CONCEPTS.map((c) => c.id);
+
 const PROGRAMMING_CONCEPTS = ['sequence', 'output', 'variables', 'arithmetic', 'conditionals', 'loops', 'while_loops', 'lists', 'functions', 'parameters_return'];
 
 const LANGUAGES = [
@@ -40,7 +45,7 @@ const LANGUAGES = [
     id: 'python', name: 'Python', nameSw: 'Python', kind: 'text', icon: '🐍',
     minAge: 10, maxAge: 99, runtime: 'none', renderer: 'python',
     description: { en: 'A friendly text language used in science, AI and many school syllabuses.', sw: 'Lugha rafiki ya maandishi inayotumika katika sayansi, AI na mitaala mingi ya shule.' },
-    concepts: PROGRAMMING_CONCEPTS,
+    concepts: [...PROGRAMMING_CONCEPTS, ...PRO_CONCEPT_IDS],
     curricula: [
       'Kenya - KICD-approved coding curriculum in Python for ages 7-16 (Kodris Africa)',
       'England National Curriculum KS3 - at least one textual language (Python is the most common choice)',
@@ -52,7 +57,7 @@ const LANGUAGES = [
     id: 'javascript', name: 'JavaScript', nameSw: 'JavaScript', kind: 'text', icon: '🟨',
     minAge: 10, maxAge: 99, runtime: 'js', renderer: 'javascript',
     description: { en: 'The language of the web. KidsCode can run it instantly and check your answers.', sw: 'Lugha ya wavuti. KidsCode inaweza kuiendesha papo hapo na kukagua majibu yako.' },
-    concepts: PROGRAMMING_CONCEPTS,
+    concepts: [...PROGRAMMING_CONCEPTS, ...PRO_CONCEPT_IDS],
     curricula: [
       'Australian Curriculum: Digital Technologies - general-purpose programming, Years 7-10',
       'KidsCode lessons (existing JavaScript modules)',
@@ -131,6 +136,8 @@ const CONSTRUCT_PATTERNS = {
   css_styling: { any: /\{[^}]*:[^}]*\}|style\s*=/i },
 };
 
+Object.assign(CONSTRUCT_PATTERNS, PRO_PATTERNS);
+
 function constructPattern(concept, language) {
   const entry = CONSTRUCT_PATTERNS[concept];
   if (!entry) return null;
@@ -151,4 +158,4 @@ function suggestedLanguage(age) {
   return 'python';
 }
 
-module.exports = { LANGUAGES, BY_ID, PROGRAMMING_CONCEPTS, CONSTRUCT_PATTERNS, constructPattern, languagesForAge, suggestedLanguage };
+module.exports = { LANGUAGES, BY_ID, PROGRAMMING_CONCEPTS, PRO_CONCEPT_IDS, CONSTRUCT_PATTERNS, constructPattern, languagesForAge, suggestedLanguage };

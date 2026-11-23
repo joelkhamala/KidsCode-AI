@@ -84,6 +84,12 @@ const Navbar = () => {
                 🤖 {t('nav.coach')}
               </Link>
               <Link 
+                to="/journey"
+                className={`nav-item ${isActive('/journey') ? 'active' : ''}`}
+              >
+                🗺️ {t('nav.journey')}
+              </Link>
+              <Link 
                 to="/playground" 
                 className={`nav-item ${isActive('/playground') ? 'active' : ''}`}
               >
@@ -205,6 +211,9 @@ const Navbar = () => {
           </Link>
           <Link to="/coach" className={`nav-item whitespace-nowrap ${isActive('/coach') ? 'active' : ''}`}>
             🤖 {t('nav.coach')}
+          </Link>
+          <Link to="/journey" className={`nav-item whitespace-nowrap ${isActive('/journey') ? 'active' : ''}`}>
+            🗺️ {t('nav.journey')}
           </Link>
           <Link to="/playground" className={`nav-item whitespace-nowrap ${isActive('/playground') ? 'active' : ''}`}>
             💻 Play

@@ -212,6 +212,15 @@ class Store {
     );
   }
 
+  /** Correct Legend challenges in a language (they count towards the next Legend level). */
+  async legendWins(userId, language) {
+    const row = await this.get(
+      "SELECT COUNT(*) AS n FROM ai_activities WHERE user_id = ? AND language = ? AND reason = 'legend_challenge' AND status = 'done' AND correct = 1",
+      [userId, language],
+    );
+    return row ? row.n : 0;
+  }
+
   recentMistakes(userId, language, limit = 3) {
     return this.all(
       `SELECT concept_id, bloom_level, activity_type FROM ai_activities WHERE user_id = ? AND language = ? AND status = 'done' AND correct = 0

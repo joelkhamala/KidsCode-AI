@@ -158,6 +158,7 @@ export const aiAPI = {
   catalog: (locale) => api.get('/ai/catalog', { params: { locale } }),
   profile: (language, locale) => api.get('/ai/profile', { params: { language, locale } }),
   savePreferences: (prefs) => api.put('/ai/preferences', prefs),
+  journey: (language, locale) => api.get('/ai/journey', { params: { language, locale } }),
   next: ({ language, locale, concept, fresh } = {}) =>
     api.get('/ai/next', { params: { language, locale, concept, fresh: fresh ? 1 : undefined } }),
   hint: (activityId, hintNumber, learnerAnswer) =>

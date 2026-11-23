@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link, useSearchParams } from 'react-router-dom';
 import { aiAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import ActivityPlayer from '../components/ai/ActivityPlayer';
@@ -25,6 +26,9 @@ const AICoach = () => {
   const { t, i18n } = useTranslation();
   const { loadProgress } = useAuth();
   const locale = i18n.language === 'sw' ? 'sw' : 'en';
+  // The Journey page links here with ?concept=... to practise one skill.
+  const [searchParams] = useSearchParams();
+  const wantedConcept = searchParams.get('concept');
 
   const [catalog, setCatalog] = useState(null);
   const [language, setLanguage] = useState(null);
@@ -68,7 +72,8 @@ const AICoach = () => {
         setCatalog(cat.data);
         setProfile(prof.data);
         setLanguage(prof.data.language);
-        await loadNext({ lang: prof.data.language });
+        const wanted = wantedConcept && prof.data.summary.concepts.find((c) => c.id === wantedConcept && c.unlocked);
+        await loadNext({ lang: prof.data.language, concept: wanted ? wanted.id : undefined });
       } catch (err) {
         if (!cancelled) {
           setError(err.response?.data?.error || t('coach.error'));
@@ -77,7 +82,7 @@ const AICoach = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [locale, loadNext, t]);
+  }, [locale, loadNext, t, wantedConcept]);
 
   const chooseLanguage = async (lang) => {
     setPickerOpen(false);
@@ -156,6 +161,7 @@ const AICoach = () => {
               ) : (
                 <span className="text-sm text-slate-400">…</span>
               )}
+              <Link to="/journey" className="tab-btn text-sm" style={{ padding: '4px 12px' }}>🗺️ {t('journey.title')}</Link>
             </div>
           </div>
         </div>

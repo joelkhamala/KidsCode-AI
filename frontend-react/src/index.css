@@ -711,3 +711,26 @@ a.kid-map-row:hover { border-color: #a5b4fc; background: #eef2ff; }
 }
 .learner-card.needs-attention { border-color: #fcd34d; }
 .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+/* ===== My Coding Journey: a winding path of stages ===== */
+.journey-path { list-style: none; margin: 0; padding: 0 0 0 0; position: relative; }
+.journey-path::before {
+  content: ''; position: absolute; left: 23px; top: 24px; bottom: 24px; width: 6px;
+  background: repeating-linear-gradient(to bottom, #c7d2fe 0 14px, transparent 14px 24px); border-radius: 3px;
+}
+.journey-step { position: relative; padding-left: 64px; margin-bottom: 18px; }
+.journey-dot {
+  position: absolute; left: 0; top: 18px; width: 52px; height: 52px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 900;
+  border: 4px solid #fff; box-shadow: 0 4px 0 rgba(15, 23, 42, 0.12); z-index: 1;
+}
+.journey-dot-done { background: #22c55e; color: #fff; }
+.journey-dot-open { background: #e0e7ff; animation: pop 0.6s ease-out; }
+.journey-dot-locked { background: #f1f5f9; font-size: 1.2rem; }
+.journey-dot-legend { background: linear-gradient(135deg, #fde047, #f59e0b); }
+@media (max-width: 480px) {
+  .journey-step { padding-left: 52px; }
+  .journey-dot { width: 42px; height: 42px; font-size: 1.2rem; }
+  .journey-path::before { left: 18px; }
+}
+@media (prefers-reduced-motion: reduce) { .journey-dot-open { animation: none; } }

@@ -6,6 +6,7 @@
  *   GET  /catalog                         languages (age-aware), Bloom levels
  *   GET  /profile?language=&locale=       mastery map for the learner
  *   PUT  /preferences                     { language, locale, interests[] }
+ *   GET  /journey?language=&locale=       life-long Coding Journey: stages, rank, Legend level
  *   GET  /next?language=&concept=&fresh=  next adaptive activity (+ mini-lesson)
  *   POST /activities/:id/hint             { hintNumber, learnerAnswer }
  *   POST /activities/:id/submit           { answerIndex | text | code, timeSeconds }
@@ -61,6 +62,8 @@ function createRoutes(engine, { authenticateToken }) {
     await engine.store.savePrefs(req.user.id, { language, locale: loc, interests: cleanInterests });
     return { success: true };
   }));
+
+  router.get('/journey', wrap(async (req) => engine.journey(req.user.id, { language: lang(req.query.language), locale: locale(req.query.locale) })));
 
   router.get('/next', wrap(async (req) => engine.next(req.user.id, {
     language: lang(req.query.language), locale: locale(req.query.locale), concept: req.query.concept || undefined, fresh: req.query.fresh === '1',

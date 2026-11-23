@@ -138,6 +138,22 @@ function summarise(rows, language) {
  * @param {{rows: object[], language: string, activityCount: number, focusConcept?: string, now?: number}} args
  * @returns {{concept: string, level: string, reason: string, bridgeFrom: string[]}}
  */
+const LEGEND_LEVELS = ['analyze', 'evaluate', 'create'];
+
+/**
+ * Everything in this language is mastered: the journey never ends. Legend challenges
+ * mix ALL the skills learned so far at the top thinking levels (Analyse, Evaluate,
+ * Create), always picking the skill practised longest ago so nothing gets rusty.
+ */
+function legendChallenge({ sorted, activityCount, recentDone, withLevel }) {
+  const lastSeen = new Map();
+  (recentDone || []).forEach((a, i) => { if (!lastSeen.has(a.concept_id)) lastSeen.set(a.concept_id, i); });
+  // Never practised recently -> Infinity (most overdue); otherwise further back = more overdue.
+  const overdue = (c) => (lastSeen.has(c) ? lastSeen.get(c) : Infinity);
+  const concept = sorted.slice().sort((x, y) => overdue(y) - overdue(x) || CONCEPTS[x].order - CONCEPTS[y].order)[0];
+  return withLevel(concept, LEGEND_LEVELS[activityCount % LEGEND_LEVELS.length], 'legend_challenge');
+}
+
 function recommendNext({ rows, language, activityCount = 0, focusConcept = null, now = Date.now(), recentDone = [] }) {
   const lang = LANGS[language];
   const map = indexRows(rows, language);
@@ -170,19 +186,17 @@ function recommendNext({ rows, language, activityCount = 0, focusConcept = null,
   }
 
   // 3. Spaced review of something already mastered (retrieval practice).
-  const reviewDue = activityCount % 7 === 6 || open.length === 0;
-  if (reviewDue) {
+  //    (When everything is mastered, review mixes with endless Legend challenges below.)
+  const reviewDue = activityCount % 7 === 6;
+  if (reviewDue || open.length === 0) {
     let best = null;
     rows.filter((r) => r.language === language && isMastered(r)).forEach((r) => {
       const d = daysSince(r.last_practiced, now);
       const decayed = r.p_known * Math.pow(0.97, d);
       if (d >= 1 && (!best || decayed < best.decayed)) best = { r, decayed };
     });
-    if (best) return withLevel(best.r.concept_id, best.r.bloom_level, 'spaced_review');
-    if (open.length === 0) {
-      const last = sorted[sorted.length - 1];
-      return withLevel(last, 'create', 'all_mastered');
-    }
+    if (best && (reviewDue || open.length > 0)) return withLevel(best.r.concept_id, best.r.bloom_level, 'spaced_review');
+    if (open.length === 0) return legendChallenge({ sorted, activityCount, recentDone, withLevel });
   }
 
   // 4. Every 3rd activity, deepen thinking on a concept already at Analyse or above.

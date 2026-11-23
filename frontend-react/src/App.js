@@ -14,6 +14,7 @@ import Curriculum from './pages/Curriculum';
 import Lesson from './pages/Lesson';
 import Playground from './pages/Playground';
 import AICoach from './pages/AICoach';
+import Journey from './pages/Journey';
 import Profile from './pages/Profile';
 import ParentDashboard from './pages/ParentDashboard';
 import TeacherDashboard from './pages/TeacherDashboard';
@@ -167,6 +168,15 @@ function AppRoutes({ currentUser }) {
             element={
               <ParentRoute>
                 <AICoach />
+              </ParentRoute>
+            }
+          />
+
+          <Route
+            path="/journey"
+            element={
+              <ParentRoute>
+                <Journey />
               </ParentRoute>
             }
           />

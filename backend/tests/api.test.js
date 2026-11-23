@@ -497,3 +497,94 @@ test('offline generator picks a question the learner has not seen yet, for every
     }
   }
 });
+
+// ---- life-long Coding Journey -------------------------------------------------
+
+const LEVELS6 = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'];
+const masteredRows = (language, concepts) => concepts.flatMap((c) => LEVELS6.map((lv) => ({
+  language, concept_id: c, bloom_level: lv, p_known: 0.95, attempts: 4, correct: 4, streak_wrong: 0, last_practiced: new Date().toISOString(),
+})));
+
+test('journey: stages run from newbie to pro skills, and pro skills unlock in order', () => {
+  const { buildJourney } = require('../ai/journey');
+  const fresh = buildJourney([], 'python', 'en', 0);
+  assert.equal(fresh.rank, 'Newbie Coder');
+  assert.equal(fresh.stages[0].id, 'first_steps');
+  assert.equal(fresh.stages[0].state, 'open');
+  assert.equal(fresh.currentStage, 'first_steps');
+  const pro = fresh.stages.find((s) => s.id === 'bug_hunting');
+  assert.equal(pro.state, 'locked');
+  assert.ok(pro.pro);
+  assert.ok(pro.needs.some((n) => n.id === 'dictionaries'), 'a locked stage says what it is waiting for');
+  assert.equal(fresh.legend.unlocked, false);
+
+  // Mastering the basics unlocks the first pro stages but not the later ones.
+  const basics = ['sequence', 'output', 'variables', 'arithmetic', 'conditionals', 'loops', 'while_loops', 'lists', 'functions', 'parameters_return', 'strings', 'dictionaries'];
+  const mid = buildJourney(masteredRows('python', basics), 'python', 'en', 0);
+  assert.equal(mid.stages.find((s) => s.id === 'organise_data').state, 'done');
+  assert.equal(mid.stages.find((s) => s.id === 'bug_hunting').state, 'open');
+  assert.equal(mid.stages.find((s) => s.id === 'blueprints').state, 'locked');
+  assert.equal(mid.rank, 'Data Organiser');
+
+  // Blocks and HTML continue into a text language, where the pro stages live.
+  assert.equal(buildJourney([], 'blocks', 'en', 0).nextLanguage.id, 'python');
+  assert.equal(buildJourney([], 'html_css', 'sw', 0).nextLanguage.id, 'javascript');
+  assert.equal(buildJourney([], 'python', 'en', 0).nextLanguage, null);
+});
+
+test('journey never ends: after the last stage come endless Legend levels', () => {
+  const { buildJourney } = require('../ai/journey');
+  const model = require('../ai/learnerModel');
+  const { BY_ID: LANGS } = require('../ai/languages');
+  const all = masteredRows('javascript', LANGS.javascript.concepts);
+
+  const j = buildJourney(all, 'javascript', 'en', 12);
+  assert.equal(j.stagesDone, j.totalStages);
+  assert.equal(j.legend.unlocked, true);
+  assert.equal(j.legend.level, 3); // 12 wins at 5 per level -> Legend 3
+  assert.equal(j.legend.winsToNext, 3);
+  assert.equal(j.rank, 'Legend 3');
+  assert.equal(buildJourney(all, 'javascript', 'sw', 0).rank, 'Gwiji 1');
+
+  // The Coach keeps giving challenges: mixed skills, top thinking levels, oldest skill first.
+  const recentDone = [{ concept_id: 'strings', bloom_level: 'create', correct: 1 }, { concept_id: 'sequence', bloom_level: 'analyze', correct: 1 }];
+  const seenConcepts = new Set();
+  for (let count = 0; count < 30; count += 1) {
+    if (count % 7 === 6) continue; // spaced-review turn
+    const rec = model.recommendNext({ rows: all, language: 'javascript', activityCount: count, recentDone });
+    assert.equal(rec.reason, 'legend_challenge');
+    assert.ok(['analyze', 'evaluate', 'create'].includes(rec.level), rec.level);
+    seenConcepts.add(rec.concept);
+  }
+  // Skills not practised recently come before ones just practised.
+  const first = model.recommendNext({ rows: all, language: 'javascript', activityCount: 0, recentDone });
+  assert.notEqual(first.concept, 'strings');
+  assert.notEqual(first.concept, 'sequence');
+});
+
+test('GET /api/ai/journey shows a new learner where they are', async () => {
+  const reg = await http('POST', '/api/register', { username: 'safari', email: 'safari@example.com', password: 'secret123', age: 14 });
+  assert.equal(reg.status, 200, JSON.stringify(reg.body));
+  const res = await http('GET', '/api/ai/journey?language=python&locale=sw', null, reg.body.token);
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(res.body.language, 'python');
+  assert.equal(res.body.stages[0].state, 'open');
+  assert.ok(res.body.totalStages >= 13);
+  assert.equal(res.body.legend.unlocked, false);
+  assert.match(res.body.stages[0].name, /Hatua/); // Kiswahili
+  const unauth = await http('GET', '/api/ai/journey?language=python');
+  assert.equal(unauth.status, 401);
+});
+
+test('journey: an earned stage or Legend level is not lost after one wrong answer', () => {
+  const { buildJourney } = require('../ai/journey');
+  const { BY_ID: LANGS } = require('../ai/languages');
+  const rows = masteredRows('python', LANGS.python.concepts).map((r) => ({ ...r, mastered_at: '2026-01-01T00:00:00Z' }));
+  // A later slip on one level drops the live estimate below mastery...
+  Object.assign(rows.find((r) => r.concept_id === 'sequence' && r.bloom_level === 'remember'), { p_known: 0.3, correct: 4, attempts: 9, streak_wrong: 1 });
+  const j = buildJourney(rows, 'python', 'en', 5);
+  // ...but the child keeps the rank they earned.
+  assert.equal(j.legend.unlocked, true);
+  assert.equal(j.rank, 'Legend 2');
+  assert.equal(j.stages.every((s) => s.skills.every((k) => k.unlocked)), true);
+});

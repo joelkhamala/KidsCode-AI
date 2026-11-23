@@ -50,6 +50,8 @@ const prelude = `
     info: (...args) => __push(args.map(__fmt).join(' ')),
     error: (...args) => __push('Error: ' + args.map(__fmt).join(' ')),
     warn: (...args) => __push('Warning: ' + args.map(__fmt).join(' ')),
+    // Tests in the "Testing your code" skill: silent when true, a clear message when false.
+    assert: (ok, ...args) => { if (!ok) __push('Assertion failed' + (args.length ? ': ' + args.map(__fmt).join(' ') : '')); },
   });
   // Turtle graphics API used by lessons and the Blockly playground.
   globalThis.forward = (dist) => __cmd({ type: 'forward', dist: __num(dist, 'forward') });

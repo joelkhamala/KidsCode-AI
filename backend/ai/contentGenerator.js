@@ -48,6 +48,8 @@ class ContentGenerator {
     const offline = generateOffline({ concept, level, language, locale, avoid });
     const seen = new Set((avoid && avoid.fingerprints) || []);
     if (!this.aiEligible(level, language)) return offline;
+    // Pro skills are checked by structure at Apply/Analyse, so keep their hand-written questions there.
+    if (CONCEPTS[concept] && CONCEPTS[concept].pro && ['apply', 'analyze'].includes(level)) return offline;
 
     const personalise = (recentMistakes && recentMistakes.length > 0) || (interests && interests.length > 0);
     const variant = randInt(Math.random, 0, CACHE_VARIANTS - 1);
@@ -151,6 +153,8 @@ class ContentGenerator {
     let example = '';
     if (!c.webOnly && signatures[concept] && lang.renderer) {
       try { example = render(signatures[concept]().program, lang.renderer).code; } catch { example = ''; }
+    } else if (c.example) {
+      example = c.example[language] || c.example.python || '';
     } else if (c.webOnly) {
       example = concept === 'html_structure' ? '<h1>Karibu!</h1>\n<p>Welcome to my page.</p>' : 'h1 {\n  color: green;\n}';
     }

@@ -528,6 +528,9 @@ const signatures = {
 const { moreScenarios } = require('./moreContent');
 Object.entries(moreScenarios).forEach(([id, list]) => { scenarios[id] = [...(scenarios[id] || []), ...list]; });
 
+// Pro skills of the life-long Coding Journey (strings ... data & APIs) - see proContent.js.
+CONCEPTS.push(...require('./proContent').PRO_CONCEPTS);
+
 const BY_ID = Object.fromEntries(CONCEPTS.map((c) => [c.id, c]));
 
 module.exports = { CONCEPTS, BY_ID, scenarios, signatures, NAMES };
