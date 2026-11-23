@@ -1,0 +1,34 @@
+{
+  "short_name": "KIDSCODE",
+  "name": "KIDSCODE - Learn to Code",
+  "description": "An online coding platform for children aged 7-16 using visual block programming",
+  "icons": [
+    {
+      "src": "kidscode_logo.png",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/png"
+    },
+    {
+      "src": "kidscode_logo.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "kidscode_logo.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#6366f1",
+  "background_color": "#f0f9ff",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "categories": ["education", "kids", "coding"],
+  "lang": "en-US",
+  "dir": "ltr",
+  "prefer_related_applications": false
+}

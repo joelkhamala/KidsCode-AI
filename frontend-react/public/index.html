@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="KIDSCODE - Learn to code with visual block programming. Free coding education for children aged 7-16.">
+  <meta name="theme-color" content="#6366f1">
+  <title>KIDSCODE 🚀</title>
+  <script>
+    // Ignore errors thrown by browser extensions (code at chrome-extension:// etc.).
+    // They are not KidsCode bugs, but the development error overlay shows them full-screen.
+    // This must run before the app bundle so it sees errors before the overlay does.
+    (function () {
+      var EXT = /(chrome|moz|safari-web)-extension:\/\//;
+      var fromExtension = function (a, b) { return EXT.test(String(a || '')) || EXT.test(String(b || '')); };
+      window.addEventListener('error', function (e) {
+        if (fromExtension(e.filename, e.error && e.error.stack)) { e.preventDefault(); e.stopImmediatePropagation(); }
+      }, true);
+      window.addEventListener('unhandledrejection', function (e) {
+        var r = e.reason;
+        if (fromExtension(r && r.stack, typeof r === 'string' ? r : '')) { e.preventDefault(); e.stopImmediatePropagation(); }
+      }, true);
+    })();
+  </script>
+  <link rel="icon" href="%PUBLIC_URL%/kidscode_logo.png" />
+  <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+  <link rel="apple-touch-icon" href="%PUBLIC_URL%/kidscode_logo.png" />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800;900&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS via CDN (development). Suppress browser warning - this is intentional. -->
+  <script src="https://cdn.tailwindcss.com?v=3"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['"Fredoka One"', 'cursive'],
+            body: ['"Nunito"', 'sans-serif'],
+            code: ['"Fira Code"', 'monospace'],
+          },
+          animation: {
+            'float': 'float 3s ease-in-out infinite',
+            'pop': 'pop 0.3s ease-out',
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Blockly for block-based coding -->
+  <!-- Blockly is pinned to an exact version so a new release cannot break the playground. -->
+  <script src="https://unpkg.com/blockly@13.5.0/blockly_compressed.js"></script>
+  <script src="https://unpkg.com/blockly@13.5.0/blocks_compressed.js"></script>
+  <script src="https://unpkg.com/blockly@13.5.0/javascript_compressed.js"></script>
+  <script src="https://unpkg.com/blockly@13.5.0/python_compressed.js"></script>
+  <script src="https://unpkg.com/blockly@13.5.0/lua_compressed.js"></script>
+  <script src="https://unpkg.com/blockly@13.5.0/dart_compressed.js"></script>
+  <script src="https://unpkg.com/blockly@13.5.0/php_compressed.js"></script>
+  <script src="https://unpkg.com/blockly@13.5.0/msg/en.js"></script>
+</head>
+<body class="bg-sky-50 font-body text-slate-800 min-h-screen">
+  <div id="root"></div>
+</body>
+</html>

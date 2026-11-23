@@ -1,0 +1,490 @@
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { useAuth } from '../context/AuthContext';
+
+const Auth = () => {
+  const { t } = useTranslation();
+  const [isLogin, setIsLogin] = useState(true);
+  const [accountMode, setAccountMode] = useState('child'); // 'child', 'parent', or 'teacher'
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    username: '',
+    age: '',
+    parent_email: '',
+    firstName: '',
+    lastName: '',
+    phoneNumber: ''
+  });
+  const [error, setError] = useState('');
+  const [showParentEmail, setShowParentEmail] = useState(false);
+  
+  const { login, register, parentLogin, parentRegister, teacherLogin, teacherRegister } = useAuth();
+  const navigate = useNavigate();
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    if (name === 'age') {
+      setShowParentEmail(parseInt(value) < 13);
+    }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    
+    if (!formData.email || !formData.password) {
+      setError(accountMode === 'child' 
+        ? '⚠️ Please enter your username/email and password!' 
+        : '⚠️ Please enter your email and password!');
+      return;
+    }
+
+    const result = accountMode === 'parent' 
+      ? await parentLogin(formData.email, formData.password)
+      : accountMode === 'teacher'
+      ? await teacherLogin(formData.email, formData.password)
+      : await login(formData.email, formData.password);
+      
+    if (result.success) {
+      if (accountMode === 'teacher') {
+        navigate('/teacher-dashboard');
+      } else {
+        navigate(accountMode === 'parent' ? '/parent-dashboard' : '/');
+      }
+    } else {
+      setError(`❌ ${result.error}`);
+    }
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setError('');
+    
+    if (accountMode === 'parent' || accountMode === 'teacher') {
+      // Parent/Teacher registration
+      if (!formData.firstName || !formData.lastName || !formData.email || !formData.password) {
+        setError('⚠️ Please fill in all required fields!');
+        return;
+      }
+
+      if (formData.password.length < 8) {
+        setError('⚠️ Password must be at least 8 characters!');
+        return;
+      }
+
+      const registrationData = {
+        email: formData.email,
+        password: formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phoneNumber: formData.phoneNumber
+      };
+
+      const result = accountMode === 'teacher' 
+        ? await teacherRegister(registrationData)
+        : await parentRegister(registrationData);
+
+      if (result.success) {
+        navigate(accountMode === 'teacher' ? '/teacher-dashboard' : '/parent-dashboard');
+      } else {
+        setError(`❌ ${result.error}`);
+      }
+    } else {
+      // Child registration
+      if (!formData.username || !formData.email || !formData.password) {
+        setError('⚠️ Please fill in all required fields!');
+        return;
+      }
+
+      const result = await register(formData);
+      if (result.success) {
+        navigate('/');
+      } else {
+        setError(`❌ ${result.error}`);
+      }
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex">
+      {/* Left Panel - Hero */}
+      <div className="hidden lg:flex flex-col justify-center flex-1 p-12 bg-gradient-to-br from-sky-100 via-indigo-100/50 to-sky-100">
+        <div className="max-w-lg">
+          <div className="text-7xl mb-6 animate-float">🚀</div>
+          <h1 className="font-display text-5xl text-slate-800 mb-4 leading-tight">
+            Learn to Code.<br />Have <span className="text-indigo-600">Epic</span> Adventures!
+          </h1>
+          <p className="text-slate-600 text-xl mb-10 leading-relaxed">
+            Join thousands of young coders on an amazing journey through JavaScript, animations, games, and more!
+          </p>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-3 bg-white rounded-2xl border-2 border-sky-200">
+              <span className="text-3xl">🎮</span>
+              <div>
+                <div className="font-bold">5 Epic Learning Modules</div>
+                <div className="text-slate-600 text-sm">From "Hello World" to building your own games!</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 bg-white rounded-2xl border-2 border-sky-200">
+              <span className="text-3xl">🐢</span>
+              <div>
+                <div className="font-bold">Visual Turtle Graphics</div>
+                <div className="text-slate-600 text-sm">Draw amazing art with code using our turtle!</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 bg-white rounded-2xl border-2 border-sky-200">
+              <span className="text-3xl">🏆</span>
+              <div>
+                <div className="font-bold">Achievements & XP</div>
+                <div className="text-slate-600 text-sm">Level up and unlock badges as you learn!</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Right Panel - Auth Forms */}
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-sky-50/50">
+        <div className="w-full max-w-md">
+          {/* Logo */}
+          <div className="text-center mb-8">
+            <img 
+              src="/kidscode_logo.png" 
+              alt="KIDSCODE" 
+              className="mx-auto w-64 md:w-80 mb-4"
+              onError={(e) => {
+                // Fallback if logo image not found
+                e.target.style.display = 'none';
+                e.target.nextSibling.style.display = 'block';
+              }}
+            />
+            <div className="hidden">
+              <div className="text-5xl mb-3">🚀</div>
+              <h1 className="font-display text-3xl text-indigo-600">KIDSCODE</h1>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-2 mb-6 bg-white p-1 rounded-xl">
+            <button
+              onClick={() => setIsLogin(true)}
+              className={`flex-1 py-2.5 rounded-lg font-bold text-sm transition-all ${
+                isLogin ? 'bg-indigo-600 text-white' : 'text-slate-600'
+              }`}
+            >
+              {t('auth.signIn')}
+            </button>
+            <button
+              onClick={() => setIsLogin(false)}
+              className={`flex-1 py-2.5 rounded-lg font-bold text-sm transition-all ${
+                !isLogin ? 'bg-indigo-600 text-white' : 'text-slate-600'
+              }`}
+            >
+              {t('auth.register')}
+            </button>
+          </div>
+
+          {/* Account Type Selector */}
+          <div className="grid grid-cols-3 gap-2 mb-6 bg-slate-100 p-1 rounded-xl">
+            <button
+              onClick={() => setAccountMode('child')}
+              className={`py-2 rounded-lg font-medium text-xs transition-all ${
+                accountMode === 'child' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600'
+              }`}
+            >
+              👦 {t('auth.childAccount')}
+            </button>
+            <button
+              onClick={() => setAccountMode('parent')}
+              className={`py-2 rounded-lg font-medium text-xs transition-all ${
+                accountMode === 'parent' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600'
+              }`}
+            >
+              👨‍👩‍👧 {t('auth.parentAccount')}
+            </button>
+            <button
+              onClick={() => setAccountMode('teacher')}
+              className={`py-2 rounded-lg font-medium text-xs transition-all ${
+                accountMode === 'teacher' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600'
+              }`}
+            >
+              👨‍🏫 Teacher
+            </button>
+          </div>
+
+          {/* Login Form */}
+          {isLogin ? (
+            <div className="card p-6">
+              <h2 className="font-display text-2xl text-slate-800 mb-1">
+                {accountMode === 'parent' ? 'Parent Sign In 👨‍👩‍👧' : accountMode === 'teacher' ? 'Teacher Sign In 👨‍🏫' : 'Welcome back! 👋'}
+              </h2>
+              <p className="text-slate-600 text-sm mb-6">
+                {accountMode === 'parent' 
+                  ? 'Sign in to manage your children\'s accounts' 
+                  : accountMode === 'teacher'
+                  ? 'Sign in to manage your students'
+                  : 'Ready to continue your coding adventure?'}
+              </p>
+              
+              {error && (
+                <div className="mb-4 p-3 bg-red-100 border-2 border-red-300 rounded-xl text-red-700 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="form-label">
+                    {accountMode === 'child' ? t('auth.emailOrUsername') : t('auth.email')}
+                  </label>
+                  <input
+                    type="text"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder={accountMode === 'child' ? 'username or email' : 'your@email.com'}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">{t('auth.password')}</label>
+                  <input
+                    type="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder="••••••••"
+                  />
+                </div>
+                <button type="submit" className="btn-primary w-full justify-center py-3 text-base">
+                  {accountMode === 'parent' ? t('auth.signIn') + ' 👨‍👩‍👧' : accountMode === 'teacher' ? t('auth.signIn') + ' 👨‍🏫' : t('auth.letsGo') + ' 🚀'}
+                </button>
+              </form>
+
+              <div className="mt-4 text-center text-slate-600 text-sm">
+                <div className="text-xs mt-2">Test: test@example.com / password123</div>
+              </div>
+            </div>
+          ) : (
+            /* Register Form */
+            <div className="card p-6">
+              <h2 className="font-display text-2xl text-slate-800 mb-1">
+                {accountMode === 'parent' ? 'Create Parent Account 👨‍👩‍👧' : accountMode === 'teacher' ? 'Create Teacher Account 👨‍🏫' : 'Join the Adventure! 🌟'}
+              </h2>
+              <p className="text-slate-600 text-sm mb-6">
+                {accountMode === 'parent' 
+                  ? 'Create an account to manage your children\'s learning' 
+                  : accountMode === 'teacher'
+                  ? 'Create an account to manage your students'
+                  : 'Create your account and start coding today!'}
+              </p>
+              
+              {error && (
+                <div className="mb-4 p-3 bg-red-100 border-2 border-red-300 rounded-xl text-red-700 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleRegister} className="space-y-4">
+                {accountMode === 'parent' || accountMode === 'teacher' ? (
+                  /* Parent/Teacher Registration Fields */
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="form-label">{t('auth.firstName')}</label>
+                        <input
+                          type="text"
+                          name="firstName"
+                          value={formData.firstName}
+                          onChange={handleChange}
+                          className="form-input"
+                          placeholder="Jane"
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label">{t('auth.lastName')}</label>
+                        <input
+                          type="text"
+                          name="lastName"
+                          value={formData.lastName}
+                          onChange={handleChange}
+                          className="form-input"
+                          placeholder="Doe"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="form-label">{t('auth.email')}</label>
+                      <input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        className="form-input"
+                        placeholder="parent@email.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">{t('auth.phoneNumber')}</label>
+                        <input
+                        type="tel"
+                        name="phoneNumber"
+                        value={formData.phoneNumber}
+                        onChange={handleChange}
+                        className="form-input"
+                        placeholder="+1234567890"
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">{t('auth.password')}</label>
+                      <input
+                        type="password"
+                        name="password"
+                        value={formData.password}
+                        onChange={handleChange}
+                        className="form-input"
+                        placeholder="••••••••"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  /* Child Registration Fields */
+                  <>
+                    <div>
+                      <label className="form-label">{t('auth.username')}</label>
+                      <input
+                        type="text"
+                        name="username"
+                        value={formData.username}
+                        onChange={handleChange}
+                        className="form-input"
+                        placeholder="CoolCoder42"
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">{t('auth.email')}</label>
+                      <input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        className="form-input"
+                        placeholder="your@email.com"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="form-label">{t('auth.password')}</label>
+                        <input
+                          type="password"
+                          name="password"
+                          value={formData.password}
+                          onChange={handleChange}
+                          className="form-input"
+                          placeholder="Min. 6 chars"
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label">{t('auth.age')}</label>
+                        <input
+                          type="number"
+                          name="age"
+                          value={formData.age}
+                          onChange={handleChange}
+                          className="form-input"
+                          placeholder="10"
+                          min="4"
+                          max="17"
+                        />
+                      </div>
+                    </div>
+                    {showParentEmail && (
+                      <div>
+                        <label className="form-label">
+                          Parent's Email <span className="text-red-400">(required under 13)</span>
+                        </label>
+                        <input
+                          type="email"
+                          name="parent_email"
+                          value={formData.parent_email}
+                          onChange={handleChange}
+                          className="form-input"
+                          placeholder="parent@email.com"
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+                <button type="submit" className="btn-primary w-full justify-center py-3 text-base">
+                  {accountMode === 'parent' ? t('auth.startAdventure') + ' 👨‍👩‍👧' : accountMode === 'teacher' ? t('auth.startAdventure') + ' 👨‍🏫' : t('auth.startAdventure') + ' 🎮'}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* Adult Learner Portal Link */}
+          <div className="mt-8 w-full max-w-md">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-300"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-sky-50/50 text-slate-500 font-medium">
+                  Professional Development
+                </span>
+              </div>
+            </div>
+
+            <div 
+              onClick={() => navigate('/adult/auth')}
+              className="mt-6 cursor-pointer group"
+            >
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border-2 border-slate-700 hover:border-indigo-500 transition-all duration-300 shadow-lg hover:shadow-xl">
+                <div className="flex items-start gap-4">
+                  <div className="text-4xl group-hover:scale-110 transition-transform">
+                    💼
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-white text-lg mb-1 group-hover:text-indigo-300 transition-colors">
+                      Adult Learner Portal
+                    </h3>
+                    <p className="text-slate-300 text-sm mb-3">
+                      Professional web development training for adults. Learn client-side development with HTML, CSS, and JavaScript.
+                    </p>
+                    <div className="flex items-center gap-2 text-indigo-400 text-sm font-medium group-hover:gap-3 transition-all">
+                      <span>Access Professional Portal</span>
+                      <span className="group-hover:translate-x-1 transition-transform">→</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="mt-4 pt-4 border-t border-slate-700 grid grid-cols-3 gap-3 text-center">
+                  <div>
+                    <div className="text-indigo-400 font-bold text-lg">170</div>
+                    <div className="text-slate-400 text-xs">Hours</div>
+                  </div>
+                  <div>
+                    <div className="text-indigo-400 font-bold text-lg">8</div>
+                    <div className="text-slate-400 text-xs">Modules</div>
+                  </div>
+                  <div>
+                    <div className="text-indigo-400 font-bold text-lg">📜</div>
+                    <div className="text-slate-400 text-xs">Certificate</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Auth;

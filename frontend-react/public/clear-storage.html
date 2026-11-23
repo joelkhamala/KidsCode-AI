@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clear Storage - KIDSCODE</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .container {
+      background: white;
+      padding: 40px;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      text-align: center;
+      max-width: 500px;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    .emoji {
+      font-size: 64px;
+      margin-bottom: 20px;
+    }
+    button {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      font-size: 16px;
+      border-radius: 10px;
+      cursor: pointer;
+      margin: 10px;
+      transition: all 0.3s;
+    }
+    button:hover {
+      background: #764ba2;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    }
+    .success {
+      color: #10b981;
+      font-weight: bold;
+      margin-top: 20px;
+      display: none;
+    }
+    .info {
+      color: #666;
+      margin-top: 20px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="emoji">🧹</div>
+    <h1>Clear Browser Storage</h1>
+    <p>If you're experiencing login issues or 431 errors, click the button below to clear your browser storage.</p>
+    
+    <button onclick="clearStorage()">Clear Storage</button>
+    <button onclick="goHome()">Go to Home</button>
+    
+    <div class="success" id="success">
+      ✅ Storage cleared successfully!<br>
+      You can now close this page and login again.
+    </div>
+    
+    <div class="info">
+      This will clear:<br>
+      • Saved login tokens<br>
+      • User preferences<br>
+      • Cached data
+    </div>
+  </div>
+
+  <script>
+    function clearStorage() {
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+        document.getElementById('success').style.display = 'block';
+        
+        // Auto redirect after 2 seconds
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 2000);
+      } catch (err) {
+        alert('Error clearing storage: ' + err.message);
+      }
+    }
+
+    function goHome() {
+      window.location.href = '/';
+    }
+
+    // Auto-clear if URL has ?auto parameter
+    if (window.location.search.includes('auto')) {
+      clearStorage();
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+# Dependencies (reinstall with npm install - the committed sqlite3 binary only works on Windows)
+node_modules/
+
+# Secrets
+backend/.env
+
+# Databases contain children's personal data - never commit them
+*.db
+*.db-journal
+
+# Builds
+frontend-react/build/

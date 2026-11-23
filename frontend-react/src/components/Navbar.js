@@ -1,0 +1,221 @@
+import React, { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useRestrictions } from '../context/RestrictionsContext';
+import { useTranslation } from 'react-i18next';
+import { ChevronDown, Clock } from 'feather-icons-react';
+import LanguageSwitcher from './LanguageSwitcher';
+
+const Navbar = () => {
+  const { currentUser, userXP, userStreak, logout, accountType } = useAuth();
+  const { getRemainingTime } = useRestrictions();
+  const { t } = useTranslation();
+  const location = useLocation();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  
+  const remainingMinutes = getRemainingTime();
+
+  const level = Math.floor((userXP || 0) / 200) + 1;
+  const currentXP = (userXP || 0) % 200;
+  const xpPercent = Math.min(100, (currentXP / 200) * 100);
+
+  const isActive = (path) => location.pathname === path;
+  const isChild = accountType !== "parent" && accountType !== "teacher";
+  const displayName = isChild
+    ? (currentUser?.username?.split("_")[0] || "Coder")
+    : (currentUser?.firstName || (accountType === "teacher" ? "Teacher" : "Parent"));
+
+  return (
+    <nav className="navbar sticky top-0 z-40 px-4 py-3">
+      <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <Link to={accountType === 'parent' ? '/parent-dashboard' : accountType === 'teacher' ? '/teacher-dashboard' : '/'} className="flex items-center gap-2 cursor-pointer">
+          <img 
+            src="/kidscode_logo.png" 
+            alt="KIDSCODE" 
+            className="h-12 w-auto md:h-14"
+            onError={(e) => {
+              // Fallback if logo image not found
+              e.target.style.display = 'none';
+              e.target.nextSibling.style.display = 'flex';
+            }}
+          />
+          <div className="hidden items-center gap-2">
+            <span className="text-2xl">🚀</span>
+            <span className="font-display text-xl text-indigo-600">KIDSCODE</span>
+          </div>
+        </Link>
+
+        <div className="hidden md:flex items-center gap-1">
+          {accountType === 'parent' ? (
+            // Parent navigation
+            <Link 
+              to="/parent-dashboard" 
+              className={`nav-item ${isActive('/parent-dashboard') ? 'active' : ''}`}
+            >
+              👨‍👩‍👧 Dashboard
+            </Link>
+          ) : accountType === 'teacher' ? (
+            // Teacher navigation
+            <Link 
+              to="/teacher-dashboard" 
+              className={`nav-item ${isActive('/teacher-dashboard') ? 'active' : ''}`}
+            >
+              👨‍🏫 Dashboard
+            </Link>
+          ) : (
+            // Child navigation
+            <>
+              <Link 
+                to="/" 
+                className={`nav-item ${isActive('/') ? 'active' : ''}`}
+              >
+                🏠 Home
+              </Link>
+              <Link 
+                to="/curriculum" 
+                className={`nav-item ${isActive('/curriculum') ? 'active' : ''}`}
+              >
+                📚 Learn
+              </Link>
+              <Link 
+                to="/coach" 
+                className={`nav-item ${isActive('/coach') ? 'active' : ''}`}
+              >
+                🤖 {t('nav.coach')}
+              </Link>
+              <Link 
+                to="/playground" 
+                className={`nav-item ${isActive('/playground') ? 'active' : ''}`}
+              >
+                💻 Playground
+              </Link>
+              <Link 
+                to="/profile" 
+                className={`nav-item ${isActive('/profile') ? 'active' : ''}`}
+              >
+                👤 Profile
+              </Link>
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Time Remaining Indicator - Only for children with time limits */}
+          {isChild && remainingMinutes !== null && (
+            <div className={`hidden md:flex items-center gap-1 px-3 py-1 rounded-lg ${
+              remainingMinutes <= 10 ? 'bg-red-100 text-red-700' : 
+              remainingMinutes <= 30 ? 'bg-yellow-100 text-yellow-700' : 
+              'bg-green-100 text-green-700'
+            }`}>
+              <Clock size={14} />
+              <span className="text-xs font-bold">{remainingMinutes}m left</span>
+            </div>
+          )}
+
+          {/* XP Display - Only for children */}
+          {isChild && (
+            <div className="hidden md:flex items-center gap-2">
+              <div className="level-badge">{level}</div>
+              <div>
+                <div className="flex items-center gap-1 mb-1">
+                  <span className="text-yellow-600 text-xs font-bold">⭐ {userXP || 0} XP</span>
+                </div>
+                <div className="xp-bar w-20">
+                  <div className="xp-fill" style={{ width: `${xpPercent}%` }}></div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Streak - Only for children */}
+          {isChild && (
+            <div className="text-orange-600 font-bold text-sm hidden md:flex items-center gap-1">
+              🔥 {userStreak}
+            </div>
+          )}
+
+          {/* Language Switcher */}
+          <LanguageSwitcher />
+
+          {/* User Menu */}
+          <div className="relative">
+            <button 
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="flex items-center gap-2 btn-secondary text-sm py-2 px-3"
+            >
+              <span>👋</span>
+              <span className="font-bold">
+                {displayName}
+              </span>
+              <ChevronDown size={14} />
+            </button>
+            
+            {showUserMenu && (
+              <div className="absolute right-0 top-full mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl py-2 min-w-40 z-50">
+                <div className="px-4 py-2 text-slate-600 text-xs font-bold border-b border-slate-200 mb-1">
+                  {isChild ? currentUser?.username : currentUser?.email}
+                </div>
+                {isChild && (
+                  <Link 
+                    to="/profile" 
+                    className="block px-4 py-2 hover:bg-slate-100 text-sm font-semibold"
+                    onClick={() => setShowUserMenu(false)}
+                  >
+                    👤 My Profile
+                  </Link>
+                )}
+                {accountType === 'parent' && (
+                  <Link 
+                    to="/parent-dashboard" 
+                    className="block px-4 py-2 hover:bg-slate-100 text-sm font-semibold"
+                    onClick={() => setShowUserMenu(false)}
+                  >
+                    👨‍👩‍👧 Parent Dashboard
+                  </Link>
+                )}
+                {accountType === 'teacher' && (
+                  <Link
+                    to="/teacher-dashboard"
+                    className="block px-4 py-2 hover:bg-slate-100 text-sm font-semibold"
+                    onClick={() => setShowUserMenu(false)}
+                  >
+                    👨‍🏫 Teacher Dashboard
+                  </Link>
+                )}
+                <button 
+                  onClick={logout}
+                  className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm font-semibold text-red-400"
+                >
+                  🚪 Sign Out
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Nav - Only for children */}
+      {isChild && (
+        <div className="md:hidden flex gap-2 mt-2 overflow-x-auto pb-1">
+          <Link to="/" className={`nav-item whitespace-nowrap ${isActive('/') ? 'active' : ''}`}>
+            🏠 Home
+          </Link>
+          <Link to="/curriculum" className={`nav-item whitespace-nowrap ${isActive('/curriculum') ? 'active' : ''}`}>
+            📚 Learn
+          </Link>
+          <Link to="/coach" className={`nav-item whitespace-nowrap ${isActive('/coach') ? 'active' : ''}`}>
+            🤖 {t('nav.coach')}
+          </Link>
+          <Link to="/playground" className={`nav-item whitespace-nowrap ${isActive('/playground') ? 'active' : ''}`}>
+            💻 Play
+          </Link>
+          <Link to="/profile" className={`nav-item whitespace-nowrap ${isActive('/profile') ? 'active' : ''}`}>
+            👤 Me
+          </Link>
+        </div>
+      )}
+    </nav>
+  );
+};
+
+export default Navbar;
