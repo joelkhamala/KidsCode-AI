@@ -7,7 +7,8 @@ import { curriculumAPI } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { nextAfterQuiz } from '../utils/learningPath';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+// Same-origin by default (the dev server proxies /api to the backend).
+const API_URL = (process.env.REACT_APP_API_URL || '').replace(/\/api\/?$/, '');
 
 const Quiz = () => {
   const navigate = useNavigate();

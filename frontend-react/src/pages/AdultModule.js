@@ -22,7 +22,7 @@ const AdultModule = () => {
       if (isRefresh) setRefreshing(true);
       const token = localStorage.getItem('adult_token');
       // Add cache-busting timestamp so browser never serves stale data
-      const response = await fetch(`http://localhost:3000/api/adult/curriculum?t=${Date.now()}`, {
+      const response = await fetch(`/api/adult/curriculum?t=${Date.now()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'

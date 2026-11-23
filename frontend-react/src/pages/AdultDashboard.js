@@ -20,7 +20,7 @@ const AdultDashboard = () => {
   const loadDashboardData = async () => {
     try {
       const token = localStorage.getItem('adult_token');
-      const response = await fetch('http://localhost:3000/api/adult/curriculum', {
+      const response = await fetch('/api/adult/curriculum', {
         headers: {
           'Authorization': `Bearer ${token}`
         }

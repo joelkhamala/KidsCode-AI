@@ -14,7 +14,7 @@ const AdultProgress = () => {
   const loadProgress = async () => {
     try {
       const token = localStorage.getItem('adult_token');
-      const response = await fetch('http://localhost:3000/api/adult/progress', {
+      const response = await fetch('/api/adult/progress', {
         headers: {
           'Authorization': `Bearer ${token}`
         }

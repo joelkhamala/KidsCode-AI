@@ -1,0 +1,43 @@
+# Render Blueprint for KidsCode: one web service that serves both the API and the website.
+# In Render: New + > Blueprint > pick this repository. See docs/DEPLOY_RENDER.md.
+services:
+  - type: web
+    name: kidscode
+    runtime: node
+    # A persistent disk (needed so accounts and progress survive restarts) requires a paid plan.
+    plan: starter
+    # Frankfurt is the closest Render region to East Africa.
+    region: frankfurt
+    buildCommand: >-
+      cd backend && npm install --no-audit --no-fund &&
+      cd ../frontend-react && npm install --no-audit --no-fund &&
+      CI=false npm run build
+    # setup-database.js is safe to run on every start: it only adds what is missing.
+    startCommand: cd backend && node setup-database.js && node server.js
+    healthCheckPath: /api/curriculum
+    disk:
+      name: kidscode-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: KIDSCODE_DB_PATH
+        value: /var/data/codequest.db
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
+      # --- AI Coach (optional). Leave OPENAI_API_KEY empty to run in offline mode. ---
+      - key: AI_PROVIDER
+        value: openai
+      - key: OPENAI_BASE_URL
+        value: https://api.groq.com/openai
+      - key: AI_MODEL
+        value: openai/gpt-oss-120b
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: AI_MAX_CALLS_PER_LEARNER_PER_HOUR
+        value: "30"

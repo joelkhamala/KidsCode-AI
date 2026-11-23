@@ -67,6 +67,10 @@ class LLMClient {
       this.model = env.AI_MODEL;
       this.baseUrl = (env.OPENAI_BASE_URL || 'https://api.openai.com').replace(/\/$/, '').replace(/\/v1$/, '');
       if (!this.model) this.disable('AI_MODEL must be set for the openai-compatible provider');
+      // A hosted service (not a local/school server) always needs a key: without one, stay offline
+      // instead of failing on every request.
+      const local = /^https?:\/\/(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|[\w-]+\.local\b)/i.test(this.baseUrl);
+      if (this.enabled && !local && !env.OPENAI_API_KEY) this.disable('OPENAI_API_KEY is not set for the hosted AI service');
     }
     if (typeof this.fetch !== 'function' && this.provider !== 'offline') this.disable('fetch() is unavailable (Node 18+ required)');
   }

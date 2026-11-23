@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+// Same-origin by default (the dev server proxies /api to the backend).
+const API_URL = (process.env.REACT_APP_API_URL || '').replace(/\/api\/?$/, '');
 
 const ProgressDebug = () => {
   const { currentToken, userProgress } = useAuth();

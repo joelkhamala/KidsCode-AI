@@ -16,7 +16,7 @@ const AdultCertificate = () => {
   const checkEligibility = async () => {
     try {
       const token = localStorage.getItem('adult_token');
-      const response = await fetch('http://localhost:3000/api/adult/certificate/eligibility', {
+      const response = await fetch('/api/adult/certificate/eligibility', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -31,7 +31,7 @@ const AdultCertificate = () => {
 
       // Check if certificate already exists
       if (data.eligible) {
-        const certResponse = await fetch('http://localhost:3000/api/adult/certificate', {
+        const certResponse = await fetch('/api/adult/certificate', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -57,7 +57,7 @@ const AdultCertificate = () => {
 
     try {
       const token = localStorage.getItem('adult_token');
-      const response = await fetch('http://localhost:3000/api/adult/certificate', {
+      const response = await fetch('/api/adult/certificate', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

@@ -12,7 +12,11 @@ A browser-based coding education platform for children aged 7–16 in Kenya and 
 
 The AI Coach runs **offline by default**. To turn on AI-generated, personalised content, add `ANTHROPIC_API_KEY` to `backend/.env`, or point it at a school server running a local model. See [docs/AI_LEARNING_ENGINE.md](docs/AI_LEARNING_ENGINE.md).
 
-On a fresh database, run `node migrate-adult-learner.js` once in `backend` to enable the adult learner pathway.
+On a fresh database, run `node setup-database.js` once in `backend`. It creates the tables, the children's curriculum and the adult learner pathway, and is safe to run again.
+
+## Putting it online
+
+See [docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md) for a step-by-step guide to hosting KidsCode on Render using the included `render.yaml`.
 
 ## Project layout
 

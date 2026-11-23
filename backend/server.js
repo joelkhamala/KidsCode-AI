@@ -1717,7 +1717,14 @@ app.get('/api/adult/certificate', authenticateToken, requireAdultLearnerAccount,
 app.get('/api/curriculum', (req, res) => {
   const db = getDb();
 
-  db.all('SELECT * FROM modules ORDER BY order_num', (err, modules) => {
+  // Children only see children's modules; adult modules live under /api/adult/curriculum.
+  // (Databases created before the adult pathway have no target_audience column: show everything.)
+  const loadModules = (cb) => db.all(
+    "SELECT * FROM modules WHERE target_audience IS NULL OR target_audience IN ('children', 'both') ORDER BY order_num",
+    (err, rows) => (err && /no such column/i.test(err.message) ? db.all('SELECT * FROM modules ORDER BY order_num', cb) : cb(err, rows)),
+  );
+
+  loadModules((err, modules) => {
     if (err) return res.status(500).json({ error: 'Failed to load curriculum' });
 
     db.all('SELECT * FROM lessons ORDER BY module_id, order_num', (err, lessons) => {

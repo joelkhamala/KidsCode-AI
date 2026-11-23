@@ -33,7 +33,7 @@ const AdultAuth = () => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:3000/api/adult/login', {
+      const response = await fetch('/api/adult/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(loginData)
@@ -74,7 +74,7 @@ const AdultAuth = () => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:3000/api/adult/register', {
+      const response = await fetch('/api/adult/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

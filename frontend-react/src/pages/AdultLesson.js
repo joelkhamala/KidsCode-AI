@@ -73,7 +73,7 @@ const AdultLesson = () => {
   const loadLesson = async () => {
     try {
       const token = localStorage.getItem('adult_token');
-      const response = await fetch(`http://localhost:3000/api/adult/lesson/${lessonId}`, {
+      const response = await fetch(`/api/adult/lesson/${lessonId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -245,7 +245,7 @@ const AdultLesson = () => {
       // Save code — use correct field names that match the DB schema
       const codeData = JSON.stringify({ html: htmlCode, css: cssCode, js: jsCode });
 
-      const progressRes = await fetch('http://localhost:3000/api/progress', {
+      const progressRes = await fetch('/api/progress', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -261,7 +261,7 @@ const AdultLesson = () => {
 
       // Log learning hours for adult learners
       const durationMinutes = Math.max(1, Math.floor(timeSpent / 60));
-      await fetch('http://localhost:3000/api/adult/hours', {
+      await fetch('/api/adult/hours', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
