@@ -2,6 +2,7 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import coachTranslations from './translations/coach';
 import uiTranslations from './translations/ui';
+import adultTranslations from './translations/adult';
 
 // Translation resources
 const resources = {
@@ -634,6 +635,8 @@ Object.assign(resources.en.translation, coachTranslations.en);
 Object.assign(resources.sw.translation, coachTranslations.sw);
 Object.assign(resources.en.translation, uiTranslations.en);
 Object.assign(resources.sw.translation, uiTranslations.sw);
+Object.assign(resources.en.translation, adultTranslations.en);
+Object.assign(resources.sw.translation, adultTranslations.sw);
 
 i18n
   .use(initReactI18next)

@@ -1,615 +1,417 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import AdultBlocklyEditor from '../components/AdultBlocklyEditor';
-import CodeEditor from '../components/CodeEditor';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { adultAPI } from '../services/api';
+import WebWorkbench from '../components/WebWorkbench';
+import LessonText from '../components/LessonText';
+import useStudyTimer from '../utils/useStudyTimer';
 
-const loadLessonState = (lessonId) => {
-  try { return JSON.parse(localStorage.getItem(`adult_lesson_state_${lessonId}`)) || {}; } catch { return {}; }
+/**
+ * One lesson of the adult course: learn, practise (checked automatically), written test,
+ * oral practice, then complete. Code is saved to the server as you type.
+ */
+const local = {
+  get: (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage may be blocked */ } },
 };
+const STEPS = ['learn', 'practise', 'test', 'oral'];
+
+const Badge = ({ ok, children }) => (
+  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${ok ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>
+    {ok ? '✓' : '○'} {children}
+  </span>
+);
+
+const PANE_NAME = { html: 'HTML', css: 'CSS', js: 'JavaScript' };
+const PANE_STYLE = { html: 'bg-orange-100 text-orange-800', css: 'bg-sky-100 text-sky-800', js: 'bg-yellow-100 text-yellow-800' };
+
+/** The editor tab a lesson's task is about: the language most of its checks look at. */
+function mainPane(lesson) {
+  const counts = { html: 0, css: 0, js: 0 };
+  (lesson.checks || []).forEach((c) => { if (counts[c.in] !== undefined) counts[c.in] += 1; });
+  const [pane, n] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  return n > 0 ? pane : 'html';
+}
 
 const AdultLesson = () => {
   const { lessonId } = useParams();
   const navigate = useNavigate();
-
-  // Load persisted state for this specific lesson
-  const saved = loadLessonState(lessonId);
-
+  const { t } = useTranslation();
   const [lesson, setLesson] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [step, setStep] = useState('learn');
+  const [code, setCode] = useState({ html: '', css: '', js: '' });
+  const prefsKey = `adult_lesson_prefs_${lessonId}`;
+  const [mode, setMode] = useState(() => (local.get(prefsKey) || {}).mode || 'code');
+  const [blocksXml, setBlocksXml] = useState(() => (local.get(prefsKey) || {}).blocksXml || '');
+  const [saveState, setSaveState] = useState('saved'); // saved | saving | unsaved | error
+  const [practical, setPractical] = useState(null);
+  const [answers, setAnswers] = useState({});
+  const [quizResult, setQuizResult] = useState(null);
+  const [oralText, setOralText] = useState('');
+  const [oralDone, setOralDone] = useState(false);
+  const [busy, setBusy] = useState('');
+  const [message, setMessage] = useState(null); // { kind: 'ok'|'err', text }
+  const [finished, setFinished] = useState(null);
+  const [showHints, setShowHints] = useState(false);
+  const loaded = useRef(false);
+  useStudyTimer({ lessonId: Number(lessonId), kind: 'lesson' });
 
-  // Code states — restored from localStorage or defaulted to empty
-  const [htmlCode, setHtmlCode] = useState(saved.htmlCode ?? '');
-  const [cssCode, setCssCode]   = useState(saved.cssCode   ?? '');
-  const [jsCode, setJsCode]     = useState(saved.jsCode    ?? '');
-  const [editorMode, setEditorMode] = useState(saved.editorMode ?? 'blocks'); // 'blocks' | 'code'
-  // Blocks state
-  const [generatedJs, setGeneratedJs] = useState(saved.generatedJs ?? '');
-  const [blocksXml,   setBlocksXml]   = useState(saved.blocksXml   ?? '');
-  // Live sync indicator
-  const [syncing, setSyncing]   = useState(false);
-  const syncTimerRef            = useRef(null);
-  // Right-panel view in blocks mode: 'js' | 'html' | 'css'
-  const [codeView, setCodeView] = useState('js');
-
-  // Preview and execution
-  const [output, setOutput] = useState('');
-  const iframeRef = useRef(null);
-
-  // Toast notification
-  const [toast, setToast] = useState(null); // { type: 'success'|'error', msg }
-  const showToast = useCallback((type, msg) => {
-    setToast({ type, msg });
-    setTimeout(() => setToast(null), 3000);
-  }, []);
-
-  // ── Persist editor state to localStorage whenever it changes ────────────────
-  useEffect(() => {
+  const load = useCallback(async () => {
+    loaded.current = false;
+    setLesson(null); setError(''); setPractical(null); setQuizResult(null); setAnswers({}); setFinished(null); setMessage(null); setOralDone(false); setOralText('');
     try {
-      localStorage.setItem(`adult_lesson_state_${lessonId}`, JSON.stringify({
-        htmlCode, cssCode, jsCode, editorMode, generatedJs, blocksXml,
-      }));
-    } catch (_) {}
-  }, [lessonId, htmlCode, cssCode, jsCode, editorMode, generatedJs, blocksXml]);
+      const r = await adultAPI.lesson(lessonId);
+      const l = r.data.lesson;
+      setLesson(l);
+      setCode(l.savedCode ? { html: l.savedCode.html || '', css: l.savedCode.css || '', js: l.savedCode.js || '' } : { html: '', css: '', js: '' });
+      setOralDone(l.best.oral !== null);
+      setStep(l.completed ? 'practise' : 'learn');
+      setSaveState('saved');
+      setTimeout(() => { loaded.current = true; }, 0);
+    } catch (e) {
+      setError(e.response?.status === 404 ? t('ad.lessonNotFound') : (e.response?.data?.error || t('ad.loadFailed')));
+    }
+  }, [lessonId, t]);
+  useEffect(() => { load(); window.scrollTo(0, 0); }, [load]);
 
-  // Session tracking
-  const [sessionStart] = useState(new Date().toISOString());
-  const [timeSpent, setTimeSpent] = useState(0);
+  // Remember editor mode and blocks per lesson.
+  useEffect(() => { local.set(prefsKey, { mode, blocksXml }); }, [prefsKey, mode, blocksXml]);
 
+  // Auto-save code a few seconds after typing stops.
+  const currentId = lesson ? lesson.id : null;
   useEffect(() => {
-    loadLesson();
-    
-    // Track time spent
-    const timer = setInterval(() => {
-      setTimeSpent(prev => prev + 1);
-    }, 1000);
-    
-    return () => clearInterval(timer);
-  }, [lessonId]);
+    if (!loaded.current || !currentId) return undefined;
+    setSaveState('unsaved');
+    const h = setTimeout(() => {
+      setSaveState('saving');
+      adultAPI.saveLesson(currentId, code).then(() => setSaveState('saved')).catch(() => setSaveState('error'));
+    }, 2500);
+    return () => clearTimeout(h);
+  }, [code, currentId]);
 
+  // Warn before leaving with unsaved code.
   useEffect(() => {
-    updatePreview();
-  }, [htmlCode, cssCode, jsCode]);
+    const onLeave = (e) => { if (saveState === 'unsaved' || saveState === 'saving') { e.preventDefault(); e.returnValue = ''; } };
+    window.addEventListener('beforeunload', onLeave);
+    return () => window.removeEventListener('beforeunload', onLeave);
+  }, [saveState]);
 
-  const loadLesson = async () => {
-    try {
-      const token = localStorage.getItem('adult_token');
-      const response = await fetch(`/api/adult/lesson/${lessonId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to load lesson');
-      }
-
-      const data = await response.json();
-      setLesson(data.lesson);
-      
-      // Load saved code or starter code
-      if (data.lesson.last_code) {
-        try {
-          const savedCode = JSON.parse(data.lesson.last_code);
-          setHtmlCode(savedCode.html || '');
-          setCssCode(savedCode.css || '');
-          setJsCode(savedCode.js || '');
-        } catch (e) {
-          // If not JSON, treat as plain code
-          setHtmlCode(data.lesson.last_code || '');
-        }
-      } else if (data.lesson.example_code) {
-        setHtmlCode(data.lesson.example_code);
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const updatePreview = () => {
-    if (!iframeRef.current) return;
-    // Code mode uses typed JS; Blocks mode prefers block-generated JS
-    const effectiveJs = editorMode === 'code' ? jsCode : (generatedJs || jsCode);
-
-    const previewDocument = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <script>
-            // Suppress SecurityError from browser extensions trying to set cookies
-            // inside this sandboxed iframe (harmless — sandbox is working correctly).
-            window.addEventListener('error', function(e) {
-              if (e.error instanceof DOMException && e.error.name === 'SecurityError' && e.message && e.message.includes('cookie')) {
-                e.preventDefault(); e.stopImmediatePropagation(); return true;
-              }
-            }, true);
-            window.addEventListener('unhandledrejection', function(e) {
-              if (e.reason instanceof DOMException && e.reason.name === 'SecurityError' && e.reason.message && e.reason.message.includes('cookie')) {
-                e.preventDefault(); e.stopImmediatePropagation();
-              }
-            }, true);
-          <\/script>
-          <style>
-            body {
-              margin: 0;
-              padding: 20px;
-              font-family: system-ui, -apple-system, sans-serif;
-            }
-            ${cssCode}
-          </style>
-        </head>
-        <body>
-          ${htmlCode}
-          <script>
-            (function() {
-              const oldLog = console.log;
-              console.log = function(...args) {
-                window.parent.postMessage({
-                  type: 'console',
-                  message: args.join(' ')
-                }, '*');
-                oldLog.apply(console, args);
-              };
-              
-              // Capture errors
-              window.onerror = function(msg, url, line, col, error) {
-                window.parent.postMessage({
-                  type: 'error',
-                  message: msg + ' (Line ' + line + ')'
-                }, '*');
-                return false;
-              };
-            })();
-            
-            try {
-              ${effectiveJs}
-            } catch (e) {
-              window.parent.postMessage({
-                type: 'error',
-                message: e.message
-              }, '*');
-            }
-          <\/script>
-        </body>
-      </html>
-    `;
-
-    // Blank first, then set new doc in next task — forces clean iframe reload
-    iframeRef.current.srcdoc = '';
-    setTimeout(() => { if (iframeRef.current) iframeRef.current.srcdoc = previewDocument; }, 0);
-  };
-
-  // Listen for console messages and editor exports from iframe
-  useEffect(() => {
-    const handleMessage = (event) => {
-      if (event.data?.type === 'console') {
-        setOutput(prev => prev + '\n' + event.data.message);
-      } else if (event.data?.type === 'error') {
-        setOutput(prev => prev + '\n❌ Error: ' + event.data.message);
-      } else if (event.data?.type === 'html_export') {
-        // REPLACE with the running total accumulated via window.__blk_html__ in the iframe
-        // (prevents keystroke-per-character history build-up)
-        setHtmlCode(event.data.html);
-      } else if (event.data?.type === 'css_export') {
-        setCssCode(event.data.css);
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
-
-  const runCode = () => {
-    setOutput('Running...\n');
-    // Clear html_export accumulation so each Run starts fresh
-    setHtmlCode('');
-    updatePreview();
-  };
-
-  // When switching modes, sync generated JS → JS editor
-  const switchEditorMode = (mode) => {
-    if (mode === 'code' && editorMode === 'blocks' && generatedJs) {
-      setJsCode(generatedJs);
-    }
-    setEditorMode(mode);
-  };
-
-  // Blockly callbacks — flash syncing indicator and auto-switch code view
-  const handleBlocksCode = useCallback((code) => {
-    setGeneratedJs(code);
-    setSyncing(true);
-    // Auto-select the code view panel based on which export blocks are used
-    if (code.includes('__blk_html__')) {
-      setCodeView('html');
-    } else if (code.includes("type:'css_export'")) {
-      setCodeView('css');
-    } else {
-      setCodeView('js');
-    }
-    clearTimeout(syncTimerRef.current);
-    syncTimerRef.current = setTimeout(() => setSyncing(false), 600);
-  }, []);
-  const handleBlocksXml = useCallback((xml) => setBlocksXml(xml), []);
-
-  const clearOutput = () => {
-    setOutput('');
-  };
-
-  const saveProgress = async (completed = false) => {
-    try {
-      const token = localStorage.getItem('adult_token');
-
-      // Save code — use correct field names that match the DB schema
-      const codeData = JSON.stringify({ html: htmlCode, css: cssCode, js: jsCode });
-
-      const progressRes = await fetch('/api/progress', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          module_id: lesson.module_id,
-          lesson_id: parseInt(lessonId),
-          completed: completed ? 1 : 0,
-          last_code: codeData,
-          score: completed ? 100 : 0
-        })
-      });
-
-      if (!progressRes.ok) throw new Error('Failed to save progress');
-
-      // Log learning hours for adult learners
-      const durationMinutes = Math.max(1, Math.floor(timeSpent / 60));
-      await fetch('/api/adult/hours', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          moduleId: lesson.module_id,
-          lessonId: parseInt(lessonId),
-          sessionStart,
-          sessionEnd: new Date().toISOString(),
-          durationMinutes,
-          activityType: 'lesson'
-        })
-      }).catch(() => {}); // Hours logging is best-effort
-
-      if (completed) {
-        showToast('success', '✅ Lesson completed! Great work!');
-        setTimeout(() => navigate(`/adult/module/${lesson.module_id}`), 1200);
-      } else {
-        showToast('success', '💾 Progress saved!');
-      }
-    } catch (err) {
-      showToast('error', '❌ Failed to save progress. Please try again.');
-      console.error(err);
-    }
+  const run = async (key, fn) => {
+    setBusy(key); setMessage(null);
+    try { return await fn(); } catch (e) {
+      setMessage({ kind: 'err', text: e.response?.data?.error || t('ad.somethingWrong') });
+      return null;
+    } finally { setBusy(''); }
   };
 
   const loadExample = () => {
-    if (lesson?.example_code) {
-      setHtmlCode(lesson.example_code);
-      setCssCode('');
-      setJsCode('');
-    }
+    const ex = lesson.example || {};
+    setCode({ html: ex.html || '', css: ex.css || '', js: ex.js || '' });
+    setMode('code');
+    setStep('practise');
   };
+  const checkWork = () => run('check', async () => {
+    const r = await adultAPI.checkLesson(lesson.id, code);
+    setPractical(r.data);
+    setSaveState('saved');
+    setLesson((l) => ({ ...l, best: { ...l.best, practical: Math.max(l.best.practical || 0, r.data.score) } }));
+  });
+  const submitQuiz = () => run('quiz', async () => {
+    if (Object.keys(answers).length < lesson.quiz.length) { setMessage({ kind: 'err', text: t('ad.answerAll') }); return; }
+    const r = await adultAPI.quiz(lesson.id, lesson.quiz.map((_, i) => answers[i]));
+    setQuizResult(r.data);
+    setLesson((l) => ({ ...l, best: { ...l.best, written: Math.max(l.best.written || 0, r.data.score) } }));
+  });
+  const submitOral = () => run('oral', async () => {
+    await adultAPI.oral(lesson.id, oralText);
+    setOralDone(true);
+    setMessage({ kind: 'ok', text: t('ad.oralSaved') });
+  });
+  const complete = () => run('complete', async () => {
+    const r = await adultAPI.complete(lesson.id, code);
+    setFinished(r.data);
+    setLesson((l) => ({ ...l, completed: true, score: r.data.score }));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
 
-  if (loading) {
+  if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-4xl mb-4">⏳</div>
-          <div className="text-gray-600">Loading lesson...</div>
+      <div className="max-w-xl mx-auto px-4 py-16 text-center">
+        <div className="text-5xl mb-3" aria-hidden="true">📄</div>
+        <p className="text-slate-700 font-semibold mb-4">{error}</p>
+        <div className="flex justify-center gap-2">
+          <button type="button" className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold" onClick={load}>{t('ad.tryAgain')}</button>
+          <Link to="/adult/dashboard" className="px-4 py-2 rounded-xl border border-slate-300 font-semibold text-slate-700">{t('ad.backToCourse')}</Link>
         </div>
       </div>
     );
   }
-
-  if (error || !lesson) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-4xl mb-4">❌</div>
-          <div className="text-gray-600">{error || 'Lesson not found'}</div>
-          <button
-            onClick={() => navigate('/adult/dashboard')}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg"
-          >
-            Back to Dashboard
-          </button>
-        </div>
-      </div>
-    );
+  if (!lesson) {
+    return <div className="max-w-7xl mx-auto px-4 py-16 text-center text-slate-500 font-semibold">{t('ad.loading')}</div>;
   }
+
+  const practicalOk = (lesson.best.practical || 0) >= lesson.passMark && (!practical || practical.passed || lesson.completed);
+  const writtenOk = (lesson.best.written || 0) >= lesson.passMark;
+  // Learn is ticked once the learner has read it and moved on (or already has results).
+  const learnDone = lesson.completed || practicalOk || writtenOk || oralDone || step !== 'learn';
+  const stepDone = { learn: learnDone, practise: practicalOk, test: writtenOk, oral: oralDone };
+  const saveLabel = { saved: t('ad.saved'), saving: t('ad.saving'), unsaved: t('ad.unsaved'), error: t('ad.saveError') }[saveState];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Toast Notification */}
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 px-5 py-3 rounded-lg shadow-lg text-sm font-medium transition-all
-          ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
-          {toast.msg}
+    <div className="max-w-7xl mx-auto px-4 py-6">
+      {/* Header */}
+      <nav className="text-sm text-slate-500 mb-2" aria-label={t('ad.breadcrumb')}>
+        <Link to="/adult/dashboard" className="hover:text-indigo-600">{t('ad.course')}</Link>
+        <span className="mx-2">›</span>
+        <Link to={`/adult/module/${lesson.moduleId}`} className="hover:text-indigo-600">{lesson.moduleIcon} {lesson.moduleTitle}</Link>
+        <span className="mx-2">›</span>
+        <span className="text-slate-700">{t('ad.lessonNofM', { n: lesson.number, total: lesson.lessonsInModule })}</span>
+      </nav>
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-900">{lesson.title}</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            ⏱️ {t('ad.aboutMinutes', { n: lesson.minutes })} · {lesson.completed
+              ? <span className="text-emerald-700 font-semibold">✓ {t('ad.completedScore', { score: lesson.score })}</span>
+              : t('ad.passMarkNote', { n: lesson.passMark })}
+          </p>
+        </div>
+        <span className={`text-xs font-semibold px-3 py-1 rounded-full ${saveState === 'error' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`} aria-live="polite">💾 {saveLabel}</span>
+      </div>
+
+      {finished && (
+        <section className="mb-6 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-5" role="status">
+          <h2 className="text-xl font-bold text-emerald-900">🎉 {t('ad.lessonComplete')}</h2>
+          <p className="text-emerald-800 mt-1">{t('ad.lessonScore', { score: finished.score, practical: finished.practical, written: finished.written })}</p>
+          {finished.courseFinished && <p className="text-emerald-900 font-semibold mt-2">🎓 {t('ad.courseFinishedNote')}</p>}
+          <div className="flex flex-wrap gap-2 mt-4">
+            {finished.next && <button type="button" className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" onClick={() => navigate(`/adult/lesson/${finished.next.id}`)}>{t('ad.nextLesson')}: {finished.next.title} →</button>}
+            <Link to={`/adult/module/${lesson.moduleId}`} className="px-4 py-2 rounded-xl border border-emerald-300 text-emerald-800 font-semibold">{t('ad.backToModule')}</Link>
+            {finished.courseFinished && <Link to="/adult/certificate" className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold">🎓 {t('ad.certificate')}</Link>}
+          </div>
+        </section>
+      )}
+
+      {/* Steps */}
+      <div className="flex flex-wrap gap-2 mb-5" role="tablist" aria-label={t('ad.lessonSteps')}>
+        {STEPS.map((s, i) => (
+          <button key={s} type="button" role="tab" aria-selected={step === s} onClick={() => setStep(s)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border transition ${step === s ? 'bg-indigo-600 text-white border-indigo-600 shadow' : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300'}`}>
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${step === s ? 'bg-white/20' : stepDone[s] ? 'bg-emerald-500 text-white' : 'bg-slate-100'}`}>
+              {stepDone[s] ? '✓' : i + 1}
+            </span>
+            {t(`ad.step.${s}`)}
+          </button>
+        ))}
+      </div>
+
+      {message && (
+        <div className={`mb-4 rounded-xl px-4 py-3 text-sm font-semibold ${message.kind === 'ok' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`} role="alert">
+          {message.text}
         </div>
       )}
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => navigate(`/adult/module/${lesson.module_id}`)}
-                className="text-sm text-blue-600 hover:text-blue-700"
-              >
-                ← Back to Module
-              </button>
-              <div className="border-l border-gray-300 pl-4">
-                <h1 className="text-xl font-bold text-gray-900">
-                  {lesson.title}
-                </h1>
-                <p className="text-xs text-gray-500">
-                  {lesson.module_title} • {Math.floor(timeSpent / 60)}m {timeSpent % 60}s
-                </p>
-              </div>
+
+      {step === 'learn' && (
+        <div className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
+          <article className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <LessonText text={lesson.content} />
+          </article>
+          <aside className="space-y-4">
+            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5">
+              <h2 className="font-bold text-indigo-900 mb-2">🎯 {t('ad.yourTask')}</h2>
+              <p className="text-sm text-indigo-900">{lesson.challenge}</p>
+              <button type="button" className="mt-4 w-full px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold" onClick={() => setStep('practise')}>{t('ad.startPractising')} →</button>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => saveProgress(false)}
-                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                💾 Save
-              </button>
-              <button
-                onClick={() => saveProgress(true)}
-                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
-              >
-                ✓ Complete
-              </button>
-            </div>
-          </div>
+            {(lesson.example.html || lesson.example.css || lesson.example.js) && (
+              <button type="button" onClick={loadExample} className="w-full px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 font-semibold hover:bg-slate-50">📝 {t('ad.tryExample')}</button>
+            )}
+          </aside>
         </div>
-      </header>
+      )}
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="grid lg:grid-cols-2 gap-6">
-          {/* Left: Instructions */}
-          <div className="space-y-6">
-            {/* Lesson Content */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-3">📚 Lesson Content</h2>
-              <div className="prose prose-sm max-w-none">
-                <p className="text-gray-700 whitespace-pre-wrap">{lesson.content}</p>
+      {step === 'practise' && (
+        <div className="space-y-4">
+          {/* items-start: each card is only as tall as its content (no empty stretch when the checklist grows). */}
+          <div className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
+            <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col" aria-labelledby="task-title">
+              {/* Task */}
+              <div className="p-5 md:p-6 border-l-4 border-indigo-500 bg-gradient-to-br from-indigo-50 via-white to-white">
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <span className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-lg shadow-sm" aria-hidden="true">🎯</span>
+                  <h2 id="task-title" className="font-bold text-slate-900 text-lg mr-auto">{t('ad.yourTask')}</h2>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${PANE_STYLE[mainPane(lesson)]}`}>{t('ad.codeGoesIn', { pane: PANE_NAME[mainPane(lesson)] })}</span>
+                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600">{t('ad.passMarkChip', { n: lesson.passMark })}</span>
+                </div>
+                <p className="text-slate-800 text-base md:text-[17px] leading-relaxed">{lesson.challenge}</p>
+                <div className="flex flex-wrap gap-2 mt-4">
+                  {lesson.hints.length > 0 && (
+                    <button type="button" onClick={() => setShowHints((s) => !s)} aria-expanded={showHints} aria-controls="task-hints"
+                      className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold border transition ${showHints ? 'bg-amber-100 border-amber-300 text-amber-900' : 'bg-white border-slate-300 text-slate-700 hover:border-amber-300 hover:bg-amber-50'}`}>
+                      💡 {showHints ? t('ad.hideHints') : t('ad.showHints')} <span className="text-xs opacity-70">({lesson.hints.length})</span>
+                    </button>
+                  )}
+                  {(lesson.example.html || lesson.example.css || lesson.example.js) && (
+                    <button type="button" onClick={loadExample}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold border bg-white border-slate-300 text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 transition">
+                      📝 {t('ad.loadExample')}
+                    </button>
+                  )}
+                </div>
+                {showHints && (
+                  <ol id="task-hints" className="mt-4 space-y-2">
+                    {lesson.hints.map((h, i) => (
+                      <li key={i} className="flex gap-3 items-start rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-950">
+                        <span className="shrink-0 w-6 h-6 rounded-full bg-amber-400 text-white text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                        <span className="pt-0.5">{h}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
               </div>
-            </div>
-
-            {/* Challenge */}
-            <div className="bg-blue-50 rounded-xl border-2 border-blue-200 p-6">
-              <h2 className="text-lg font-bold text-blue-900 mb-3">🎯 Challenge</h2>
-              <div className="prose prose-sm max-w-none">
-                <p className="text-blue-800 whitespace-pre-wrap">{lesson.challenge}</p>
+              {/* How it works - fills the card's lower part with useful guidance */}
+              <ol className="mt-auto grid sm:grid-cols-3 gap-px bg-slate-200 border-t border-slate-200 text-sm" aria-label={t('ad.howItWorks')}>
+                {[['✍️', t('ad.taskHow1')], ['🔍', t('ad.taskHow2')], ['🏁', t('ad.taskHow3', { n: lesson.passMark })]].map(([icon, text], i) => (
+                  <li key={i} className="bg-slate-50 px-4 py-3 flex gap-2.5 items-start">
+                    <span className="shrink-0 w-6 h-6 rounded-full bg-white border border-slate-300 text-slate-600 text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                    <span className="text-slate-600"><span aria-hidden="true">{icon} </span>{text}</span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+            <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col" aria-labelledby="checks-title">
+              <div className="px-5 pt-5 pb-3 flex items-center justify-between gap-3">
+                <h2 id="checks-title" className="font-bold text-slate-900 flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm" aria-hidden="true">✓</span>
+                  {t('ad.checklist')}
+                </h2>
+                {practical && (
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${practical.passed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                    {t('ad.checksPassed', { n: practical.passedCount, total: practical.total })}
+                  </span>
+                )}
               </div>
-            </div>
-
-            {/* Hints */}
-            {lesson.hints && (
-              <div className="bg-yellow-50 rounded-xl border border-yellow-200 p-6">
-                <h2 className="text-lg font-bold text-yellow-900 mb-3">💡 Hints</h2>
-                <div className="text-sm text-yellow-800">
-                  {JSON.parse(lesson.hints).map((hint, index) => (
-                    <div key={index} className="mb-2">
-                      • {hint}
+              <ul className="px-3 space-y-1.5">
+                {lesson.checks.map((c, i) => {
+                  const r = practical && practical.results[i];
+                  const state = !r ? 'todo' : r.passed ? 'ok' : 'bad';
+                  return (
+                    <li key={i} className={`flex items-start gap-3 rounded-xl px-2.5 py-2 text-sm ${state === 'ok' ? 'bg-emerald-50' : state === 'bad' ? 'bg-red-50' : 'bg-slate-50'}`}>
+                      <span className={`mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${state === 'ok' ? 'bg-emerald-500 text-white' : state === 'bad' ? 'bg-red-500 text-white' : 'border-2 border-slate-300 bg-white'}`}
+                        aria-label={state === 'ok' ? t('ad.checkOk') : state === 'bad' ? t('ad.checkMissing') : t('ad.checkTodo')}>
+                        {state === 'ok' ? '✓' : state === 'bad' ? '✕' : ''}
+                      </span>
+                      <span className={`flex-1 leading-snug ${state === 'bad' ? 'text-red-800' : 'text-slate-700'}`}>{c.label}</span>
+                      <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-bold ${PANE_STYLE[c.in] || 'bg-slate-100 text-slate-600'}`}>{PANE_NAME[c.in] || c.in}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="p-5 mt-auto space-y-3">
+                {practical && (
+                  <div className={`rounded-xl px-4 py-3 border ${practical.passed ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`} role="status">
+                    <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                      <span className={`text-sm font-semibold ${practical.passed ? 'text-emerald-800' : 'text-amber-800'}`}>
+                        {practical.passed ? `🎉 ${t('ad.practicalPassedShort')}` : `🔧 ${t('ad.practicalNotYetShort', { n: lesson.passMark })}`}
+                      </span>
+                      <span className={`text-lg font-bold ${practical.passed ? 'text-emerald-700' : 'text-amber-700'}`}>{practical.score}%</span>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Example Code */}
-            {lesson.example_code && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div className="flex justify-between items-center mb-3">
-                  <h2 className="text-lg font-bold text-gray-900">📝 Example Code</h2>
-                  <button
-                    onClick={loadExample}
-                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg"
-                  >
-                    Load Example
-                  </button>
-                </div>
-                <pre className="text-xs bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto">
-                  {lesson.example_code}
-                </pre>
-              </div>
-            )}
-          </div>
-
-          {/* Right: Code Editor & Preview */}
-          <div className="space-y-6">
-            {/* Editor Mode Toggle */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => switchEditorMode('blocks')}
-                    className={`px-4 py-2 rounded-lg font-medium transition ${
-                      editorMode === 'blocks'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    🧩 Blocks
-                  </button>
-                  <button
-                    onClick={() => switchEditorMode('code')}
-                    className={`px-4 py-2 rounded-lg font-medium transition ${
-                      editorMode === 'code'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    💻 Code
-                  </button>
-                </div>
-                <button
-                  onClick={runCode}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
-                >
-                  ▶ Run
-                </button>
-              </div>
-            </div>
-
-            {/* Code Editors */}
-            {editorMode === 'code' && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                {/* HTML Editor */}
-                <div className="border-b border-gray-200">
-                  <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
-                    <span className="text-sm font-medium text-gray-700">HTML</span>
-                  </div>
-                  <div className="p-2">
-                    <CodeEditor value={htmlCode} onChange={setHtmlCode} language="html" height={180} placeholder="<h1>Hello World</h1>" ariaLabel="HTML" />
-                  </div>
-                </div>
-
-                {/* CSS Editor */}
-                <div className="border-b border-gray-200">
-                  <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
-                    <span className="text-sm font-medium text-gray-700">CSS</span>
-                  </div>
-                  <div className="p-2">
-                    <CodeEditor value={cssCode} onChange={setCssCode} language="css" height={150} placeholder="h1 { color: blue; }" ariaLabel="CSS" showSwitches={false} />
-                  </div>
-                </div>
-
-                {/* JavaScript Editor */}
-                <div>
-                  <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
-                    <span className="text-sm font-medium text-gray-700">JavaScript</span>
-                  </div>
-                  <div className="p-2">
-                    <CodeEditor value={jsCode} onChange={setJsCode} language="javascript" height={150} placeholder="console.log('Hello!');" ariaLabel="JavaScript" showSwitches={false} />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Blocks Editor — two-column: workspace left, live code right */}
-            {editorMode === 'blocks' && (
-              <div className="bg-white rounded-xl shadow-sm border border-indigo-200 overflow-hidden">
-                {/* Header */}
-                <div className="bg-indigo-50 px-4 py-2 border-b border-indigo-100 flex items-center justify-between">
-                  <span className="text-sm font-bold text-indigo-700">🧩 Block Editor</span>
-                  <div className="flex items-center gap-2">
-                    {syncing && (
-                      <span className="text-[10px] bg-green-500 text-white px-2 py-0.5 rounded-full animate-pulse">⚡ syncing...</span>
-                    )}
-                    {generatedJs && !syncing && (
-                      <button
-                        onClick={() => switchEditorMode('code')}
-                        className="text-xs px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded"
-                      >
-                        Edit as Code →
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {/* Two-column body */}
-                <div className="flex" style={{ minHeight: '380px' }}>
-                  {/* Left: Blockly workspace */}
-                  <div className="flex-1 overflow-hidden" style={{ borderRight: '1px solid #e0e7ff' }}>
-                    <AdultBlocklyEditor
-                      height="380px"
-                      initialXml={blocksXml}
-                      onCodeChange={handleBlocksCode}
-                      onXmlChange={handleBlocksXml}
-                    />
-                  </div>
-                  {/* Right: live code panel with auto-switching view */}
-                  <div
-                    className="flex flex-col shrink-0"
-                    style={{ width: '38%', background: '#0f172a', minHeight: '380px' }}
-                  >
-                    {/* Tab bar */}
-                    <div className="flex items-center gap-1 px-2 py-1.5 border-b border-gray-700 shrink-0">
-                      {[['js', '⚡ JS', 'text-yellow-400'], ['html', '🏗 HTML', 'text-orange-400'], ['css', '🎨 CSS', 'text-blue-400']].map(([id, label, activeColor]) => (
-                        <button
-                          key={id}
-                          onClick={() => setCodeView(id)}
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all ${
-                            codeView === id
-                              ? `bg-gray-700 ${activeColor}`
-                              : 'text-gray-500 hover:text-gray-300'
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                      <div className="ml-auto">
-                        {syncing && (
-                          <span className="w-2 h-2 rounded-full bg-green-400 animate-ping inline-block" />
-                        )}
-                      </div>
+                    <div className="h-1.5 rounded-full bg-white overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-700 ${practical.passed ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${practical.score}%` }} />
                     </div>
-                    {/* Content */}
-                    <pre
-                      className={`flex-1 p-3 font-mono text-[11px] overflow-auto whitespace-pre-wrap ${
-                        codeView === 'html' ? 'text-orange-300'
-                        : codeView === 'css'  ? 'text-blue-300'
-                        : 'text-yellow-300'
-                      }`}
-                      style={{ transition: 'opacity 0.15s', opacity: syncing ? 0.55 : 1 }}
-                    >
-                      {codeView === 'html'
-                        ? (htmlCode  || '<!-- HTML will appear here after Run -->')
-                        : codeView === 'css'
-                        ? (cssCode   || '/* CSS will appear here after Run */')
-                        : (generatedJs || '// Drag blocks from the left\n// — generated JS appears here')}
-                    </pre>
                   </div>
-                </div>
-              </div>
-            )}
-
-            {/* Live Preview */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-700">🌐 Live Preview</span>
-                <button
-                  onClick={updatePreview}
-                  className="text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded"
-                >
-                  Refresh
+                )}
+                <button type="button" disabled={busy === 'check'} onClick={checkWork}
+                  className={`w-full px-4 py-2.5 rounded-xl font-semibold transition disabled:opacity-60 ${practical?.passed ? 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm'}`}>
+                  {busy === 'check' ? t('ad.checking') : `🔍 ${practical ? t('ad.checkAgain') : t('ad.checkWork')}`}
                 </button>
+                {practical?.passed && !writtenOk && (
+                  <button type="button" onClick={() => setStep('test')} className="w-full px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm">
+                    📝 {t('ad.goToTest')} →
+                  </button>
+                )}
               </div>
-              <div className="bg-white" style={{ height: '300px' }}>
-                <iframe
-                  ref={iframeRef}
-                  title="preview"
-                  sandbox="allow-scripts"
-                  className="w-full h-full border-0"
-                />
-              </div>
-            </div>
-
-            {/* Console Output */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-700">📟 Console</span>
-                <button
-                  onClick={clearOutput}
-                  className="text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded"
-                >
-                  Clear
-                </button>
-              </div>
-              <pre className="p-4 font-mono text-xs bg-gray-900 text-green-400 h-32 overflow-auto">
-                {output || '// Console output will appear here...'}
-              </pre>
-            </div>
+            </section>
           </div>
+          <WebWorkbench key={lesson.id} initialTab={mainPane(lesson)} value={code} onChange={setCode} mode={mode} onModeChange={setMode} blocksXml={blocksXml} onBlocksXml={setBlocksXml} usesJquery={lesson.usesJquery} editorHeight={320} />
         </div>
-      </div>
+      )}
+
+      {step === 'test' && (
+        <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 max-w-3xl" aria-labelledby="test-title">
+          <h2 id="test-title" className="text-xl font-bold text-slate-900 mb-1">📝 {t('ad.writtenTest')}</h2>
+          <p className="text-sm text-slate-500 mb-5">{t('ad.writtenHelp', { n: lesson.passMark })}{lesson.best.written !== null ? ` · ${t('ad.bestSoFar', { score: lesson.best.written })}` : ''}</p>
+          <ol className="space-y-6">
+            {lesson.quiz.map((q, i) => {
+              const mark = quizResult && quizResult.marking[i];
+              return (
+                <li key={q.n}>
+                  <fieldset>
+                    <legend className="font-semibold text-slate-900 mb-2">{q.n}. {q.q}</legend>
+                    <div className="space-y-2">
+                      {q.options.map((opt, j) => {
+                        const chosen = answers[i] === j;
+                        const right = mark && mark.correctIndex === j;
+                        return (
+                          <label key={j} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${right ? 'border-emerald-400 bg-emerald-50' : mark && chosen ? 'border-red-300 bg-red-50' : chosen ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                            <input type="radio" name={`q${i}`} className="mt-1" checked={chosen} onChange={() => { setAnswers((a) => ({ ...a, [i]: j })); setQuizResult(null); }} />
+                            <span className="text-slate-800">{opt}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {mark && <p className={`mt-2 text-sm ${mark.correct ? 'text-emerald-700' : 'text-red-700'}`}>{mark.correct ? '✓' : '✗'} {mark.why}</p>}
+                  </fieldset>
+                </li>
+              );
+            })}
+          </ol>
+          <div className="flex flex-wrap items-center gap-3 mt-6">
+            <button type="button" disabled={busy === 'quiz'} onClick={submitQuiz} className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold">{t('ad.submitAnswers')}</button>
+            {quizResult && (
+              <span className={`font-semibold ${quizResult.passed ? 'text-emerald-700' : 'text-amber-700'}`} role="status">
+                {quizResult.passed ? t('ad.testPassed', { score: quizResult.score }) : t('ad.testNotYet', { score: quizResult.score })}
+              </span>
+            )}
+          </div>
+        </section>
+      )}
+
+      {step === 'oral' && (
+        <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 max-w-3xl" aria-labelledby="oral-title">
+          <h2 id="oral-title" className="text-xl font-bold text-slate-900 mb-1">🎤 {t('ad.oralPractice')}</h2>
+          <p className="text-sm text-slate-500 mb-4">{t('ad.oralHelp')}</p>
+          <blockquote className="border-l-4 border-indigo-400 bg-indigo-50 rounded-r-xl px-4 py-3 text-indigo-900 font-semibold mb-4">{lesson.oral}</blockquote>
+          {oralDone && !oralText ? (
+            <p className="text-emerald-700 font-semibold">✓ {t('ad.oralAlreadyDone')}</p>
+          ) : null}
+          <label htmlFor="oral-text" className="block text-sm font-semibold text-slate-700 mb-1">{t('ad.oralWrite')}</label>
+          <textarea id="oral-text" value={oralText} onChange={(e) => setOralText(e.target.value)} rows={7} className="w-full rounded-xl border border-slate-300 p-3 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none" />
+          <div className="flex items-center justify-between mt-2">
+            <span className="text-xs text-slate-500">{t('ad.words', { n: oralText.trim().split(/\s+/).filter(Boolean).length })} / 30</span>
+            <button type="button" disabled={busy === 'oral' || oralText.trim().split(/\s+/).filter(Boolean).length < 30} onClick={submitOral} className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold">{t('ad.saveAnswer')}</button>
+          </div>
+        </section>
+      )}
+
+      {/* Finish */}
+      <section className="mt-6 bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-wrap items-center gap-4" aria-label={t('ad.finishLesson')}>
+        <div className="flex flex-wrap gap-2 flex-1">
+          <Badge ok={practicalOk}>{t('ad.reqPractical', { n: lesson.passMark })}</Badge>
+          <Badge ok={writtenOk}>{t('ad.reqWritten', { n: lesson.passMark })}</Badge>
+          <Badge ok={oralDone}>{t('ad.reqOral')}</Badge>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {lesson.prev && <button type="button" onClick={() => navigate(`/adult/lesson/${lesson.prev.id}`)} className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50">← {t('ad.previous')}</button>}
+          {!lesson.completed || finished === null ? (
+            <button type="button" disabled={busy === 'complete' || !writtenOk} onClick={complete} title={!writtenOk ? t('ad.passTestFirst') : ''}
+              className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold">
+              {lesson.completed ? `✓ ${t('ad.saveCompletion')}` : `✓ ${t('ad.completeLesson')}`}
+            </button>
+          ) : null}
+          {lesson.next && <button type="button" onClick={() => navigate(`/adult/lesson/${lesson.next.id}`)} className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50">{t('ad.next')} →</button>}
+        </div>
+      </section>
     </div>
   );
 };

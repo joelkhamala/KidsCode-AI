@@ -1,199 +1,127 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { adultAPI } from '../services/api';
+import { Page, PageHeader, Card, Bar, Stat, Loading, ErrorBox, studyTime } from '../components/AdultUi';
 
+/** Progress report: totals, each module, study time per week, recent assessments, certificate requirements. */
 const AdultProgress = () => {
-  const navigate = useNavigate();
-  const [progress, setProgress] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { t, i18n } = useTranslation();
+  const [p, setP] = useState(null);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    loadProgress();
-  }, []);
+  const load = useCallback(() => {
+    setError('');
+    adultAPI.progress().then((r) => setP(r.data.progress)).catch((e) => setError(e.response?.data?.error || t('ad.loadFailed')));
+  }, [t]);
+  useEffect(() => { load(); }, [load]);
 
-  const loadProgress = async () => {
-    try {
-      const token = localStorage.getItem('adult_token');
-      const response = await fetch('/api/adult/progress', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+  if (error) return <Page><ErrorBox message={error} onRetry={load} /></Page>;
+  if (!p) return <Page><Loading /></Page>;
 
-      if (!response.ok) {
-        throw new Error('Failed to load progress');
-      }
-
-      const data = await response.json();
-      setProgress(data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-4xl mb-4">⏳</div>
-          <div className="text-gray-600">Loading progress...</div>
-        </div>
-      </div>
-    );
-  }
+  const maxWeek = Math.max(1, ...p.weeklyHours.map((w) => w.hours));
+  const req = p.requirements;
+  const fmtDate = (s) => (s ? new Date(String(s).replace(' ', 'T') + (String(s).includes('Z') ? '' : 'Z')).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short' }) : '');
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate('/adult/dashboard')}
-              className="text-sm text-blue-600 hover:text-blue-700"
-            >
-              ← Back to Dashboard
-            </button>
-            <div className="border-l border-gray-300 pl-4">
-              <h1 className="text-2xl font-bold text-gray-900">
-                📈 Your Progress
-              </h1>
-              <p className="text-sm text-gray-600">
-                Track your learning journey
-              </p>
-            </div>
-          </div>
-        </div>
-      </header>
+    <Page>
+      <PageHeader title={t('ad.myProgress')} subtitle={t('ad.progressSubtitle')} />
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
-          </div>
-        )}
-
-        {/* Overall Stats */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="text-sm font-medium text-gray-600 mb-1">Completion</div>
-            <div className="text-3xl font-bold text-blue-600">
-              {progress?.stats?.progressPercentage || 0}%
-            </div>
-            <div className="mt-3 bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-blue-600 h-2 rounded-full"
-                style={{ width: `${progress?.stats?.progressPercentage || 0}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="text-sm font-medium text-gray-600 mb-1">Lessons</div>
-            <div className="text-3xl font-bold text-green-600">
-              {progress?.stats?.completedLessons || 0}/{progress?.stats?.totalLessons || 0}
-            </div>
-            <div className="text-xs text-gray-500 mt-1">Completed</div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="text-sm font-medium text-gray-600 mb-1">Hours</div>
-            <div className="text-3xl font-bold text-purple-600">
-              {progress?.stats?.hoursLogged || 0}
-            </div>
-            <div className="text-xs text-gray-500 mt-1">of 170 required</div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="text-sm font-medium text-gray-600 mb-1">Average</div>
-            <div className="text-3xl font-bold text-indigo-600">
-              {progress?.stats?.averageScore || 0}%
-            </div>
-            <div className="text-xs text-gray-500 mt-1">Assessment Score</div>
-          </div>
-        </div>
-
-        {/* Module Progress */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-6">Module Progress</h2>
-          
-          {progress?.modules && progress.modules.length > 0 ? (
-            <div className="space-y-4">
-              {progress.modules.map((module) => {
-                const completedLessons = module.lessons.filter(l => l.completed).length;
-                const totalLessons = module.lessons.length;
-                const moduleProgress = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
-
-                return (
-                  <div key={module.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <h3 className="font-bold text-gray-900">{module.title}</h3>
-                        <p className="text-sm text-gray-600">
-                          {completedLessons}/{totalLessons} lessons • {module.estimated_hours || 0} hours
-                        </p>
-                      </div>
-                      <span className="text-sm font-bold text-blue-600">
-                        {Math.round(moduleProgress)}%
-                      </span>
-                    </div>
-                    
-                    <div className="bg-gray-200 rounded-full h-2 mb-3">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full transition-all"
-                        style={{ width: `${moduleProgress}%` }}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                      {module.lessons.map((lesson) => (
-                        <div
-                          key={lesson.id}
-                          className={`text-xs p-2 rounded border ${
-                            lesson.completed
-                              ? 'bg-green-50 border-green-200 text-green-700'
-                              : 'bg-gray-50 border-gray-200 text-gray-600'
-                          }`}
-                        >
-                          {lesson.completed ? '✓' : '○'} {lesson.title}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              No progress data available yet. Start learning!
-            </div>
-          )}
-        </div>
-
-        {/* Recent Activity */}
-        {progress?.recentActivity && progress.recentActivity.length > 0 && (
-          <div className="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">Recent Activity</h2>
-            <div className="space-y-3">
-              {progress.recentActivity.map((activity, index) => (
-                <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                  <div className="text-2xl">{activity.type === 'lesson' ? '📚' : '⏱️'}</div>
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">{activity.title}</div>
-                    <div className="text-xs text-gray-500">{activity.date}</div>
-                  </div>
-                  {activity.duration && (
-                    <div className="text-sm text-gray-600">{activity.duration} min</div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <Stat label={t('ad.lessons')} value={`${p.completedLessons}/${p.totalLessons}`} sub={`${p.progressPercentage}%`} bar={{ value: p.completedLessons, max: p.totalLessons }} />
+        <Stat label={t('ad.modules')} value={`${p.completedModules}/${p.totalModules}`} sub={t('ad.completed')} color="text-sky-600" />
+        <Stat label={t('ad.studyTime')} value={studyTime(p.minutesLogged, p.hoursLogged)} sub={t('ad.ofHours', { n: p.requiredHours })} color="text-emerald-600" barColor="bg-emerald-500" bar={{ value: p.hoursLogged, max: p.requiredHours }} />
+        <Stat label={t('ad.averageScore')} value={`${p.averageScore}%`} sub={t('ad.passMarkNote', { n: 70 })} color="text-violet-600" />
       </div>
-    </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_360px] gap-6">
+        <div className="space-y-6">
+          <Card className="p-5">
+            <h2 className="font-bold text-slate-900 mb-4">{t('ad.byModule')}</h2>
+            <ul className="space-y-4">
+              {p.modules.map((m) => (
+                <li key={m.id}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <Link to={`/adult/module/${m.id}`} className="font-semibold text-slate-800 hover:text-indigo-600">{m.icon} {m.title}</Link>
+                    <span className="text-slate-500">{m.completed}/{m.total}{m.completed ? ` · ${m.averageScore}%` : ''}</span>
+                  </div>
+                  <Bar value={m.completed} max={m.total} color={m.total && m.completed === m.total ? 'bg-emerald-500' : 'bg-indigo-600'} label={m.title} />
+                </li>
+              ))}
+            </ul>
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="font-bold text-slate-900 mb-1">{t('ad.weeklyStudy')}</h2>
+            <p className="text-xs text-slate-500 mb-4">{t('ad.weeklyStudyHelp')}</p>
+            {p.weeklyHours.length === 0 ? <p className="text-sm text-slate-500">{t('ad.noStudyYet')}</p> : (
+              <div className="flex items-end gap-2 h-40" role="img" aria-label={t('ad.weeklyStudy')}>
+                {p.weeklyHours.map((w) => (
+                  <div key={w.start} className="flex-1 flex flex-col items-center gap-1 min-w-0">
+                    <span className="text-[11px] font-semibold text-slate-600">{studyTime(w.minutes, w.hours)}</span>
+                    <div className="w-full bg-emerald-500 rounded-t-md" style={{ height: `${Math.max(4, (100 * w.hours) / maxWeek)}%` }} />
+                    <span className="text-[10px] text-slate-400 truncate w-full text-center">{fmtDate(w.start)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="font-bold text-slate-900 mb-4">{t('ad.recentAssessments')}</h2>
+            {p.recentAssessments.length === 0 ? <p className="text-sm text-slate-500">{t('ad.noAssessments')}</p> : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-slate-500 border-b border-slate-200">
+                      <th scope="col" className="py-2 pr-3 font-semibold">{t('ad.lesson')}</th>
+                      <th scope="col" className="py-2 pr-3 font-semibold">{t('ad.type')}</th>
+                      <th scope="col" className="py-2 pr-3 font-semibold">{t('ad.score')}</th>
+                      <th scope="col" className="py-2 font-semibold">{t('ad.date')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {p.recentAssessments.map((a) => (
+                      <tr key={a.id} className="border-b border-slate-100">
+                        <td className="py-2 pr-3"><Link to={`/adult/lesson/${a.lessonId}`} className="text-indigo-700 hover:underline">{a.lessonTitle}</Link></td>
+                        <td className="py-2 pr-3">{t(`ad.assess.${a.type}`)}</td>
+                        <td className={`py-2 pr-3 font-semibold ${a.passed ? 'text-emerald-700' : 'text-amber-700'}`}>{a.percentage}%</td>
+                        <td className="py-2 text-slate-500">{fmtDate(a.at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </div>
+
+        <aside>
+          <Card className="p-5 lg:sticky lg:top-4">
+            <h2 className="font-bold text-slate-900 mb-1">🎓 {t('ad.certificateRequirements')}</h2>
+            <p className="text-xs text-slate-500 mb-4">{t('ad.certificateRequirementsHelp')}</p>
+            <ul className="space-y-4">
+              {[
+                ['allLessonsCompleted', t('ad.reqAllLessons'), `${req.allLessonsCompleted.current}/${req.allLessonsCompleted.required}`],
+                ['passedAssessments', t('ad.reqAverage', { n: req.passedAssessments.required }), `${req.passedAssessments.current}%`],
+                ['sufficientHours', t('ad.reqHours', { n: req.sufficientHours.required }), studyTime(null, req.sufficientHours.current)],
+              ].map(([key, label, value]) => (
+                <li key={key}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className={`font-semibold ${req[key].met ? 'text-emerald-700' : 'text-slate-700'}`}>{req[key].met ? '✅' : '⏳'} {label}</span>
+                    <span className="text-slate-500">{value}</span>
+                  </div>
+                  <Bar value={req[key].current} max={req[key].required} color={req[key].met ? 'bg-emerald-500' : 'bg-indigo-600'} label={label} />
+                </li>
+              ))}
+            </ul>
+            <Link to="/adult/certificate" className={`mt-5 block text-center px-4 py-2 rounded-xl font-semibold ${p.eligible || p.certificateNumber ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+              {p.certificateNumber ? t('ad.viewCertificate') : p.eligible ? t('ad.getCertificateNow') : t('ad.aboutCertificate')}
+            </Link>
+          </Card>
+        </aside>
+      </div>
+    </Page>
   );
 };
 

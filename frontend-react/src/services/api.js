@@ -96,11 +96,77 @@ export const socialAPI = {
   getLeaderboard: (timeframe = 'all', limit = 50) => 
     api.get('/social/leaderboard', { params: { timeframe, limit } }),
   getFriendsLeaderboard: (timeframe = 'all') => api.get('/social/leaderboard/friends', { params: { timeframe } }),
-  updateLeaderboardCache: () => api.post('/social/leaderboard/update'),
   getUserRank: () => api.get('/social/rank'),
-  
+
   // Activity feed
   getActivityFeed: (limit = 20) => api.get('/social/feed', { params: { limit } }),
+
+  // Things friends do together
+  getSettings: () => api.get('/social/settings'),
+  getTeam: () => api.get('/social/team'),
+  getProfile: (friendId, locale) => api.get(`/social/friends/${friendId}/profile`, { params: { locale } }),
+  cheer: ({ to, sticker, eventId, projectId }) => api.post('/social/cheers', { to, sticker, eventId, projectId }),
+  getInbox: (locale) => api.get('/social/inbox', { params: { locale } }),
+  markInboxSeen: () => api.post('/social/inbox/seen'),
+  getDuels: (locale) => api.get('/social/duels', { params: { locale } }),
+  startDuel: ({ to, language, concept }) => api.post('/social/duels', { to, language, concept }),
+  getDuel: (id, locale) => api.get(`/social/duels/${id}`, { params: { locale } }),
+  answerDuel: (id, answers, locale) => api.post(`/social/duels/${id}/answers`, { answers, locale }),
+  declineDuel: (id) => api.post(`/social/duels/${id}/decline`),
+  getProjects: () => api.get('/social/projects'),
+  getProject: (id) => api.get(`/social/projects/${id}`),
+  shareProject: (data) => api.post('/social/projects', data),
+  unshareProject: (id) => api.delete(`/social/projects/${id}`),
+};
+
+// ---------------------------------------------------------------------------
+// Adult learners - a separate client that uses the adult login (adult_token), so an
+// adult session and a children's session can be open in the same browser.
+// ---------------------------------------------------------------------------
+const adultHttp = axios.create({ baseURL: API_BASE, headers: { 'Content-Type': 'application/json' } });
+adultHttp.interceptors.request.use((config) => {
+  const token = localStorage.getItem('adult_token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+adultHttp.interceptors.response.use((r) => r, (error) => {
+  const url = error.config?.url || '';
+  // Expired or invalid login: go back to the adult sign-in page.
+  if (error.response?.status === 401 && !/\/adult\/(login|register)$/.test(url)) {
+    localStorage.removeItem('adult_token');
+    localStorage.removeItem('adult_user');
+    if (!window.location.pathname.startsWith('/adult/auth')) window.location.href = '/adult/auth';
+  }
+  return Promise.reject(error);
+});
+
+export const adultAPI = {
+  register: (data) => adultHttp.post('/adult/register', data),
+  login: (email, password) => adultHttp.post('/adult/login', { email, password }),
+  me: () => adultHttp.get('/adult/me'),
+  updateProfile: (data) => adultHttp.put('/adult/profile', data),
+  changePassword: (currentPassword, newPassword) => adultHttp.put('/adult/password', { currentPassword, newPassword }),
+  curriculum: () => adultHttp.get('/adult/curriculum'),
+  lesson: (id) => adultHttp.get(`/adult/lesson/${id}`),
+  saveLesson: (id, code) => adultHttp.post(`/adult/lesson/${id}/save`, { code }),
+  checkLesson: (id, code) => adultHttp.post(`/adult/lesson/${id}/check`, { code }),
+  quiz: (id, answers) => adultHttp.post(`/adult/lesson/${id}/quiz`, { answers }),
+  oral: (id, text) => adultHttp.post(`/adult/lesson/${id}/oral`, { text }),
+  complete: (id, code) => adultHttp.post(`/adult/lesson/${id}/complete`, { code }),
+  activity: (data) => adultHttp.post('/adult/activity', data),
+  progress: () => adultHttp.get('/adult/progress'),
+  eligibility: () => adultHttp.get('/adult/certificate/eligibility'),
+  certificate: () => adultHttp.get('/adult/certificate'),
+  issueCertificate: () => adultHttp.post('/adult/certificate'),
+  verifyCertificate: (code) => adultHttp.get(`/certificates/verify/${encodeURIComponent(code)}`),
+};
+
+// Parents: their child's friends and sharing settings
+export const parentSocialAPI = {
+  get: (childId) => api.get(`/parent/social/${childId}`),
+  update: (childId, settings) => api.put(`/parent/social/${childId}`, settings),
+  removeFriend: (childId, friendId) => api.delete(`/parent/social/${childId}/friends/${friendId}`),
+  removeProject: (childId, projectId) => api.delete(`/parent/social/${childId}/projects/${projectId}`),
 };
 
 // Code execution API

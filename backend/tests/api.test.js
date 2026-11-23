@@ -655,3 +655,221 @@ test('social: friends, leaderboards and activity come from real learning records
   // If they also ask me, it simply becomes a friendship.
   assert.equal((await http('POST', '/api/social/friends/request', { friendId: neema.id }, tumaini.token)).body.status, 'accepted');
 });
+
+test('friends can cheer, duel, share projects and see each other; parents stay in control', async () => {
+  const dbRun = (sql, params = []) => new Promise((resolve, reject) => getDb().run(sql, params, (e) => (e ? reject(e) : resolve())));
+  const mk = async (username) => {
+    const r = await http('POST', '/api/register', { username, email: `${username}@example.com`, password: 'secret123', age: 14 });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    return { token: r.body.token, id: r.body.user.id };
+  };
+  const a = await mk('furaha_friend');
+  const b = await mk('jabali_friend');
+  const stranger = await mk('mgeni_friend');
+  const req = await http('POST', '/api/social/friends/request', { friendId: b.id }, a.token);
+  await http('POST', `/api/social/friends/accept/${req.body.requestId}`, null, b.token);
+
+  // Cheers: only ready-made stickers, only to friends.
+  assert.equal((await http('POST', '/api/social/cheers', { to: b.id, sticker: 'high_five' }, a.token)).status, 200);
+  assert.equal((await http('POST', '/api/social/cheers', { to: b.id, sticker: 'you are dumb' }, a.token)).status, 400);
+  assert.equal((await http('POST', '/api/social/cheers', { to: stranger.id, sticker: 'star' }, a.token)).status, 403);
+  let inbox = await http('GET', '/api/social/inbox', null, b.token);
+  assert.ok(inbox.body.items.some((i) => i.type === 'cheer' && i.emoji === '🙌' && i.fromId === a.id));
+  assert.ok(inbox.body.unread >= 1);
+  await http('POST', '/api/social/inbox/seen', null, b.token);
+  inbox = await http('GET', '/api/social/inbox', null, b.token);
+  assert.equal(inbox.body.unread, 0);
+
+  // Code duel: same 5 questions for both, answers stay on the server, winner gets bonus XP.
+  const duel = await http('POST', '/api/social/duels', { to: b.id, language: 'python', concept: 'loops' }, a.token);
+  assert.equal(duel.status, 200, JSON.stringify(duel.body));
+  const qa = await http('GET', `/api/social/duels/${duel.body.duelId}`, null, a.token);
+  const qb = await http('GET', `/api/social/duels/${duel.body.duelId}`, null, b.token);
+  assert.equal(qa.body.questions.length, 5);
+  assert.deepEqual(qa.body.questions.map((q) => q.prompt), qb.body.questions.map((q) => q.prompt));
+  assert.equal(qa.body.questions[0].answerIndex, undefined, 'answers are not sent to the browser');
+  assert.ok((await http('GET', '/api/social/inbox', null, b.token)).body.items.some((i) => i.type === 'duel' && i.duel.yourTurn));
+  const xpBefore = (await dbGet('SELECT xp FROM users WHERE id = ?', [a.id])).xp;
+  const first = await http('POST', `/api/social/duels/${duel.body.duelId}/answers`, { answers: [9, 9, 9, 9, 9] }, a.token);
+  assert.equal(first.body.score, 0);
+  assert.equal(first.body.duel.theirScore, null, 'the other score stays hidden until both finish');
+  const right = first.body.marking.map((m) => m.correctIndex);
+  const second = await http('POST', `/api/social/duels/${duel.body.duelId}/answers`, { answers: right }, b.token);
+  assert.equal(second.body.score, 5);
+  assert.equal(second.body.duel.result, 'won');
+  assert.equal((await http('POST', `/api/social/duels/${duel.body.duelId}/answers`, { answers: right }, b.token)).status, 409);
+  const xpAfter = (await dbGet('SELECT xp FROM users WHERE id = ?', [a.id])).xp;
+  assert.equal(xpAfter - xpBefore, 10, 'finishing a duel earns XP even when you lose');
+  const record = await http('GET', '/api/social/duels', null, b.token);
+  assert.equal(record.body.record.won, 1);
+
+  // Projects: shared with friends only, unsafe ones are blocked, friends can open and cheer them.
+  const share = await http('POST', '/api/social/projects', { title: 'Rainbow spiral', code: 'for (let i = 0; i < 36; i++) { forward(i * 3); right(20); }', language: 'javascript' }, a.token);
+  assert.equal(share.status, 200, JSON.stringify(share.body));
+  const unsafe = await http('POST', '/api/social/projects', { title: 'Call me', code: 'console.log("my number is 0712345678")' }, a.token);
+  assert.equal(unsafe.status, 422);
+  const proj = await http('GET', `/api/social/projects/${share.body.projectId}`, null, b.token);
+  assert.match(proj.body.code, /forward/);
+  assert.equal((await http('GET', `/api/social/projects/${share.body.projectId}`, null, stranger.token)).status, 403);
+  assert.equal((await http('POST', '/api/social/cheers', { to: a.id, sticker: 'wow', projectId: share.body.projectId }, b.token)).status, 200);
+  const list = await http('GET', '/api/social/projects', null, b.token);
+  assert.equal(list.body.projects[0].cheers.counts.wow, 1);
+
+  // Profile + buddy streak + team goal.
+  await dbRun("INSERT OR IGNORE INTO activity_days (user_id, day) VALUES (?, date('now', '+3 hours'))", [a.id]);
+  await dbRun("INSERT OR IGNORE INTO activity_days (user_id, day) VALUES (?, date('now', '+3 hours'))", [b.id]);
+  const profile = await http('GET', `/api/social/friends/${a.id}/profile`, null, b.token);
+  assert.equal(profile.status, 200, JSON.stringify(profile.body));
+  assert.ok(profile.body.journey.rank);
+  assert.equal(profile.body.projects.length, 1);
+  assert.equal(profile.body.buddyStreak, 1);
+  assert.equal((await http('GET', `/api/social/friends/${a.id}/profile`, null, stranger.token)).status, 403);
+  const team = await http('GET', '/api/social/team', null, a.token);
+  assert.equal(team.body.members.length, 2);
+  assert.equal(team.body.goal, 500);
+
+  // Parent controls: see friends, switch sharing/friends off, remove a friend.
+  const p = await http('POST', '/api/parent/register', { email: 'mzazi_friends@example.com', password: 'secret123', firstName: 'Mzazi', lastName: 'F', phoneNumber: '0700000001' });
+  assert.equal(p.status, 200, JSON.stringify(p.body));
+  assert.equal((await http('GET', `/api/parent/social/${a.id}`, null, p.body.token)).status, 403, 'only their own child');
+  await dbRun('INSERT INTO parent_child_relationships (parent_id, child_id) VALUES (?, ?)', [p.body.user.id, a.id]);
+  const view = await http('GET', `/api/parent/social/${a.id}`, null, p.body.token);
+  assert.equal(view.body.friends[0].id, b.id);
+  assert.equal(view.body.sharedProjects.length, 1);
+  await http('PUT', `/api/parent/social/${a.id}`, { sharingEnabled: false }, p.body.token);
+  assert.equal((await http('POST', '/api/social/projects', { title: 'Another', code: 'forward(10)' }, a.token)).status, 403);
+  await http('PUT', `/api/parent/social/${a.id}`, { friendsEnabled: false }, p.body.token);
+  assert.equal((await http('GET', '/api/social/friends', null, b.token)).body.friends.length, 0, 'friendship paused while friends are off');
+  assert.equal((await http('POST', '/api/social/cheers', { to: a.id, sticker: 'star' }, b.token)).status, 403);
+  await http('PUT', `/api/parent/social/${a.id}`, { friendsEnabled: true, sharingEnabled: true }, p.body.token);
+  assert.equal((await http('GET', '/api/social/friends', null, b.token)).body.friends.length, 1, 'back on');
+  assert.equal((await http('DELETE', `/api/parent/social/${a.id}/friends/${b.id}`, null, p.body.token)).status, 200);
+  assert.equal((await http('GET', '/api/social/friends', null, a.token)).body.friends.length, 0);
+});
+
+// ---- Adult learners: Professional Web Development ------------------------------
+
+test('adult course: full content, real tests before completion, study time and a verifiable certificate', async () => {
+  const dbRun = (sql, params = []) => new Promise((resolve, reject) => getDb().run(sql, params, (e) => (e ? reject(e) : resolve())));
+  const course = require('../adultCourse');
+
+  const reg = await http('POST', '/api/adult/register', { email: 'Wanjiku.Adult@example.com', password: 'longpassword1', firstName: 'Wanjiku', lastName: 'Kamau', occupation: 'Teacher' });
+  assert.equal(reg.status, 200, JSON.stringify(reg.body));
+  const token = reg.body.token;
+  assert.equal((await http('POST', '/api/adult/register', { email: 'wanjiku.adult@example.com', password: 'longpassword1', firstName: 'W', lastName: 'K' })).body.code, 'email_taken');
+  assert.equal((await http('POST', '/api/adult/login', { email: 'wanjiku.adult@example.com', password: 'longpassword1' })).status, 200, 'email is not case-sensitive');
+  assert.equal((await http('POST', '/api/adult/login', { email: 'wanjiku.adult@example.com', password: 'wrong' })).status, 401);
+
+  // The whole course is there: 8 modules, 44 lessons, no duplicates.
+  const cur = await http('GET', '/api/adult/curriculum', null, token);
+  assert.equal(cur.status, 200, JSON.stringify(cur.body));
+  assert.equal(cur.body.curriculum.length, 8);
+  assert.equal(cur.body.stats.totalLessons, 44);
+  assert.equal(new Set(cur.body.curriculum.flatMap((m) => m.lessons.map((l) => `${m.id}:${l.title}`))).size, 44);
+  const first = cur.body.nextLesson;
+  assert.ok(first);
+
+  // A lesson has real content, checks and a written test - but never the answers.
+  const lesson = (await http('GET', `/api/adult/lesson/${first.id}`, null, token)).body.lesson;
+  assert.ok(lesson.content.length > 400);
+  assert.ok(lesson.checks.length >= 2);
+  assert.equal(lesson.quiz.length, 3);
+  assert.equal(lesson.quiz[0].answerIndex, undefined);
+  assert.ok(lesson.oral);
+  assert.equal(lesson.next.title, 'HTML Document Structure');
+
+  // Completing needs the practical task AND the written test.
+  const notYet = await http('POST', `/api/adult/lesson/${first.id}/complete`, { code: { html: '<p>hi</p>' } }, token);
+  assert.equal(notYet.body.code, 'practical_not_passed');
+  const good = { html: '<h1>Wanjiku Kamau</h1>\n<p>I want to build websites for schools.</p>' };
+  const check = await http('POST', `/api/adult/lesson/${first.id}/check`, { code: good }, token);
+  assert.equal(check.body.passed, true, JSON.stringify(check.body));
+  assert.equal((await http('POST', `/api/adult/lesson/${first.id}/complete`, { code: good }, token)).body.code, 'written_not_passed');
+  const c = course.courseLesson(101, 1);
+  const right = course.quizFor(c, first.id).map((q) => q.answerIndex);
+  const wrongQuiz = await http('POST', `/api/adult/lesson/${first.id}/quiz`, { answers: right.map((a) => (a + 1) % 4) }, token);
+  assert.equal(wrongQuiz.body.passed, false);
+  const quiz = await http('POST', `/api/adult/lesson/${first.id}/quiz`, { answers: right }, token);
+  assert.equal(quiz.body.score, 100);
+  assert.equal((await http('POST', `/api/adult/lesson/${first.id}/oral`, { text: 'too short' }, token)).body.code, 'too_short');
+  const oral = await http('POST', `/api/adult/lesson/${first.id}/oral`, { text: 'HTML gives a page its structure and meaning, CSS controls how it looks with colours fonts and layout, and JavaScript adds behaviour such as reacting to clicks and checking forms before they are sent to the server for processing.' }, token);
+  assert.equal(oral.status, 200, JSON.stringify(oral.body));
+  const done = await http('POST', `/api/adult/lesson/${first.id}/complete`, { code: good }, token);
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal(done.body.score, 100);
+  assert.equal(done.body.next.title, 'HTML Document Structure');
+  const saved = (await http('GET', `/api/adult/lesson/${first.id}`, null, token)).body.lesson;
+  assert.equal(saved.completed, true);
+  assert.match(saved.savedCode.html, /Wanjiku/);
+
+  // The old progress route cannot be used to skip the tests.
+  assert.equal((await http('POST', '/api/progress', { module_id: 101, lesson_id: lesson.next.id, completed: 1 }, token)).status, 403);
+
+  // Study time: one minute per heartbeat, extra beats from other tabs are ignored.
+  const beat = await http('POST', '/api/adult/activity', { lessonId: first.id }, token);
+  assert.equal(beat.body.credited, 1);
+  assert.equal((await http('POST', '/api/adult/activity', { lessonId: first.id }, token)).body.credited, 0);
+
+  // Certificate: not yet (lessons and hours missing).
+  assert.equal((await http('POST', '/api/adult/certificate', null, token)).status, 400);
+  const report = await http('GET', '/api/adult/progress', null, token);
+  assert.equal(report.body.progress.completedLessons, 1);
+  assert.equal(report.body.progress.modules.length, 8);
+  assert.equal(report.body.progress.requirements.sufficientHours.met, false);
+
+  // Simulate finishing the course with 170+ hours, then the certificate can be issued once and verified publicly.
+  const me = reg.body.user.id;
+  const all = cur.body.curriculum.flatMap((m) => m.lessons.map((l) => [m.id, l.id]));
+  for (const [moduleId, lessonId] of all) {
+    await dbRun('INSERT OR REPLACE INTO progress (user_id, module_id, lesson_id, completed, score) VALUES (?, ?, ?, 1, 90)', [me, moduleId, lessonId]);
+  }
+  await dbRun("INSERT INTO learning_hours_log (user_id, session_start, duration_minutes, activity_type) VALUES (?, datetime('now'), 10260, 'lesson')", [me]);
+  const elig = await http('GET', '/api/adult/certificate/eligibility', null, token);
+  assert.equal(elig.body.eligible, true, JSON.stringify(elig.body));
+  const cert = await http('POST', '/api/adult/certificate', null, token);
+  assert.equal(cert.status, 200, JSON.stringify(cert.body));
+  assert.equal(cert.body.certificate.firstName, 'Wanjiku');
+  assert.equal(cert.body.certificate.totalHours, 171);
+  const again = await http('POST', '/api/adult/certificate', null, token);
+  assert.equal(again.body.certificate.certificateNumber, cert.body.certificate.certificateNumber, 'issued only once');
+  const verify = await http('GET', `/api/certificates/verify/${cert.body.certificate.verificationCode}`);
+  assert.equal(verify.body.valid, true);
+  assert.equal(verify.body.name, 'Wanjiku Kamau');
+  assert.equal(verify.body.email, undefined, 'no private data on the public check');
+  assert.equal((await http('GET', '/api/certificates/verify/NOPE123')).status, 404);
+
+  // Profile and password.
+  const prof = await http('PUT', '/api/adult/profile', { firstName: 'Wanjiku', lastName: 'Njoroge', occupation: 'Developer' }, token);
+  assert.equal(prof.body.user.lastName, 'Njoroge');
+  // An issued certificate keeps the name it was issued with (a profile edit cannot change it).
+  assert.equal((await http('GET', '/api/adult/certificate', null, token)).body.certificate.lastName, 'Kamau');
+  assert.equal((await http('GET', `/api/certificates/verify/${cert.body.certificate.verificationCode}`)).body.name, 'Wanjiku Kamau');
+  // The study time the dashboard shows is exact (minutes), not just rounded hours.
+  assert.ok((await http('GET', '/api/adult/curriculum', null, token)).body.stats.minutesLogged >= 10260);
+  assert.equal((await http('PUT', '/api/adult/password', { currentPassword: 'nope', newPassword: 'newpassword2' }, token)).status, 400);
+  assert.equal((await http('PUT', '/api/adult/password', { currentPassword: 'longpassword1', newPassword: 'newpassword2' }, token)).status, 200);
+  assert.equal((await http('POST', '/api/adult/login', { email: 'wanjiku.adult@example.com', password: 'newpassword2' })).status, 200);
+
+  // Children cannot use adult routes.
+  const kid = await http('POST', '/api/register', { username: 'adultcheck_kid', email: 'ack@example.com', password: 'secret123', age: 14 });
+  assert.equal((await http('GET', '/api/adult/curriculum', null, kid.body.token)).status, 403);
+});
+
+test('adult course content: every lesson is complete and its checks can be passed', () => {
+  const course = require('../adultCourse');
+  let lessons = 0;
+  for (const m of course.MODULES) {
+    for (const l of m.lessons) {
+      lessons += 1;
+      assert.ok(l.content.length > 300, `${l.title}: content too short`);
+      assert.ok(l.checks.length >= 2, `${l.title}: needs checks`);
+      assert.equal(l.quiz.length, 3, `${l.title}: needs 3 questions`);
+      l.quiz.forEach((q) => assert.equal(new Set(q.options).size, q.options.length, `${l.title}: duplicate options`));
+      assert.ok(l.oral, `${l.title}: oral question`);
+      // The content must not show unfilled template text.
+      assert.ok(!/\$\{(?![^}]*\})/.test(l.content) || l.content.includes('${'), `${l.title}`);
+    }
+  }
+  assert.equal(lessons, 44);
+  assert.ok(course.MODULES.reduce((h, m) => h + m.hours, 0) >= course.REQUIRED_HOURS);
+});

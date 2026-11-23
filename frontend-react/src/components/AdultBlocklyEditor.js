@@ -939,15 +939,24 @@ const AdultBlocklyEditor = ({ onCodeChange, initialXml, onXmlChange, height = '4
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ─── Expose clear method via ref (optional future use) ────────────────────
-  const clearWorkspace = () => {
-    if (workspaceRef.current) workspaceRef.current.clear();
-  };
+  // ─── Keep Blockly sized to its box ────────────────────────────────────────
+  // Blockly measures its container once when injected; if the layout settles later
+  // (grids, tabs, window resize) the workspace and block menu end up the wrong size.
+  useEffect(() => {
+    const el = containerRef.current;
+    const B = window.Blockly;
+    if (!el || !B || typeof ResizeObserver === 'undefined') return undefined;
+    const resize = () => { if (workspaceRef.current) { try { B.svgResize(workspaceRef.current); } catch (_) { /* disposed */ } } };
+    const ro = new ResizeObserver(resize);
+    ro.observe(el);
+    const t = setTimeout(resize, 50);
+    return () => { ro.disconnect(); clearTimeout(t); };
+  }, []);
 
   return (
     <div className="flex flex-col" style={{ height }}>
       {/* Blockly container */}
-      <div ref={containerRef} className="flex-1 w-full" style={{ minHeight: 0 }} />
+      <div ref={containerRef} className="flex-1 w-full relative overflow-hidden" style={{ minHeight: 0 }} />
     </div>
   );
 };

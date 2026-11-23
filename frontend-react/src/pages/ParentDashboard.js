@@ -6,6 +6,7 @@ import { useToast } from '../context/ToastContext';
 import { parentAPI, approvalAPI, curriculumAPI } from '../services/api';
 import ChildAccountManager from '../components/ChildAccountManager';
 import ApprovalQueue from '../components/ApprovalQueue';
+import ParentFriendsPanel from '../components/ParentFriendsPanel';
 import { LearnerCard, LearnerDetail, activityStatus } from '../components/LearnerCard';
 
 const ParentDashboard = () => {
@@ -232,6 +233,9 @@ const ParentDashboard = () => {
               ))}
             </div>
           </section>
+
+          {/* Who each child is friends with, plus switches for friends and sharing. */}
+          <ParentFriendsPanel children={children} />
         </>
       )}
 

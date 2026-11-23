@@ -1,348 +1,196 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { adultAPI } from '../services/api';
+import { Page, Card, Loading, ErrorBox, Ring, stageOf } from '../components/AdultUi';
 
+/**
+ * One module: a hero (stage, level, hours, progress ring, one clear action), the lessons
+ * as a connected timeline with their status, a side panel explaining how each lesson
+ * works, and links to the previous and next modules.
+ */
 const AdultModule = () => {
   const { moduleId } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
-  const [module, setModule] = useState(null);
-  const [lessons, setLessons] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedLesson, setSelectedLesson] = useState(null);
-  const [lastRefreshed, setLastRefreshed] = useState(null);
+  const { t } = useTranslation();
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
 
-  // Refetch every time this page is visited (navigating back from a lesson)
-  useEffect(() => {
-    loadModuleData();
-  }, [moduleId, location.key]);
+  const load = useCallback(() => {
+    setError('');
+    adultAPI.curriculum().then((r) => setData(r.data)).catch((e) => setError(e.response?.data?.error || t('ad.loadFailed')));
+  }, [t]);
+  useEffect(() => { load(); window.scrollTo(0, 0); }, [load, moduleId]);
 
-  const loadModuleData = async (isRefresh = false) => {
-    try {
-      if (isRefresh) setRefreshing(true);
-      const token = localStorage.getItem('adult_token');
-      // Add cache-busting timestamp so browser never serves stale data
-      const response = await fetch(`/api/adult/curriculum?t=${Date.now()}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache'
-        }
-      });
+  if (error) return <Page><ErrorBox message={error} onRetry={load} /></Page>;
+  if (!data) return <Page><Loading /></Page>;
 
-      if (!response.ok) throw new Error('Failed to load module');
-
-      const data = await response.json();
-      const foundModule = data.curriculum.find(m => m.id === parseInt(moduleId));
-
-      if (foundModule) {
-        setModule(foundModule);
-        setLessons(foundModule.lessons || []);
-        setLastRefreshed(new Date());
-      } else {
-        navigate('/adult/dashboard');
-      }
-    } catch (err) {
-      console.error('Failed to load module:', err);
-      if (!module) navigate('/adult/dashboard');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  const getStats = () => {
-    const total = lessons.length;
-    const completed = lessons.filter(l => l.completed).length;
-    const inProgress = lessons.filter(l => l.in_progress).length;
-    const averageScore = lessons.reduce((acc, l) => acc + (l.score || 0), 0) / total || 0;
-    return { total, completed, inProgress, averageScore, remaining: total - completed };
-  };
-
-  const getDifficultyInfo = (difficulty) => {
-    const map = {
-      beginner: { label: 'Beginner', color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200', icon: '🌱' },
-      intermediate: { label: 'Intermediate', color: 'text-yellow-600', bg: 'bg-yellow-50', border: 'border-yellow-200', icon: '⚡' },
-      advanced: { label: 'Advanced', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200', icon: '🚀' }
-    };
-    return map[difficulty] || map.beginner;
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-3 border-gray-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-gray-500">Loading module...</p>
-        </div>
-      </div>
-    );
+  const index = data.curriculum.findIndex((m) => String(m.id) === String(moduleId));
+  const m = data.curriculum[index];
+  if (!m) {
+    return <Page><ErrorBox message={t('ad.moduleNotFound')} /><div className="text-center mt-4"><Link to="/adult/dashboard" className="text-indigo-600 font-semibold">← {t('ad.backToCourse')}</Link></div></Page>;
   }
+  const total = m.lessons.length;
+  const done = m.lessons.filter((l) => l.completed).length;
+  const complete = total > 0 && done === total;
+  const next = m.lessons.find((l) => !l.completed);
+  const prevModule = data.curriculum[index - 1];
+  const nextModule = data.curriculum[index + 1];
+  const minutes = m.lessons.reduce((s, l) => s + (l.minutes || 0), 0);
+  const scored = m.lessons.filter((l) => l.completed);
+  const avg = scored.length ? Math.round(scored.reduce((s, l) => s + (l.score || 0), 0) / scored.length) : null;
+  const stage = stageOf(m.id);
+  const pct = total ? Math.round((100 * done) / total) : 0;
 
-  if (!module) return null;
+  const action = complete
+    ? (nextModule ? { to: `/adult/module/${nextModule.id}`, label: `${t('ad.nextModule')} →` } : { to: '/adult/certificate', label: `🎓 ${t('ad.certificate')}` })
+    : { to: `/adult/lesson/${next.id}`, label: `${done ? t('ad.continue') : t('ad.startModule')} →` };
 
-  const stats = getStats();
-  const difficultyInfo = getDifficultyInfo(module.difficulty);
-  const progressPercentage = (stats.completed / stats.total) * 100 || 0;
+  const steps = [
+    ['📖', t('ad.step.learn'), t('ad.howStepLearn')],
+    ['💻', t('ad.step.practise'), t('ad.howStepPractise')],
+    ['📝', t('ad.step.test'), t('ad.howStepTest')],
+    ['🎤', t('ad.step.oral'), t('ad.howStepOral')],
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header - Compact */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <button
-              onClick={() => navigate('/adult/dashboard')}
-              className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
-            >
-              ← Back to Dashboard
-            </button>
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">{module.icon}</span>
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">{module.title}</h1>
-                <p className="text-xs text-gray-500">{module.description}</p>
-              </div>
+    <Page wide>
+      <nav className="text-sm text-slate-500 mb-4 flex flex-wrap items-center gap-1" aria-label={t('ad.breadcrumb')}>
+        <Link to="/adult/dashboard" className="hover:text-indigo-600">{t('ad.course')}</Link>
+        <span aria-hidden="true">›</span>
+        <span className="text-slate-700 font-medium">{t('ad.moduleN', { n: index + 1 })}: {m.title}</span>
+      </nav>
+
+      {/* ===== Hero ===== */}
+      <section className="relative overflow-hidden rounded-3xl p-6 md:p-8 mb-6 text-white shadow-lg"
+        style={{ background: `radial-gradient(circle at 90% 10%, ${m.color || '#6366f1'}66, transparent 50%), linear-gradient(135deg, #0f172a 0%, #312e81 65%, #4c1d95 100%)` }}
+        aria-labelledby="module-title">
+        <div className="absolute -right-6 -bottom-10 text-[160px] leading-none opacity-10 select-none" aria-hidden="true">{m.icon}</div>
+        <div className="relative grid lg:grid-cols-[1fr_auto] gap-8 items-center">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span className="w-12 h-12 rounded-2xl bg-white/15 border border-white/20 flex items-center justify-center text-2xl" aria-hidden="true">{m.icon}</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-indigo-200">{t('ad.moduleN', { n: index + 1 })}</span>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${stage.chip}`}>{t(`ad.stage.${stage.id}`)}</span>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white/15 text-white">{t(`ad.level.${m.difficulty}`)}</span>
             </div>
-            <button
-              onClick={() => loadModuleData(true)}
-              disabled={refreshing}
-              className="text-xs text-gray-500 hover:text-blue-600 flex items-center gap-1 disabled:opacity-50"
-              title="Refresh progress"
-            >
-              <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
-              {refreshing ? 'Refreshing...' : 'Refresh'}
-            </button>
-          </div>
-        </div>
-      </div>
+            <h1 id="module-title" className="text-2xl md:text-4xl font-bold">{m.title}</h1>
+            <p className="text-indigo-100 mt-2 max-w-2xl">{m.description}</p>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Main Content - Lessons Grid (2/3 width) */}
-          <div className="lg:col-span-2">
-            {/* View Toggle */}
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">
-                All Lessons
-                <span className="ml-2 text-sm font-normal text-gray-500">{stats.total} total</span>
-              </h2>
-              <div className="flex items-center gap-3">
-                {lastRefreshed && (
-                  <span className="text-xs text-gray-400">
-                    Updated {lastRefreshed.toLocaleTimeString()}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Masonry Grid */}
-            <div className="grid sm:grid-cols-2 gap-4">
-              {lessons.map((lesson, idx) => (
-                <div
-                  key={lesson.id}
-                  className={`bg-white rounded-lg border transition-all duration-200 overflow-hidden ${lesson.completed
-                      ? 'border-green-300 shadow-sm'
-                      : selectedLesson === lesson.id
-                        ? 'border-blue-400 shadow-md ring-2 ring-blue-100'
-                        : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                    }`}
-                >
-                  {/* Completion banner */}
-                  {lesson.completed && (
-                    <div className="bg-green-50 border-b border-green-100 px-4 py-1 flex items-center gap-1">
-                      <span className="text-green-600 text-xs font-semibold">✓ Completed</span>
-                      {lesson.score > 0 && (
-                        <span className="ml-auto text-xs text-green-700 font-medium">{lesson.score}%</span>
-                      )}
-                    </div>
-                  )}
-                  {lesson.in_progress && !lesson.completed && (
-                    <div className="bg-yellow-50 border-b border-yellow-100 px-4 py-1">
-                      <span className="text-yellow-600 text-xs font-semibold">⏳ In Progress</span>
-                    </div>
-                  )}
-
-                  <div className="p-4">
-                    {/* Header */}
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-medium ${lesson.completed
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-gray-100 text-gray-600'
-                          }`}>
-                          {lesson.completed ? '✓' : idx + 1}
-                        </div>
-                        <span className="text-xs text-gray-400">Lesson {idx + 1}</span>
-                      </div>
-                    </div>
-
-                    {/* Title */}
-                    <h3 className="font-semibold text-gray-900 mb-1 line-clamp-1">
-                      {lesson.title}
-                    </h3>
-
-                    {/* Description */}
-                    <p className="text-xs text-gray-500 mb-3 line-clamp-2">
-                      {lesson.content?.substring(0, 80)}...
-                    </p>
-
-                    {/* Assessment Icons */}
-                    <div className="flex gap-2 mb-3 text-xs text-gray-400">
-                      {lesson.has_written_test && <span title="Written Test">📝</span>}
-                      {lesson.has_practical_test && <span title="Practical Test">✏️</span>}
-                      {lesson.has_oral_test && <span title="Oral Test">🎤</span>}
-                    </div>
-
-                    {/* CTA */}
-                    <div className="flex items-center justify-between">
-                      <div className={`w-1.5 h-1.5 rounded-full ${lesson.completed ? 'bg-green-500' : lesson.in_progress ? 'bg-yellow-500' : 'bg-gray-300'
-                        }`} />
-                      <button
-                        onClick={() => navigate(`/adult/lesson/${lesson.id}`)}
-                        className={`text-sm font-medium ${lesson.completed
-                            ? 'text-green-600 hover:text-green-700'
-                            : 'text-blue-600 hover:text-blue-700'
-                          }`}
-                      >
-                        {lesson.completed ? 'Review →' : lesson.in_progress ? 'Continue →' : 'Start →'}
-                      </button>
-                    </div>
-                  </div>
+            <dl className="flex flex-wrap gap-x-6 gap-y-2 mt-5 text-sm">
+              {[
+                ['📚', t('ad.lessons'), `${done}/${total}`],
+                ['⏱️', t('ad.lessonTime'), t('ad.lessonTimeTotal', { n: Math.round((minutes / 60) * 10) / 10 })],
+                ['📅', t('ad.studyGuide'), t('ad.hoursN', { n: m.estimated_hours })],
+                ['🎯', t('ad.averageScore'), avg === null ? '—' : `${avg}%`],
+              ].map(([icon, label, value]) => (
+                <div key={label}>
+                  <dt className="text-indigo-200 text-xs">{label}</dt>
+                  <dd className="font-semibold"><span aria-hidden="true">{icon} </span>{value}</dd>
                 </div>
               ))}
-            </div>
+            </dl>
 
-            {/* Completion Message */}
-            {stats.completed === stats.total && stats.total > 0 && (
-              <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-                <div className="text-2xl mb-1">🎉</div>
-                <p className="text-sm font-medium text-green-800">Module completed!</p>
-                <button className="mt-2 text-xs text-green-700 underline hover:text-green-800">
-                  Download certificate
-                </button>
-              </div>
-            )}
+            <div className="flex flex-wrap items-center gap-3 mt-6">
+              <button type="button" onClick={() => navigate(action.to)}
+                className="px-6 py-3 rounded-xl bg-white text-indigo-800 font-bold shadow-md hover:bg-indigo-50 hover:-translate-y-0.5 transition">
+                {action.label}
+              </button>
+              {complete && <span className="px-3 py-1.5 rounded-full bg-emerald-400/20 border border-emerald-300/40 text-emerald-100 text-sm font-semibold">✓ {t('ad.moduleComplete')}</span>}
+              {!complete && next && <span className="text-sm text-indigo-100">{t('ad.upNext')}: <span className="font-semibold text-white">{next.title}</span></span>}
+            </div>
           </div>
-
-          {/* Sidebar - Stats Panel (1/3 width) */}
-          <div className="lg:col-span-1">
-            {/* Module Info Card */}
-            <div className="bg-white rounded-lg border border-gray-200 p-5 mb-5">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="text-4xl">{module.icon}</div>
-                <div>
-                  <h2 className="font-semibold text-gray-900">{module.title}</h2>
-                  <span className={`inline-flex items-center gap-1 text-xs ${difficultyInfo.color}`}>
-                    <span>{difficultyInfo.icon}</span>
-                    {difficultyInfo.label}
-                  </span>
-                </div>
-              </div>
-              <p className="text-sm text-gray-600 mb-3">{module.description}</p>
-              <div className="flex items-center justify-between text-xs text-gray-500 pt-3 border-t border-gray-100">
-                <span>⏱️ {module.estimated_hours || 0} hours</span>
-                <span>📚 {stats.total} lessons</span>
-              </div>
-            </div>
-
-            {/* Progress Card */}
-            <div className="bg-white rounded-lg border border-gray-200 p-5 mb-5">
-              <h3 className="font-medium text-gray-900 mb-3 text-sm">Your Progress</h3>
-
-              {/* Big Progress Ring */}
-              <div className="flex justify-center mb-4">
-                <div className="relative w-28 h-28">
-                  <svg className="w-28 h-28 transform -rotate-90">
-                    <circle cx="56" cy="56" r="50" stroke="#e5e7eb" strokeWidth="6" fill="none" />
-                    <circle
-                      cx="56" cy="56" r="50"
-                      stroke="#2563eb"
-                      strokeWidth="6"
-                      fill="none"
-                      strokeDasharray="314"
-                      strokeDashoffset={314 - (314 * progressPercentage / 100)}
-                      className="transition-all duration-500"
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-2xl font-bold text-gray-900">{Math.round(progressPercentage)}%</span>
-                    <span className="text-xs text-gray-500">complete</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stats Breakdown */}
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Completed</span>
-                  <span className="font-semibold text-gray-900">{stats.completed}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">In Progress</span>
-                  <span className="font-semibold text-gray-900">{stats.inProgress || 0}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Remaining</span>
-                  <span className="font-semibold text-gray-900">{stats.remaining}</span>
-                </div>
-                {stats.averageScore > 0 && (
-                  <div className="flex justify-between items-center pt-2 border-t border-gray-100">
-                    <span className="text-gray-600">Avg. Score</span>
-                    <span className="font-semibold text-blue-600">{Math.round(stats.averageScore)}%</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Quick Stats Card */}
-            <div className="bg-white rounded-lg border border-gray-200 p-5">
-              <h3 className="font-medium text-gray-900 mb-3 text-sm">Assessment Types</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">📝 Written Tests</span>
-                  <span className="font-medium text-gray-900">
-                    {lessons.filter(l => l.has_written_test).length}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">✏️ Practical Tests</span>
-                  <span className="font-medium text-gray-900">
-                    {lessons.filter(l => l.has_practical_test).length}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">🎤 Oral Tests</span>
-                  <span className="font-medium text-gray-900">
-                    {lessons.filter(l => l.has_oral_test).length}
-                  </span>
-                </div>
-              </div>
-
-              {/* Next Lesson Suggestion */}
-              {stats.completed < stats.total && (
-                <div className="mt-4 pt-3 border-t border-gray-100">
-                  <p className="text-xs text-gray-500 mb-2">Next up</p>
-                  <div className="text-sm">
-                    <p className="font-medium text-gray-800 truncate">
-                      {lessons.find(l => !l.completed)?.title || 'All completed!'}
-                    </p>
-                    <button
-                      onClick={() => {
-                        const nextLesson = lessons.find(l => !l.completed);
-                        if (nextLesson) navigate(`/adult/lesson/${nextLesson.id}`);
-                      }}
-                      className="mt-2 text-xs text-blue-600 hover:text-blue-700"
-                    >
-                      Continue learning →
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+          <div className="flex lg:flex-col items-center gap-3 justify-center">
+            <Ring pct={pct} label={t('ad.moduleProgress')} />
           </div>
         </div>
+      </section>
+
+      <div className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
+        {/* ===== Lessons timeline ===== */}
+        <section className="min-w-0" aria-labelledby="lessons-title">
+          <h2 id="lessons-title" className="text-xl font-bold text-slate-900 mb-4">{t('ad.lessonsInModule', { n: total })}</h2>
+          <ol className="relative">
+            {m.lessons.map((l, i) => {
+              const isNext = next && next.id === l.id;
+              const last = i === total - 1;
+              const state = l.completed ? 'done' : isNext ? 'next' : l.started ? 'started' : 'todo';
+              return (
+                <li key={l.id} className="relative pl-14 pb-4">
+                  {!last && <span className={`absolute left-[19px] top-10 bottom-0 w-0.5 ${l.completed ? 'bg-emerald-300' : 'bg-slate-200'}`} aria-hidden="true" />}
+                  <span className={`absolute left-0 top-3 w-10 h-10 rounded-full flex items-center justify-center font-bold ring-4 ring-slate-50 ${state === 'done' ? 'bg-emerald-500 text-white' : state === 'next' ? 'bg-indigo-600 text-white' : 'bg-white border-2 border-slate-200 text-slate-500'}`} aria-hidden="true">
+                    {state === 'done' ? '✓' : i + 1}
+                  </span>
+                  <Link to={`/adult/lesson/${l.id}`}
+                    className={`group flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border bg-white p-4 md:p-5 transition hover:shadow-md ${state === 'next' ? 'border-indigo-300 ring-4 ring-indigo-100' : 'border-slate-200 hover:border-indigo-200'}`}>
+                    <span className="flex-1 min-w-[12rem]">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-400">{t('ad.lessonNofM', { n: i + 1, total })}</span>
+                        {state === 'next' && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-indigo-600 text-white">{t('ad.upNext')}</span>}
+                        {state === 'started' && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">{t('ad.inProgress')}</span>}
+                        {state === 'done' && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">✓ {t('ad.done')}</span>}
+                      </span>
+                      <span className="block font-bold text-slate-900 text-base md:text-lg mt-0.5">{l.title}</span>
+                      <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 mt-1">
+                        <span>⏱️ {t('ad.aboutMinutes', { n: l.minutes })}</span>
+                        {state === 'done' && (
+                          <span className="flex items-center gap-2">
+                            <span className="h-1.5 w-20 rounded-full bg-slate-100 overflow-hidden" aria-hidden="true">
+                              <span className={`block h-full rounded-full ${l.score >= 70 ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${l.score || 0}%` }} />
+                            </span>
+                            <span className="font-semibold text-slate-600">{t('ad.scoreN', { n: l.score })}</span>
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                    <span className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition ${state === 'next' ? 'bg-indigo-600 text-white group-hover:bg-indigo-700' : state === 'done' ? 'bg-emerald-50 text-emerald-700 group-hover:bg-emerald-100' : 'bg-slate-100 text-slate-700 group-hover:bg-indigo-50 group-hover:text-indigo-700'}`}>
+                      {state === 'done' ? t('ad.review') : state === 'next' ? (l.started ? t('ad.continue') : t('ad.startLesson')) : state === 'started' ? t('ad.continue') : t('ad.open')} →
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+
+        {/* ===== Side column ===== */}
+        <aside className="space-y-4 lg:sticky lg:top-4">
+          <Card className="p-5">
+            <h2 className="font-bold text-slate-900 mb-1">{t('ad.howLessonsWork')}</h2>
+            <p className="text-sm text-slate-500 mb-4">{t('ad.howLessonsWorkHelp')}</p>
+            <ol className="space-y-3">
+              {steps.map(([icon, title, text], i) => (
+                <li key={title} className="flex gap-3">
+                  <span className="w-9 h-9 shrink-0 rounded-xl bg-indigo-50 flex items-center justify-center text-lg" aria-hidden="true">{icon}</span>
+                  <span className="text-sm">
+                    <span className="block font-semibold text-slate-800">{i + 1}. {title}</span>
+                    <span className="block text-slate-500">{text}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </Card>
+
+          <Card className="p-2">
+            {[[prevModule, -1], [nextModule, 1]].filter(([mod]) => mod).map(([mod, dir]) => (
+              <Link key={mod.id} to={`/adult/module/${mod.id}`} className="flex items-center gap-3 rounded-xl p-3 hover:bg-slate-50 transition">
+                {dir < 0 && <span className="text-slate-400" aria-hidden="true">‹</span>}
+                <span className="w-10 h-10 shrink-0 rounded-xl flex items-center justify-center text-xl" style={{ background: `${mod.color || '#6366f1'}1a` }} aria-hidden="true">{mod.icon}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400">{dir < 0 ? t('ad.prevModule') : t('ad.nextModule')}</span>
+                  <span className="block font-semibold text-slate-900 text-sm truncate">{mod.title}</span>
+                </span>
+                {dir > 0 && <span className="text-slate-400" aria-hidden="true">›</span>}
+              </Link>
+            ))}
+            <Link to="/adult/dashboard" className="flex items-center gap-3 rounded-xl p-3 hover:bg-slate-50 transition">
+              <span className="w-10 h-10 shrink-0 rounded-xl bg-slate-100 flex items-center justify-center text-lg" aria-hidden="true">🗺️</span>
+              <span className="font-semibold text-slate-900 text-sm">{t('ad.allModules')}</span>
+            </Link>
+          </Card>
+        </aside>
       </div>
-    </div>
+    </Page>
   );
 };
 

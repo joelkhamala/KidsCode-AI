@@ -267,6 +267,7 @@ body {
 }
 
 /* ===== CODE BLOCKS ===== */
+/* Inline code (a word in a sentence) gets a soft highlight... */
 code {
   background: #e0e7ff;
   color: #4338ca;
@@ -287,6 +288,16 @@ pre {
   overflow-x: auto;
   color: #1e293b;
   line-height: 1.6;
+}
+
+/* ...but code inside a code block is plain text in the block's own colours - no highlight on every line. */
+pre code {
+  background: none;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  font-weight: normal;
 }
 
 /* ===== LOADING BAR ===== */

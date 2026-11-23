@@ -1,269 +1,138 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { adultAPI } from '../services/api';
+import { getAdultUser } from '../utils/authStorage';
+import { Page, PageHeader, Card, Bar, Loading, ErrorBox, Button, studyTime } from '../components/AdultUi';
 
+/**
+ * Certificate: requirements while studying; once earned, a printable certificate with a
+ * verification link that employers can open without an account.
+ */
 const AdultCertificate = () => {
-  const navigate = useNavigate();
-  const [eligibility, setEligibility] = useState(null);
-  const [certificate, setCertificate] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { t, i18n } = useTranslation();
+  const [state, setState] = useState(null); // { certificate } | { eligibility }
   const [error, setError] = useState('');
-  const [generating, setGenerating] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    checkEligibility();
-  }, []);
-
-  const checkEligibility = async () => {
-    try {
-      const token = localStorage.getItem('adult_token');
-      const response = await fetch('/api/adult/certificate/eligibility', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to check eligibility');
-      }
-
-      const data = await response.json();
-      setEligibility(data);
-
-      // Check if certificate already exists
-      if (data.eligible) {
-        const certResponse = await fetch('/api/adult/certificate', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        if (certResponse.ok) {
-          const certData = await certResponse.json();
-          if (certData.certificate) {
-            setCertificate(certData.certificate);
-          }
-        }
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const generateCertificate = async () => {
-    setGenerating(true);
+  const load = useCallback(async () => {
     setError('');
-
     try {
-      const token = localStorage.getItem('adult_token');
-      const response = await fetch('/api/adult/certificate', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to generate certificate');
+      const c = await adultAPI.certificate();
+      setState({ certificate: c.data.certificate });
+    } catch (e) {
+      if (e.response?.status !== 404) { setError(e.response?.data?.error || t('ad.loadFailed')); return; }
+      try {
+        const el = await adultAPI.eligibility();
+        setState({ eligibility: el.data });
+      } catch (e2) {
+        setError(e2.response?.data?.error || t('ad.loadFailed'));
       }
+    }
+  }, [t]);
+  useEffect(() => { load(); }, [load]);
 
-      const data = await response.json();
-      setCertificate(data.certificate);
-    } catch (err) {
-      setError(err.message);
+  const issue = async () => {
+    setBusy(true);
+    try {
+      const r = await adultAPI.issueCertificate();
+      setState({ certificate: r.data.certificate });
+    } catch (e) {
+      setError(e.response?.data?.error || t('ad.somethingWrong'));
     } finally {
-      setGenerating(false);
+      setBusy(false);
     }
   };
 
-  if (loading) {
+  if (error) return <Page><ErrorBox message={error} onRetry={load} /></Page>;
+  if (!state) return <Page><Loading /></Page>;
+
+  if (state.certificate) {
+    const c = state.certificate;
+    const verifyUrl = `${window.location.origin}/verify/${c.verificationCode}`;
+    const date = new Date(`${c.issueDate}T00:00:00`).toLocaleDateString(i18n.language, { day: 'numeric', month: 'long', year: 'numeric' });
+    const copy = async () => { try { await navigator.clipboard.writeText(verifyUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* ignore */ } };
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-4xl mb-4">⏳</div>
-          <div className="text-gray-600">Loading certificate status...</div>
+      <Page>
+        <div className="print:hidden">
+          <PageHeader title={`🎓 ${t('ad.yourCertificate')}`} subtitle={t('ad.certificateEarned')}
+            actions={<><Button onClick={() => window.print()}>🖨️ {t('ad.printOrPdf')}</Button><Button variant="secondary" onClick={copy}>🔗 {copied ? t('ad.copied') : t('ad.copyVerifyLink')}</Button></>} />
         </div>
-      </div>
+        <div id="certificate" className="bg-white mx-auto max-w-4xl border-[10px] border-double border-indigo-800 rounded-lg p-8 md:p-14 text-center shadow-xl print:shadow-none print:border-indigo-800">
+          <p className="tracking-[0.3em] text-xs font-semibold text-indigo-700 uppercase">KidsCode · {t('ad.professionalDevelopment')}</p>
+          <h2 className="text-3xl md:text-5xl font-serif font-bold text-slate-900 mt-4">{t('ad.certOfCompletion')}</h2>
+          <p className="text-slate-600 mt-6">{t('ad.certifiesThat')}</p>
+          <p className="text-3xl md:text-4xl font-serif text-indigo-900 mt-2 border-b-2 border-indigo-200 inline-block px-6 pb-2">{c.firstName} {c.lastName}</p>
+          <p className="text-slate-600 mt-6">{t('ad.hasCompleted')}</p>
+          <p className="text-xl md:text-2xl font-bold text-slate-900 mt-1">{t('ad.courseName')}</p>
+          <p className="text-slate-500 text-sm mt-1">{t('ad.curriculumCode')}: {c.curriculumCode}</p>
+          <div className="grid grid-cols-3 gap-4 mt-10 text-sm">
+            <div><div className="font-bold text-slate-900">{c.totalHours} h</div><div className="text-slate-500">{t('ad.studyTime')}</div></div>
+            <div><div className="font-bold text-slate-900">{c.overallScore}%</div><div className="text-slate-500">{t('ad.overallScore')}</div></div>
+            <div><div className="font-bold text-slate-900">{date}</div><div className="text-slate-500">{t('ad.issued')}</div></div>
+          </div>
+          <div className="mt-10 pt-4 border-t border-slate-200 text-xs text-slate-500">
+            <div>{t('ad.certificateNo')}: <span className="font-mono font-semibold text-slate-700">{c.certificateNumber}</span></div>
+            <div className="mt-1">{t('ad.verifyAt')}: <span className="font-mono break-all">{verifyUrl}</span></div>
+          </div>
+        </div>
+      </Page>
     );
   }
 
+  const { eligible, requirements: req } = state.eligibility;
+  const rows = [
+    ['allLessonsCompleted', '📚', t('ad.reqAllLessons'), `${req.allLessonsCompleted.current}/${req.allLessonsCompleted.required}`, '/adult/dashboard'],
+    ['passedAssessments', '📝', t('ad.reqAverage', { n: req.passedAssessments.required }), `${req.passedAssessments.current}%`, '/adult/progress'],
+    ['sufficientHours', '⏱️', t('ad.reqHours', { n: req.sufficientHours.required }), studyTime(null, req.sufficientHours.current), '/adult/dashboard'],
+  ];
+  const me = getAdultUser() || {};
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate('/adult/dashboard')}
-              className="text-sm text-blue-600 hover:text-blue-700"
-            >
-              ← Back to Dashboard
-            </button>
-            <div className="border-l border-gray-300 pl-4">
-              <h1 className="text-2xl font-bold text-gray-900">
-                🎓 Certificate of Completion
-              </h1>
-              <p className="text-sm text-gray-600">
-                ICT/CU/CP/CR/08/6/A - Client-Side Web Development
-              </p>
-            </div>
-          </div>
+    <Page>
+      <PageHeader title={`🎓 ${t('ad.certificate')}`} subtitle={t('ad.certificateIntro')} />
+      <div className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
+      <Card className="p-6">
+        <ul className="space-y-5">
+          {rows.map(([key, icon, label, value, to]) => (
+            <li key={key}>
+              <div className="flex flex-wrap justify-between gap-2 mb-1">
+                <span className={`font-semibold ${req[key].met ? 'text-emerald-700' : 'text-slate-800'}`}>{req[key].met ? '✅' : icon} {label}</span>
+                <span className="text-slate-500 text-sm">{value}{!req[key].met && <Link to={to} className="ml-3 text-indigo-600 font-semibold">{t('ad.workOnIt')} →</Link>}</span>
+              </div>
+              <Bar value={req[key].current} max={req[key].required} color={req[key].met ? 'bg-emerald-500' : 'bg-indigo-600'} label={label} />
+            </li>
+          ))}
+        </ul>
+        <div className="mt-6 pt-5 border-t border-slate-200 flex flex-wrap items-center gap-3">
+          {eligible
+            ? <><p className="flex-1 text-emerald-800 font-semibold">🎉 {t('ad.allRequirementsMet')}</p><Button variant="success" disabled={busy} onClick={issue}>{busy ? t('ad.issuing') : t('ad.issueCertificate')}</Button></>
+            : <p className="text-slate-600 text-sm">{t('ad.notEligibleYet')}</p>}
         </div>
-      </header>
+      </Card>
 
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
+      {/* What the learner is working towards */}
+      <aside className="space-y-4">
+        <Card className="p-5">
+          <h2 className="text-sm font-semibold text-slate-700 mb-3">{t('ad.previewTitle')}</h2>
+          <div className="relative border-4 border-double border-indigo-300 rounded-md p-5 text-center bg-white" aria-hidden="true">
+            <span className="absolute top-2 right-2 text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">{t('ad.previewBadge')}</span>
+            <p className="tracking-[0.25em] text-[9px] font-semibold text-indigo-600 uppercase">KidsCode</p>
+            <p className="font-serif font-bold text-slate-800 text-lg mt-1">{t('ad.certOfCompletion')}</p>
+            <p className="text-[11px] text-slate-500 mt-2">{t('ad.certifiesThat')}</p>
+            <p className="font-serif text-indigo-900 text-base border-b border-indigo-200 inline-block px-3">{me.firstName} {me.lastName}</p>
+            <p className="text-[11px] text-slate-500 mt-2">{t('ad.hasCompleted')}</p>
+            <p className="text-xs font-bold text-slate-800">{t('ad.courseName')}</p>
+            <p className="text-[10px] text-slate-400 mt-1">ICT/CU/CP/CR/08/6/A</p>
           </div>
-        )}
-
-        {/* Certificate Display */}
-        {certificate ? (
-          <div className="bg-white rounded-xl shadow-lg border-4 border-indigo-600 p-12 mb-8">
-            <div className="text-center">
-              <div className="text-6xl mb-6">🎓</div>
-              <h2 className="text-3xl font-bold text-gray-900 mb-2">
-                Certificate of Completion
-              </h2>
-              <p className="text-gray-600 mb-8">
-                This certifies that
-              </p>
-              <h3 className="text-4xl font-bold text-indigo-600 mb-8">
-                {certificate.learner_name}
-              </h3>
-              <p className="text-gray-700 mb-4">
-                has successfully completed the
-              </p>
-              <h4 className="text-2xl font-bold text-gray-900 mb-8">
-                Client-Side Web Development Course
-              </h4>
-              <p className="text-gray-600 mb-2">
-                ICT/CU/CP/CR/08/6/A
-              </p>
-              <p className="text-gray-600 mb-8">
-                170 Hours of Professional Training
-              </p>
-              
-              <div className="grid grid-cols-3 gap-8 mb-8 text-center">
-                <div>
-                  <div className="text-2xl font-bold text-blue-600">{eligibility?.completedLessons}</div>
-                  <div className="text-sm text-gray-600">Lessons Completed</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-green-600">{eligibility?.hoursLogged}h</div>
-                  <div className="text-sm text-gray-600">Hours Logged</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-purple-600">{eligibility?.averageScore}%</div>
-                  <div className="text-sm text-gray-600">Average Score</div>
-                </div>
-              </div>
-
-              <div className="border-t border-gray-300 pt-6">
-                <p className="text-sm text-gray-500">
-                  Certificate ID: {certificate.certificate_id}
-                </p>
-                <p className="text-sm text-gray-500">
-                  Issued: {new Date(certificate.issued_date).toLocaleDateString()}
-                </p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          /* Eligibility Status */
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-            <div className="text-center mb-8">
-              <div className="text-6xl mb-4">
-                {eligibility?.eligible ? '🎉' : '📚'}
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                {eligibility?.eligible 
-                  ? 'Congratulations! You\'re Eligible!' 
-                  : 'Keep Learning!'}
-              </h2>
-              <p className="text-gray-600">
-                {eligibility?.eligible
-                  ? 'You\'ve met all requirements for certification'
-                  : 'Complete the requirements below to earn your certificate'}
-              </p>
-            </div>
-
-            {/* Requirements */}
-            <div className="space-y-4 mb-8">
-              <div className={`flex items-center gap-4 p-4 rounded-lg border-2 ${
-                eligibility?.requirements?.allLessonsComplete
-                  ? 'bg-green-50 border-green-200'
-                  : 'bg-gray-50 border-gray-200'
-              }`}>
-                <div className="text-3xl">
-                  {eligibility?.requirements?.allLessonsComplete ? '✅' : '⏳'}
-                </div>
-                <div className="flex-1">
-                  <div className="font-bold text-gray-900">Complete All Lessons</div>
-                  <div className="text-sm text-gray-600">
-                    {eligibility?.completedLessons || 0}/{eligibility?.totalLessons || 0} lessons completed
-                  </div>
-                </div>
-              </div>
-
-              <div className={`flex items-center gap-4 p-4 rounded-lg border-2 ${
-                eligibility?.requirements?.minimumHours
-                  ? 'bg-green-50 border-green-200'
-                  : 'bg-gray-50 border-gray-200'
-              }`}>
-                <div className="text-3xl">
-                  {eligibility?.requirements?.minimumHours ? '✅' : '⏳'}
-                </div>
-                <div className="flex-1">
-                  <div className="font-bold text-gray-900">Log 170 Hours</div>
-                  <div className="text-sm text-gray-600">
-                    {eligibility?.hoursLogged || 0}/170 hours logged
-                  </div>
-                </div>
-              </div>
-
-              <div className={`flex items-center gap-4 p-4 rounded-lg border-2 ${
-                eligibility?.requirements?.passingGrade
-                  ? 'bg-green-50 border-green-200'
-                  : 'bg-gray-50 border-gray-200'
-              }`}>
-                <div className="text-3xl">
-                  {eligibility?.requirements?.passingGrade ? '✅' : '⏳'}
-                </div>
-                <div className="flex-1">
-                  <div className="font-bold text-gray-900">Achieve 70% Average</div>
-                  <div className="text-sm text-gray-600">
-                    Current average: {eligibility?.averageScore || 0}%
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Action Button */}
-            {eligibility?.eligible ? (
-              <button
-                onClick={generateCertificate}
-                disabled={generating}
-                className="w-full bg-indigo-600 text-white py-4 rounded-lg font-bold text-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {generating ? 'Generating Certificate...' : '🎓 Generate Certificate'}
-              </button>
-            ) : (
-              <button
-                onClick={() => navigate('/adult/dashboard')}
-                className="w-full bg-blue-600 text-white py-4 rounded-lg font-bold text-lg hover:bg-blue-700"
-              >
-                Continue Learning
-              </button>
-            )}
-          </div>
-        )}
+        </Card>
+        <Card className="p-5">
+          <h2 className="text-sm font-semibold text-slate-700 mb-1">🔒 {t('ad.employersTitle')}</h2>
+          <p className="text-sm text-slate-500">{t('ad.employersText')}</p>
+        </Card>
+      </aside>
       </div>
-    </div>
+    </Page>
   );
 };
 

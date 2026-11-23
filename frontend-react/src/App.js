@@ -29,6 +29,8 @@ import AdultLesson from './pages/AdultLesson';
 import AdultPlayground from './pages/AdultPlayground';
 import AdultProgress from './pages/AdultProgress';
 import AdultCertificate from './pages/AdultCertificate';
+import AdultProfile from './pages/AdultProfile';
+import CertificateVerify from './pages/CertificateVerify';
 import './index.css';
 
 // Protected Route Component
@@ -120,8 +122,8 @@ function AppRoutes({ currentUser }) {
   const showAdultNavbar = isAdultPage && adultUser && location.pathname !== '/adult/auth';
 
   return (
-    <div className="min-h-screen">
-      {currentUser && !isAdultPage && <Navbar />}
+    <div className={`min-h-screen ${isAdultPage || location.pathname.startsWith('/verify') ? 'bg-slate-50' : ''}`}>
+      {currentUser && !isAdultPage && !location.pathname.startsWith('/verify') && <Navbar />}
       {showAdultNavbar && <AdultNavbar />}
 
       <Routes>
@@ -303,6 +305,20 @@ function AppRoutes({ currentUser }) {
               </AdultProtectedRoute>
             }
           />
+
+          <Route
+            path="/adult/profile"
+            element={
+              <AdultProtectedRoute>
+                <AdultProfile />
+              </AdultProtectedRoute>
+            }
+          />
+          <Route path="/adult" element={<Navigate to={getAdultToken() ? '/adult/dashboard' : '/adult/auth'} replace />} />
+
+          {/* Public: anyone can check a certificate */}
+          <Route path="/verify" element={<CertificateVerify />} />
+          <Route path="/verify/:code" element={<CertificateVerify />} />
 
           {/* Catch all - redirect to home */}
           <Route path="*" element={<Navigate to="/" />} />
