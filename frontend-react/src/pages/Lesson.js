@@ -17,6 +17,7 @@ const Lesson = () => {
   const { t, i18n } = useTranslation();
   const { loadProgress, userXP } = useAuth();
   const [challenge, setChallenge] = useState(null); // checklist + best score from the server
+  const [challengeUnavailable, setChallengeUnavailable] = useState(false);
   const [check, setCheck] = useState(null); // result of the latest check
   const [checking, setChecking] = useState(false);
   const [htmlPreview, setHtmlPreview] = useState(null);
@@ -220,9 +221,12 @@ const Lesson = () => {
   useEffect(() => {
     let cancelled = false;
     setChallenge(null);
+    setChallengeUnavailable(false);
     lessonAPI.getChallenge(lessonId, challengeLocale)
       .then((res) => { if (!cancelled) setChallenge(res.data); })
-      .catch(() => {});
+      // If the checklist can't be loaded (e.g. the server hasn't been updated), don't strand
+      // the learner behind a lock they can't open: the server still decides when they finish.
+      .catch(() => { if (!cancelled) setChallengeUnavailable(true); });
     return () => { cancelled = true; };
   }, [lessonId, challengeLocale]);
 
@@ -468,7 +472,7 @@ const Lesson = () => {
   const passMark = challenge?.passMark ?? 50;
   const bestScore = Math.max(challenge?.bestScore || 0, check?.score || 0);
   const shownScore = check ? check.score : bestScore;
-  const canFinish = Boolean(challenge?.completed) || bestScore >= passMark;
+  const canFinish = challengeUnavailable || Boolean(challenge?.completed) || bestScore >= passMark;
   const nextTitle = (n) => n?.type === 'lesson' ? (getTranslatedLesson(n.lesson.id, i18n.language)?.title || n.lesson.title) : t('learn.quizName');
 
   if (!lesson || !module) {
@@ -705,6 +709,12 @@ const Lesson = () => {
           </div>
 
           {/* Challenge score: the learner needs 50% before the lesson can be completed */}
+          {challengeUnavailable && (
+            <p className="text-sm font-semibold text-slate-600 bg-white rounded-2xl p-4 border-2 border-slate-200">
+              ℹ️ {t('lessonUi.checklistUnavailable')}
+            </p>
+          )}
+
           {challenge && (
             <section className="card p-6" style={{ borderColor: canFinish ? '#86efac' : '#fcd34d' }} aria-labelledby="challenge-score-title">
               <div className="flex justify-between items-baseline gap-2 mb-2">

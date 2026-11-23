@@ -46,6 +46,7 @@ const ui = {
     'lessonUi.htmlPreview': 'Preview of your web page',
     'lessonUi.htmlPreviewBelow': '👇 Here is how your web page looks:',
     'lessonUi.showHint': 'Show a hint ({{n}} of {{total}})',
+    'lessonUi.checklistUnavailable': "The challenge checklist couldn't be loaded right now, so this lesson can be finished without a score. Try the challenge anyway!",
     'lessonUi.noMoreHints': 'No more hints - you can do it!',
 
     // Quiz
@@ -296,6 +297,7 @@ const ui = {
     'lessonUi.htmlPreview': 'Muonekano wa ukurasa wako wa wavuti',
     'lessonUi.htmlPreviewBelow': '👇 Hivi ndivyo ukurasa wako wa wavuti unavyoonekana:',
     'lessonUi.showHint': 'Onyesha kidokezo ({{n}} kati ya {{total}})',
+    'lessonUi.checklistUnavailable': 'Orodha ya changamoto haikuweza kupakiwa sasa hivi, kwa hivyo somo hili linaweza kumalizwa bila alama. Jaribu changamoto hata hivyo!',
     'lessonUi.noMoreHints': 'Hakuna vidokezo zaidi - unaweza!',
 
     'quizUi.finishLessonsFirst': 'Maliza masomo yote katika ulimwengu huu kabla ya jaribio!',
