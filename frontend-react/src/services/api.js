@@ -159,6 +159,13 @@ export const adultAPI = {
   certificate: () => adultHttp.get('/adult/certificate'),
   issueCertificate: () => adultHttp.post('/adult/certificate'),
   verifyCertificate: (code) => adultHttp.get(`/certificates/verify/${encodeURIComponent(code)}`),
+  // Run code on the server. Every language answers { ok, language, output, error, tables, notes, timeMs }.
+  executeCode: (language, code, input = '') => adultHttp.post(`/adult/code/execute/${language}`, { code, input }),
+  executeJava: (code, input = '') => adultHttp.post('/adult/code/execute/java', { code, input }),
+  executePython: (code, input = '') => adultHttp.post('/adult/code/execute/python', { code, input }),
+  executeSQL: (query) => adultHttp.post('/adult/code/execute/sql', { code: query }),
+  sqlTables: () => adultHttp.get('/adult/code/sql/tables'),
+  codeStatus: () => adultHttp.get('/adult/code/status'),
 };
 
 // Parents: their child's friends and sharing settings

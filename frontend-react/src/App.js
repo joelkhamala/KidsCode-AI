@@ -24,6 +24,7 @@ import Social from './pages/Social';
 import ProgressDebug from './pages/ProgressDebug';
 import AdultAuth from './pages/AdultAuth';
 import AdultDashboard from './pages/AdultDashboard';
+import AdultCourseView from './pages/AdultCourseView';
 import AdultModule from './pages/AdultModule';
 import AdultLesson from './pages/AdultLesson';
 import AdultPlayground from './pages/AdultPlayground';
@@ -263,6 +264,14 @@ function AppRoutes({ currentUser }) {
             element={
               <AdultProtectedRoute>
                 <AdultDashboard />
+              </AdultProtectedRoute>
+            }
+          />
+          <Route
+            path="/adult/course/:courseNum/view"
+            element={
+              <AdultProtectedRoute>
+                <AdultCourseView />
               </AdultProtectedRoute>
             }
           />

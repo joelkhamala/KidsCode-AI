@@ -14,6 +14,10 @@ import React, { useEffect, useRef, useCallback } from 'react';
 const AdultBlocklyEditor = ({ onCodeChange, initialXml, onXmlChange, height = '420px' }) => {
   const containerRef = useRef(null);
   const workspaceRef = useRef(null);
+  const callbacksRef = useRef({ onCodeChange, onXmlChange });
+
+  // Keep callbacks current without rebuilding the Blockly workspace.
+  callbacksRef.current = { onCodeChange, onXmlChange };
 
   // ─── Toolbox ──────────────────────────────────────────────────────────────
   const getToolbox = () => ({
@@ -856,7 +860,7 @@ const AdultBlocklyEditor = ({ onCodeChange, initialXml, onXmlChange, height = '4
   }, []);
 
   // ─── Sync code from workspace ──────────────────────────────────────────────
-  const syncCode = useCallback(() => {
+  const syncCode = useCallback((meta = {}) => {
     const B = window.Blockly;
     const ws = workspaceRef.current;
     if (!B || !ws) return;
@@ -865,15 +869,14 @@ const AdultBlocklyEditor = ({ onCodeChange, initialXml, onXmlChange, height = '4
       const gen = B.javascriptGenerator || B.JavaScript;
       if (!gen) return;
       const code = gen.workspaceToCode(ws);
-      onCodeChange && onCodeChange(code);
-
-      // Also emit XML for persistence
       const xml = B.Xml.domToText(B.Xml.workspaceToDom(ws));
-      onXmlChange && onXmlChange(xml);
+
+      callbacksRef.current.onCodeChange?.(code, meta);
+      callbacksRef.current.onXmlChange?.(xml, meta);
     } catch (e) {
       console.warn('BlocklyEditor: sync error', e);
     }
-  }, [onCodeChange, onXmlChange]);
+  }, []);
 
   // ─── Mount / Unmount ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -917,12 +920,13 @@ const AdultBlocklyEditor = ({ onCodeChange, initialXml, onXmlChange, height = '4
       }
 
       workspaceRef.current.addChangeListener((e) => {
-        if (e.isUiEvent) return;
-        syncCode();
+        if (e.isUiEvent || e.isFinishedLoading) return;
+        syncCode({ isInitial: false, eventType: e.type || 'change' });
       });
 
-      // Initial sync
-      syncCode();
+      // Initial sync reports the restored workspace but must not overwrite the
+      // learner's existing JavaScript until they actually edit a block.
+      syncCode({ isInitial: true, eventType: 'initial' });
     } catch (e) {
       console.error('AdultBlocklyEditor: init error', e);
     } finally {

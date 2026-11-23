@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { adultAPI } from '../services/api';
 import WebWorkbench from '../components/WebWorkbench';
+import { SERVER_LANGUAGES, languageForModule } from '../components/codeLanguages';
 import LessonText from '../components/LessonText';
 import useStudyTimer from '../utils/useStudyTimer';
 
@@ -22,11 +23,22 @@ const Badge = ({ ok, children }) => (
   </span>
 );
 
-const PANE_NAME = { html: 'HTML', css: 'CSS', js: 'JavaScript' };
-const PANE_STYLE = { html: 'bg-orange-100 text-orange-800', css: 'bg-sky-100 text-sky-800', js: 'bg-yellow-100 text-yellow-800' };
+const PANE_NAME = { html: 'HTML', css: 'CSS', js: 'JavaScript', java: 'Java', python: 'Python', sql: 'SQL' };
+const PANE_STYLE = {
+  html: 'bg-orange-100 text-orange-800', css: 'bg-sky-100 text-sky-800', js: 'bg-yellow-100 text-yellow-800',
+  java: SERVER_LANGUAGES.java.chip, python: SERVER_LANGUAGES.python.chip, sql: SERVER_LANGUAGES.sql.chip,
+};
+const EMPTY_CODE = { html: '', css: '', js: '', java: '', python: '', sql: '' };
+/** Every language box from saved or example code (missing ones become empty). */
+const codeFrom = (saved) => Object.fromEntries(Object.keys(EMPTY_CODE).map((k) => [k, (saved && saved[k]) || '']));
+/** The language the lesson is practised in: 'web', 'java', 'python' or 'sql'. */
+const lessonLanguage = (lesson) => lesson.language || languageForModule(lesson.moduleId);
+const hasExample = (lesson) => Object.values(lesson.example || {}).some(Boolean);
 
-/** The editor tab a lesson's task is about: the language most of its checks look at. */
+/** The editor tab a lesson's task is about: its own language, or the web tab most checks look at. */
 function mainPane(lesson) {
+  const language = lessonLanguage(lesson);
+  if (language !== 'web') return language;
   const counts = { html: 0, css: 0, js: 0 };
   (lesson.checks || []).forEach((c) => { if (counts[c.in] !== undefined) counts[c.in] += 1; });
   const [pane, n] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
@@ -40,7 +52,7 @@ const AdultLesson = () => {
   const [lesson, setLesson] = useState(null);
   const [error, setError] = useState('');
   const [step, setStep] = useState('learn');
-  const [code, setCode] = useState({ html: '', css: '', js: '' });
+  const [code, setCode] = useState(EMPTY_CODE);
   const prefsKey = `adult_lesson_prefs_${lessonId}`;
   const [mode, setMode] = useState(() => (local.get(prefsKey) || {}).mode || 'code');
   const [blocksXml, setBlocksXml] = useState(() => (local.get(prefsKey) || {}).blocksXml || '');
@@ -64,7 +76,7 @@ const AdultLesson = () => {
       const r = await adultAPI.lesson(lessonId);
       const l = r.data.lesson;
       setLesson(l);
-      setCode(l.savedCode ? { html: l.savedCode.html || '', css: l.savedCode.css || '', js: l.savedCode.js || '' } : { html: '', css: '', js: '' });
+      setCode(codeFrom(l.savedCode));
       setOralDone(l.best.oral !== null);
       setStep(l.completed ? 'practise' : 'learn');
       setSaveState('saved');
@@ -107,7 +119,7 @@ const AdultLesson = () => {
 
   const loadExample = () => {
     const ex = lesson.example || {};
-    setCode({ html: ex.html || '', css: ex.css || '', js: ex.js || '' });
+    setCode(codeFrom(ex));
     setMode('code');
     setStep('practise');
   };
@@ -223,7 +235,7 @@ const AdultLesson = () => {
               <p className="text-sm text-indigo-900">{lesson.challenge}</p>
               <button type="button" className="mt-4 w-full px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold" onClick={() => setStep('practise')}>{t('ad.startPractising')} →</button>
             </div>
-            {(lesson.example.html || lesson.example.css || lesson.example.js) && (
+            {hasExample(lesson) && (
               <button type="button" onClick={loadExample} className="w-full px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 font-semibold hover:bg-slate-50">📝 {t('ad.tryExample')}</button>
             )}
           </aside>
@@ -251,7 +263,7 @@ const AdultLesson = () => {
                       💡 {showHints ? t('ad.hideHints') : t('ad.showHints')} <span className="text-xs opacity-70">({lesson.hints.length})</span>
                     </button>
                   )}
-                  {(lesson.example.html || lesson.example.css || lesson.example.js) && (
+                  {hasExample(lesson) && (
                     <button type="button" onClick={loadExample}
                       className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold border bg-white border-slate-300 text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 transition">
                       📝 {t('ad.loadExample')}
@@ -271,7 +283,7 @@ const AdultLesson = () => {
               </div>
               {/* How it works - fills the card's lower part with useful guidance */}
               <ol className="mt-auto grid sm:grid-cols-3 gap-px bg-slate-200 border-t border-slate-200 text-sm" aria-label={t('ad.howItWorks')}>
-                {[['✍️', t('ad.taskHow1')], ['🔍', t('ad.taskHow2')], ['🏁', t('ad.taskHow3', { n: lesson.passMark })]].map(([icon, text], i) => (
+                {[['✍️', lessonLanguage(lesson) === 'web' ? t('ad.taskHow1') : t('ad.taskHow1Run', { language: PANE_NAME[lessonLanguage(lesson)] })], ['🔍', t('ad.taskHow2')], ['🏁', t('ad.taskHow3', { n: lesson.passMark })]].map(([icon, text], i) => (
                   <li key={i} className="bg-slate-50 px-4 py-3 flex gap-2.5 items-start">
                     <span className="shrink-0 w-6 h-6 rounded-full bg-white border border-slate-300 text-slate-600 text-xs font-bold flex items-center justify-center">{i + 1}</span>
                     <span className="text-slate-600"><span aria-hidden="true">{icon} </span>{text}</span>
@@ -333,7 +345,7 @@ const AdultLesson = () => {
               </div>
             </section>
           </div>
-          <WebWorkbench key={lesson.id} initialTab={mainPane(lesson)} value={code} onChange={setCode} mode={mode} onModeChange={setMode} blocksXml={blocksXml} onBlocksXml={setBlocksXml} usesJquery={lesson.usesJquery} editorHeight={320} />
+          <WebWorkbench key={lesson.id} initialTab={mainPane(lesson)} value={code} onChange={setCode} mode={mode} onModeChange={setMode} blocksXml={blocksXml} onBlocksXml={setBlocksXml} usesJquery={lesson.usesJquery} editorHeight={320} language={lessonLanguage(lesson)} />
         </div>
       )}
 

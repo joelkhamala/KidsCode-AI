@@ -14,6 +14,8 @@ import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
 import { html } from '@codemirror/lang-html';
 import { css } from '@codemirror/lang-css';
+import { java } from '@codemirror/lang-java';
+import { sql, SQLite } from '@codemirror/lang-sql';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { abbreviationTracker, expandAbbreviation } from '@emmetio/codemirror6-plugin';
 import { useEditorPrefs, setEditorPref, getEditorPrefs } from '../utils/editorPrefs';
@@ -22,7 +24,7 @@ const EMMET_LANGS = ['html', 'css'];
 
 // Python uses 4-space indents (as in real Python); everything else uses 2.
 // Smart typing also controls HTML tag auto-closing (<p> -> <p></p>).
-const languageExtension = (lang, smart = true) => [indentUnit.of(lang === 'python' ? '    ' : '  '), languageMode(lang, smart)];
+const languageExtension = (lang, smart = true) => [indentUnit.of(lang === 'python' || lang === 'java' ? '    ' : '  '), languageMode(lang, smart)];
 
 const languageMode = (lang, smart) => {
   switch (lang) {
@@ -30,6 +32,8 @@ const languageMode = (lang, smart) => {
     case 'html': return html({ autoCloseTags: smart });
     case 'css': return css();
     case 'javascript': return javascript();
+    case 'java': return java();
+    case 'sql': return sql({ dialect: SQLite, upperCaseKeywords: true });
     default: return [];
   }
 };
@@ -59,7 +63,7 @@ const Switch = ({ checked, onChange, label, help }) => (
 
 /**
  * Code editor for learners (CodeMirror 6) with switchable helpers.
- * Props: value, onChange(text), language ('javascript' | 'python' | 'html' | 'css' | 'text'),
+ * Props: value, onChange(text), language ('javascript' | 'python' | 'java' | 'sql' | 'html' | 'css' | 'text'),
  *        height (px), readOnly, placeholder, ariaLabel, onRun (Ctrl/Cmd+Enter), showSwitches.
  */
 const CodeEditor = ({

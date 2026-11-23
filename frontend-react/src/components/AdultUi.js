@@ -3,15 +3,22 @@ import { useTranslation } from 'react-i18next';
 
 /** Small shared pieces for the adult pages (consistent look). */
 
-/** The course in three stages (module ids), with their colours. */
-export const STAGES = [
-  { id: 'html', modules: [101, 102, 103], dot: 'bg-orange-500', chip: 'bg-orange-100 text-orange-800' },
-  { id: 'css', modules: [104], dot: 'bg-sky-500', chip: 'bg-sky-100 text-sky-800' },
-  { id: 'js', modules: [105, 106, 107, 108], dot: 'bg-yellow-400', chip: 'bg-yellow-100 text-yellow-800' },
+/** The four adult learning courses, each with their modules and styling. */
+export const COURSES = [
+  { id: 1, title: 'Web Development', icon: '🌐', color: '#f97316', modules: [101, 102, 103, 104, 105, 106, 107, 108], dot: 'bg-orange-500', chip: 'bg-orange-100 text-orange-800' },
+  { id: 2, title: 'Java Programming', icon: '☕', color: '#3b82f6', modules: [109, 110, 111], dot: 'bg-sky-500', chip: 'bg-sky-100 text-sky-800' },
+  { id: 3, title: 'Python & Artificial Intelligence', icon: '🐍', color: '#a855f7', modules: [112, 113, 114], dot: 'bg-purple-500', chip: 'bg-purple-100 text-purple-800' },
+  { id: 4, title: 'Database Management', icon: '🗄️', color: '#6366f1', modules: [115, 116, 117], dot: 'bg-indigo-500', chip: 'bg-indigo-100 text-indigo-800' },
 ];
+
+/** Deprecated: use COURSES instead. Kept for backwards compatibility. */
+export const STAGES = COURSES;
+
 export const PASS_MARK = 70;
-/** Which stage a module belongs to. */
-export const stageOf = (moduleId) => STAGES.find((s) => s.modules.includes(Number(moduleId))) || STAGES[0];
+/** Which course a module belongs to. */
+export const courseOf = (moduleId) => COURSES.find((c) => c.modules.includes(Number(moduleId))) || COURSES[0];
+/** Alias for backwards compatibility */
+export const stageOf = courseOf;
 
 /** Circular progress ring. */
 export const Ring = ({ pct, size = 132, stroke = 12, label }) => {

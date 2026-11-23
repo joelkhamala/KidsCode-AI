@@ -760,12 +760,15 @@ test('adult course: full content, real tests before completion, study time and a
   assert.equal((await http('POST', '/api/adult/login', { email: 'wanjiku.adult@example.com', password: 'longpassword1' })).status, 200, 'email is not case-sensitive');
   assert.equal((await http('POST', '/api/adult/login', { email: 'wanjiku.adult@example.com', password: 'wrong' })).status, 401);
 
-  // The whole course is there: 8 modules, 44 lessons, no duplicates.
+  // All four courses are there (web, Java, Python, databases), with no duplicate lessons.
+  const { MODULES } = require('../adultCourse');
+  const lessonTotal = MODULES.reduce((n, m) => n + m.lessons.length, 0);
   const cur = await http('GET', '/api/adult/curriculum', null, token);
   assert.equal(cur.status, 200, JSON.stringify(cur.body));
-  assert.equal(cur.body.curriculum.length, 8);
-  assert.equal(cur.body.stats.totalLessons, 44);
-  assert.equal(new Set(cur.body.curriculum.flatMap((m) => m.lessons.map((l) => `${m.id}:${l.title}`))).size, 44);
+  assert.equal(cur.body.curriculum.length, MODULES.length);
+  assert.deepEqual(cur.body.curriculum.map((m) => m.id), [101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117]);
+  assert.equal(cur.body.stats.totalLessons, lessonTotal);
+  assert.equal(new Set(cur.body.curriculum.flatMap((m) => m.lessons.map((l) => `${m.id}:${l.title}`))).size, lessonTotal);
   const first = cur.body.nextLesson;
   assert.ok(first);
 
@@ -814,22 +817,24 @@ test('adult course: full content, real tests before completion, study time and a
   assert.equal((await http('POST', '/api/adult/certificate', null, token)).status, 400);
   const report = await http('GET', '/api/adult/progress', null, token);
   assert.equal(report.body.progress.completedLessons, 1);
-  assert.equal(report.body.progress.modules.length, 8);
+  assert.equal(report.body.progress.modules.length, MODULES.length);
   assert.equal(report.body.progress.requirements.sufficientHours.met, false);
 
-  // Simulate finishing the course with 170+ hours, then the certificate can be issued once and verified publicly.
+  // Simulate finishing the course with the required hours (plus one), then the certificate can be issued once and verified publicly.
+  const { REQUIRED_HOURS } = require('../adultCourse');
+  const minutes = (REQUIRED_HOURS + 1) * 60;
   const me = reg.body.user.id;
   const all = cur.body.curriculum.flatMap((m) => m.lessons.map((l) => [m.id, l.id]));
   for (const [moduleId, lessonId] of all) {
     await dbRun('INSERT OR REPLACE INTO progress (user_id, module_id, lesson_id, completed, score) VALUES (?, ?, ?, 1, 90)', [me, moduleId, lessonId]);
   }
-  await dbRun("INSERT INTO learning_hours_log (user_id, session_start, duration_minutes, activity_type) VALUES (?, datetime('now'), 10260, 'lesson')", [me]);
+  await dbRun("INSERT INTO learning_hours_log (user_id, session_start, duration_minutes, activity_type) VALUES (?, datetime('now'), ?, 'lesson')", [me, minutes]);
   const elig = await http('GET', '/api/adult/certificate/eligibility', null, token);
   assert.equal(elig.body.eligible, true, JSON.stringify(elig.body));
   const cert = await http('POST', '/api/adult/certificate', null, token);
   assert.equal(cert.status, 200, JSON.stringify(cert.body));
   assert.equal(cert.body.certificate.firstName, 'Wanjiku');
-  assert.equal(cert.body.certificate.totalHours, 171);
+  assert.equal(cert.body.certificate.totalHours, REQUIRED_HOURS + 1);
   const again = await http('POST', '/api/adult/certificate', null, token);
   assert.equal(again.body.certificate.certificateNumber, cert.body.certificate.certificateNumber, 'issued only once');
   const verify = await http('GET', `/api/certificates/verify/${cert.body.certificate.verificationCode}`);
@@ -845,7 +850,7 @@ test('adult course: full content, real tests before completion, study time and a
   assert.equal((await http('GET', '/api/adult/certificate', null, token)).body.certificate.lastName, 'Kamau');
   assert.equal((await http('GET', `/api/certificates/verify/${cert.body.certificate.verificationCode}`)).body.name, 'Wanjiku Kamau');
   // The study time the dashboard shows is exact (minutes), not just rounded hours.
-  assert.ok((await http('GET', '/api/adult/curriculum', null, token)).body.stats.minutesLogged >= 10260);
+  assert.ok((await http('GET', '/api/adult/curriculum', null, token)).body.stats.minutesLogged >= minutes);
   assert.equal((await http('PUT', '/api/adult/password', { currentPassword: 'nope', newPassword: 'newpassword2' }, token)).status, 400);
   assert.equal((await http('PUT', '/api/adult/password', { currentPassword: 'longpassword1', newPassword: 'newpassword2' }, token)).status, 200);
   assert.equal((await http('POST', '/api/adult/login', { email: 'wanjiku.adult@example.com', password: 'newpassword2' })).status, 200);
@@ -870,7 +875,8 @@ test('adult course content: every lesson is complete and its checks can be passe
       assert.ok(!/\$\{(?![^}]*\})/.test(l.content) || l.content.includes('${'), `${l.title}`);
     }
   }
-  assert.equal(lessons, 44);
+  assert.equal(course.MODULES.length, 17);
+  assert.equal(lessons, 69);
   assert.ok(course.MODULES.reduce((h, m) => h + m.hours, 0) >= course.REQUIRED_HOURS);
 });
 
@@ -904,4 +910,93 @@ test('adult learners can use the AI Coach with grown-up settings', async () => {
   // Children keep the children's Coach.
   const kid = await http('POST', '/api/register', { username: 'coach_kid_check', email: 'ckc@example.com', password: 'secret123', age: 14 });
   assert.equal((await http('GET', '/api/ai/catalog', null, kid.body.token)).body.suggestedLanguage, 'python');
+});
+
+test('adult courses run Java, Python and SQL on the server with one result shape', async () => {
+  const reg = await http('POST', '/api/adult/register', { email: 'runner.adult@example.com', password: 'longpassword1', firstName: 'Baraka', lastName: 'Juma' });
+  assert.equal(reg.status, 200, JSON.stringify(reg.body));
+  const token = reg.body.token;
+  const run = (language, code, input) => http('POST', `/api/adult/code/execute/${language}`, { code, input }, token);
+  const shape = (r) => ['ok', 'language', 'output', 'error', 'tables', 'notes', 'timeMs'].every((k) => k in r);
+
+  // Needs a login, and only knows three languages.
+  assert.equal((await http('POST', '/api/adult/code/execute/sql', { code: 'SELECT 1;' })).status, 401);
+  assert.equal((await run('ruby', 'puts 1')).status, 404);
+
+  // SQL always works: a fresh practice database for every run.
+  const q = await run('sql', 'SELECT name, price FROM Products WHERE price BETWEEN 100 AND 500 ORDER BY price;');
+  assert.equal(q.status, 200);
+  assert.ok(shape(q.body));
+  assert.equal(q.body.ok, true);
+  assert.deepEqual(q.body.tables[0].columns, ['name', 'price']);
+  assert.ok(q.body.tables[0].rowCount > 0);
+  const change = await run('sql', "INSERT INTO Products (name, price) VALUES ('Mango', 30);\nDELETE FROM Products WHERE price < 50;");
+  assert.deepEqual(change.body.output, ['Statement 1: 1 row inserted.', 'Statement 2: 1 row deleted.']);
+  const again = await run('sql', "SELECT COUNT(*) AS n FROM Products WHERE name = 'Mango';");
+  assert.equal(again.body.tables[0].rows[0][0], 0, 'every run starts from a fresh copy');
+  const bad = await run('sql', 'SELECT * FROM Customer;');
+  assert.equal(bad.body.ok, false);
+  assert.equal(bad.body.error.type, 'sql');
+  assert.match(bad.body.error.message, /no such table/);
+  assert.match(bad.body.error.hint, /Customers/);
+  assert.equal((await run('sql', "ATTACH DATABASE 'x.db' AS x;")).body.error.type, 'sql');
+  const mysql = await run('sql', 'CREATE TABLE Members (member_id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(50));');
+  assert.equal(mysql.body.ok, true);
+  assert.ok(mysql.body.notes.some((n) => /AUTO_INCREMENT/.test(n)));
+  assert.equal((await run('sql', '   ')).body.error.type, 'input');
+  const tables = await http('GET', '/api/adult/code/sql/tables', null, token);
+  assert.ok(tables.body.tables.some((t) => t.name === 'Customers' && t.columns.includes('customer_id')));
+
+  // Java and Python need those tools installed; check them when they are.
+  const status = (await http('GET', '/api/adult/code/status', null, token)).body;
+  if (status.python.available) {
+    const py = await run('python', 'name = input()\nprint("Habari", name)', 'Wanjiru');
+    assert.ok(shape(py.body));
+    assert.deepEqual(py.body.output, ['Habari Wanjiru']);
+    const err = await run('python', 'x = 1\nprint(y)');
+    assert.equal(err.body.error.type, 'runtime');
+    assert.equal(err.body.error.name, 'NameError');
+    assert.equal(err.body.error.line, 2);
+    const syntax = await run('python', 'if True\n    print(1)');
+    assert.equal(syntax.body.error.type, 'syntax');
+    assert.equal((await run('python', 'print(open("/etc/passwd").read())')).body.error.name, 'PermissionError');
+  }
+  if (status.java.available) {
+    const j = await run('java', 'System.out.println("Hello");');
+    assert.deepEqual(j.body.output, ['Hello']);
+    const ce = await run('java', 'System.out.println("Hi")');
+    assert.equal(ce.body.error.type, 'compile');
+    assert.equal(ce.body.error.line, 1, 'line numbers match what the learner wrote');
+    const re = await run('java', 'int a = 0;\nSystem.out.println(5 / a);');
+    assert.equal(re.body.error.name, 'ArithmeticException');
+    assert.equal(re.body.error.line, 2);
+  }
+});
+
+test('adult lessons say their language and grade the code in that language', async () => {
+  const reg = await http('POST', '/api/adult/register', { email: 'lang.adult@example.com', password: 'longpassword1', firstName: 'Halima', lastName: 'Hassan' });
+  const token = reg.body.token;
+  const lessonIn = async (moduleId, order) => {
+    const row = await dbGet('SELECT id FROM lessons WHERE module_id = ? AND order_num = ?', [moduleId, order]);
+    return (await http('GET', `/api/adult/lesson/${row.id}`, null, token)).body.lesson;
+  };
+  assert.equal((await lessonIn(101, 1)).language, 'web');
+  const java = await lessonIn(109, 2);
+  assert.equal(java.language, 'java');
+  assert.ok(java.checks.every((c) => c.in === 'java'));
+  assert.equal((await lessonIn(112, 1)).language, 'python');
+  const sql = await lessonIn(115, 3);
+  assert.equal(sql.language, 'sql');
+
+  // The SQL task is checked against the SQL editor, and the code is saved with the lesson.
+  const query = 'SELECT name, price FROM Products WHERE price BETWEEN 100 AND 500 ORDER BY price ASC LIMIT 20;';
+  const check = await http('POST', `/api/adult/lesson/${sql.id}/check`, { code: { sql: query } }, token);
+  assert.equal(check.body.score, 100, JSON.stringify(check.body));
+  assert.equal((await lessonIn(115, 3)).savedCode.sql, query);
+
+  // Java code is kept too (it used to be dropped on save).
+  const javaCode = 'public class HelloWorld {\n  public static void main(String[] args) {\n    System.out.println("I am learning Java programming");\n  }\n}';
+  const jcheck = await http('POST', `/api/adult/lesson/${java.id}/check`, { code: { java: javaCode } }, token);
+  assert.equal(jcheck.body.passed, true, JSON.stringify(jcheck.body));
+  assert.equal((await lessonIn(109, 2)).savedCode.java, javaCode);
 });

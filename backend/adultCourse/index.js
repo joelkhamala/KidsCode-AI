@@ -1,24 +1,51 @@
 'use strict';
 /**
- * The adult course: "Professional Web Development" (ICT/CU/CP/CR/08/6/A).
+ * The adult course: "Professional Programming and Database Development" 
+ * (ICT/CU/CP/CR/08/6/A, ICT/OS/CS/CR/04/6/A, ICT/OS/CS/CR/08/6/A, ICT/OS/CS/CR/05/6/A).
  *
- * 8 modules, 44 lessons. Each lesson has an explanation, a working example, a practical
- * task that is checked automatically, a short written test and an oral question.
+ * 17 modules, 92 lessons covering:
+ *   - Web Development (HTML, CSS, JavaScript)
+ *   - Java Programming (Fundamentals, Control Structures, OOP)
+ *   - Python Programming & AI (Basics, Data Analysis, Machine Learning)
+ *   - Database Management (Fundamentals, SQL, Advanced Queries)
  *
- * The course text lives in code (html.js, css.js, js.js) and is copied into the
- * database by syncCourse() so lesson ids and learners' progress stay stable. Duplicate
- * lessons left by older seed scripts are merged (their progress moves to the kept lesson).
+ * Each lesson has explanation, working example, practical task (auto-checked), 
+ * written test and oral question.
+ *
+ * The course text lives in code (html.js, css.js, js.js, java.js, python.js, database.js) 
+ * and is copied into the database by syncCourse() so lesson ids and learners' progress stay stable. 
+ * Duplicate lessons left by older seed scripts are merged (their progress moves to the kept lesson).
  */
 const { M101, M102, M103 } = require('./html');
 const { M104 } = require('./css');
 const { M105, M106, M107, M108 } = require('./js');
+const { M109, M110, M111 } = require('./java');
+const { M112, M113, M114 } = require('./python');
+const { M115, M116, M117 } = require('./database');
 const { mulberry32, shuffle } = require('../ai/random');
 
-const MODULES = [M101, M102, M103, M104, M105, M106, M107, M108];
+const MODULES = [
+  M101, M102, M103, M104, M105, M106, M107, M108,  // Web Development (8 modules, 44 lessons)
+  M109, M110, M111,                                // Java (3 modules, 11 lessons)
+  M112, M113, M114,                                // Python & AI (3 modules, 12 lessons)
+  M115, M116, M117,                                // Database (3 modules, 15 lessons)
+];
 const BY_MODULE = Object.fromEntries(MODULES.map((m) => [m.id, m]));
 const CURRICULUM_CODE = 'ICT/CU/CP/CR/08/6/A';
 const PASS_MARK = 70;          // % needed in the practical and the written test
-const REQUIRED_HOURS = 170;    // study time needed for the certificate
+const REQUIRED_HOURS = 445;    // study time needed for the certificate (all 17 modules)
+
+/**
+ * The language each module is practised in. Web modules use the HTML/CSS/JavaScript
+ * workbench with a live preview; the others run on the server (see backend/sandbox).
+ */
+const LANGUAGE_BY_MODULE = {
+  101: 'web', 102: 'web', 103: 'web', 104: 'web', 105: 'web', 106: 'web', 107: 'web', 108: 'web',
+  109: 'java', 110: 'java', 111: 'java',
+  112: 'python', 113: 'python', 114: 'python',
+  115: 'sql', 116: 'sql', 117: 'sql',
+};
+const languageOf = (moduleId) => LANGUAGE_BY_MODULE[Number(moduleId)] || 'web';
 
 /** Course lesson for a database lesson row (by module and position). */
 function courseLesson(moduleId, orderNum) {
@@ -26,10 +53,24 @@ function courseLesson(moduleId, orderNum) {
   return m ? m.lessons[Number(orderNum) - 1] || null : null;
 }
 
-/** Practical test: run every check against the learner's HTML / CSS / JS. */
-function gradePractical(lesson, code = {}) {
-  const text = { html: String(code.html || ''), css: String(code.css || ''), js: String(code.js || '') };
-  const results = lesson.checks.map((c) => ({ label: c.label, in: c.in, passed: c.re.test(text[c.in]) }));
+/** Where a check looks: Java, Python and SQL lessons check the code in their own language. */
+const checkTarget = (check, language) => (language && language !== 'web' ? language : check.in);
+
+/**
+ * Practical test: run every check against the learner's code (HTML / CSS / JS for web
+ * lessons, or the Java / Python / SQL editor for the other courses).
+ */
+function gradePractical(lesson, code = {}, language = 'web') {
+  const text = {
+    html: String(code.html || ''), css: String(code.css || ''), js: String(code.js || ''),
+    java: String(code.java || ''), python: String(code.python || ''), sql: String(code.sql || ''),
+  };
+  // Older saves kept these lessons' answers in the JavaScript box.
+  if (language !== 'web' && !text[language].trim()) text[language] = text.js;
+  const results = lesson.checks.map((c) => {
+    const where = checkTarget(c, language);
+    return { label: c.label, in: where, passed: c.re.test(text[where]) };
+  });
   const passedCount = results.filter((r) => r.passed).length;
   const score = Math.round((100 * passedCount) / results.length);
   return { results, score, passed: score >= PASS_MARK, passedCount, total: results.length };
@@ -186,4 +227,4 @@ async function syncCourse(q) {
   return { merged };
 }
 
-module.exports = { MODULES, BY_MODULE, CURRICULUM_CODE, PASS_MARK, REQUIRED_HOURS, courseLesson, gradePractical, quizFor, gradeQuiz, syncCourse };
+module.exports = { MODULES, BY_MODULE, LANGUAGE_BY_MODULE, languageOf, checkTarget, CURRICULUM_CODE, PASS_MARK, REQUIRED_HOURS, courseLesson, gradePractical, quizFor, gradeQuiz, syncCourse };

@@ -121,13 +121,49 @@ async function recordAssessment(userId, lessonId, type, percent, data) {
 }
 
 async function saveCode(userId, lesson, code) {
-  const json = JSON.stringify({ html: String(code.html || '').slice(0, 50000), css: String(code.css || '').slice(0, 50000), js: String(code.js || '').slice(0, 50000) });
+  const keep = (k) => String(code[k] || '').slice(0, 50000);
+  const json = JSON.stringify({ html: keep('html'), css: keep('css'), js: keep('js'), java: keep('java'), python: keep('python'), sql: keep('sql') });
   await run(
     `INSERT INTO progress (user_id, module_id, lesson_id, completed, last_code, score, updated_at)
      VALUES (?, ?, ?, 0, ?, 0, CURRENT_TIMESTAMP)
      ON CONFLICT(user_id, lesson_id) DO UPDATE SET last_code = excluded.last_code, updated_at = CURRENT_TIMESTAMP`,
     [userId, lesson.module_id, lesson.id, json],
   );
+}
+
+// ---------------------------------------------------------------------------
+// Server-side code runners (see backend/sandbox)
+// ---------------------------------------------------------------------------
+const RUNNERS = {
+  java: () => require('./sandbox/runJava').runJava,
+  python: () => require('./sandbox/runPython').runPython,
+  sql: () => require('./sandbox/runSQL').runSQL,
+};
+const RUNS_PER_MINUTE = 30;
+const runLog = new Map();
+
+/** At most RUNS_PER_MINUTE runs per learner per minute (protects the server's CPU). */
+function allowRun(userId) {
+  const now = Date.now();
+  const recent = (runLog.get(userId) || []).filter((t) => now - t < 60000);
+  if (recent.length >= RUNS_PER_MINUTE) { runLog.set(userId, recent); return false; }
+  recent.push(now);
+  runLog.set(userId, recent);
+  if (runLog.size > 5000) for (const [k, v] of runLog) if (!v.some((t) => now - t < 60000)) runLog.delete(k);
+  return true;
+}
+
+function runtimeStatus() {
+  const { findTool } = require('./sandbox/common');
+  const first = (s) => (s ? s.version.split(/\r?\n/)[0] : null);
+  const javaHomes = [process.env.KIDSCODE_JAVA_HOME, process.env.JAVA_HOME].filter(Boolean);
+  const javac = findTool('javac', [...javaHomes.map((h) => require('path').join(h, 'bin', 'javac')), 'javac'], ['-version']);
+  const py = findTool('python', [process.env.KIDSCODE_PYTHON, 'python3', 'python', 'py'], ['-c', 'import sys; print(sys.version_info[0], sys.version_info[1])']);
+  return {
+    java: { available: Boolean(javac), version: first(javac) },
+    python: { available: Boolean(py), version: py ? `Python ${py.version.replace(' ', '.')}` : null },
+    sql: { available: true, version: 'SQLite (practice database)' },
+  };
 }
 
 const lastBeat = new Map();
@@ -266,7 +302,8 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
         id: lesson.id, moduleId: lesson.module_id, moduleTitle: lesson.module_title, moduleIcon: lesson.module_icon,
         number: inModule.findIndex((l) => l.id === lesson.id) + 1, lessonsInModule: inModule.length,
         title: c.title, minutes: c.minutes, content: c.content, example: c.example || {}, challenge: c.challenge, hints: c.hints || [],
-        checks: c.checks.map((k) => ({ label: k.label, in: k.in })),
+        language: course.languageOf(lesson.module_id),
+        checks: c.checks.map((k) => ({ label: k.label, in: course.checkTarget(k, course.languageOf(lesson.module_id)) })),
         quiz: course.quizFor(c, lesson.id).map(({ answerIndex, why, ...q }) => q),
         oral: c.oral || null,
         usesJquery: lesson.module_id === 108,
@@ -289,11 +326,29 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
   router.post('/lesson/:id/check', wrap(async (req) => {
     const { lesson, c } = await loadLesson(req);
     const code = (req.body && req.body.code) || {};
-    const r = course.gradePractical(c, code);
+    const r = course.gradePractical(c, code, course.languageOf(lesson.module_id));
     await saveCode(req.user.id, lesson, code);
     await recordAssessment(req.user.id, lesson.id, 'practical', r.score, { results: r.results });
     return r;
   }));
+
+  // ---- running Java, Python and SQL on the server ----
+  // Every language answers with the same shape: { ok, language, output, error, tables, notes, timeMs }.
+  router.post('/code/execute/:language', wrap(async (req) => {
+    const language = String(req.params.language || '').toLowerCase();
+    const runner = RUNNERS[language];
+    if (!runner) throw fail(404, 'Unknown language. Use java, python or sql.');
+    if (!allowRun(req.user.id)) throw fail(429, `You are running code very quickly. Please wait a few seconds and try again (limit: ${RUNS_PER_MINUTE} runs a minute).`, 'too_many_runs');
+    const code = (req.body && req.body.code) ?? '';
+    const input = typeof (req.body && req.body.input) === 'string' ? req.body.input : '';
+    return runner()(code, { input });
+  }));
+
+  /** Tables in the SQL practice database (shown beside the SQL editor). */
+  router.get('/code/sql/tables', wrap(async () => ({ tables: require('./sandbox/runSQL').SAMPLE_TABLES })));
+
+  /** Which languages this server can run (Java and Python need to be installed). */
+  router.get('/code/status', wrap(async () => runtimeStatus()));
 
   router.post('/lesson/:id/quiz', wrap(async (req) => {
     const { lesson, c } = await loadLesson(req);
@@ -318,7 +373,7 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
   router.post('/lesson/:id/complete', wrap(async (req) => {
     const { lesson, c } = await loadLesson(req);
     const code = (req.body && req.body.code) || {};
-    const practical = course.gradePractical(c, code);
+    const practical = course.gradePractical(c, code, course.languageOf(lesson.module_id));
     await saveCode(req.user.id, lesson, code);
     if (!practical.passed) throw Object.assign(fail(400, `The practical task is not finished yet (${practical.score}% - you need ${course.PASS_MARK}%). Press "Check my work" to see what is missing.`, 'practical_not_passed'), {});
     const best = await bestScores(req.user.id, lesson.id);
