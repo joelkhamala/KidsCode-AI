@@ -352,7 +352,7 @@ const Lesson = () => {
 
   const runCode = async () => {
     // HTML lessons: show the page as a preview (never run it as JavaScript), then check it.
-    if (challenge?.kind === 'html') {
+    if (isHtmlLesson) {
       setRunCount(prev => prev + 1);
       setCodeAttempts(prev => prev + 1);
       setHasError(false);
@@ -452,6 +452,19 @@ const Lesson = () => {
   );
 
   const position = lessonPosition(curriculum, moduleId, lessonId);
+  // HTML lessons are previewed, never run as JavaScript. Use the checklist's answer, or spot
+  // HTML from the lesson's example code if the checklist could not be loaded.
+  const isHtmlLesson = challenge ? challenge.kind === 'html' : /^\s*(<!doctype|<\w|<!--)/i.test(lesson?.example_code || '');
+  // Hints are stored as a JSON list (or plain text); show them as plain text.
+  const hintList = (() => {
+    const raw = lesson?.hints;
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.map(String).filter((h) => h.trim());
+    } catch { /* not JSON */ }
+    return [String(raw)];
+  })();
   const passMark = challenge?.passMark ?? 50;
   const bestScore = Math.max(challenge?.bestScore || 0, check?.score || 0);
   const shownScore = check ? check.score : bestScore;
@@ -591,19 +604,22 @@ const Lesson = () => {
             />
           </div>
 
-          {/* Hints */}
-          {lesson.hints && (
+          {/* Hints: revealed one at a time (each one counts as a hint used) */}
+          {hintList.length > 0 && (
             <div className="card p-6 bg-yellow-50 border-yellow-200">
-              <button
-                onClick={() => setHintsUsed(prev => prev + 1)}
-                className="w-full text-left"
-              >
-                <h3 className="font-bold text-yellow-800 mb-2">💡 {t('lesson.hints')}</h3>
-              </button>
-              <div 
-                className="text-slate-700 text-sm"
-                dangerouslySetInnerHTML={{ __html: lesson.hints }}
-              />
+              <h3 className="font-bold text-yellow-800 mb-2">💡 {t('lesson.hints')}</h3>
+              {hintsUsed > 0 && (
+                <ol className="list-decimal pl-5 space-y-1 text-slate-700 text-sm mb-3">
+                  {hintList.slice(0, hintsUsed).map((h, i) => <li key={i}>{h}</li>)}
+                </ol>
+              )}
+              {hintsUsed < hintList.length ? (
+                <button type="button" onClick={() => setHintsUsed(prev => prev + 1)} className="btn-secondary text-sm py-2">
+                  💡 {t('lessonUi.showHint', { n: hintsUsed + 1, total: hintList.length })}
+                </button>
+              ) : (
+                <p className="text-xs font-bold text-yellow-700">{t('lessonUi.noMoreHints')}</p>
+              )}
             </div>
           )}
 
@@ -677,7 +693,7 @@ const Lesson = () => {
           <CodeCheck code={code} language="javascript" task={lesson.challenge} />
 
           {/* Turtle Canvas (not used by HTML lessons) */}
-          <div className="card p-6" style={challenge?.kind === 'html' ? { display: 'none' } : undefined}>
+          <div className="card p-6" style={isHtmlLesson ? { display: 'none' } : undefined}>
             <h3 className="font-bold text-slate-800 mb-3">🐢 {t('lesson.turtleGraphics')}</h3>
             <canvas
               ref={canvasRef}

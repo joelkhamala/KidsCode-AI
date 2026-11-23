@@ -45,6 +45,8 @@ const ui = {
     'lessonUi.saveFailed': "We couldn't save your lesson. Please try again.",
     'lessonUi.htmlPreview': 'Preview of your web page',
     'lessonUi.htmlPreviewBelow': '👇 Here is how your web page looks:',
+    'lessonUi.showHint': 'Show a hint ({{n}} of {{total}})',
+    'lessonUi.noMoreHints': 'No more hints - you can do it!',
 
     // Quiz
     'quizUi.finishLessonsFirst': 'Finish all the lessons in this world before the quiz!',
@@ -293,6 +295,8 @@ const ui = {
     'lessonUi.saveFailed': 'Hatukuweza kuhifadhi somo lako. Tafadhali jaribu tena.',
     'lessonUi.htmlPreview': 'Muonekano wa ukurasa wako wa wavuti',
     'lessonUi.htmlPreviewBelow': '👇 Hivi ndivyo ukurasa wako wa wavuti unavyoonekana:',
+    'lessonUi.showHint': 'Onyesha kidokezo ({{n}} kati ya {{total}})',
+    'lessonUi.noMoreHints': 'Hakuna vidokezo zaidi - unaweza!',
 
     'quizUi.finishLessonsFirst': 'Maliza masomo yote katika ulimwengu huu kabla ya jaribio!',
     'quizUi.nextWorld': 'Anza ulimwengu unaofuata',
