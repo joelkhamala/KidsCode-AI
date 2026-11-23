@@ -891,6 +891,12 @@ test('adult learners can use the AI Coach with grown-up settings', async () => {
   const sub = await http('POST', `/api/ai/activities/${next.body.activityId}/submit`, await correctSubmission(next.body.activityId), token);
   assert.equal(sub.status, 200, JSON.stringify(sub.body));
   assert.equal(sub.body.correct, true);
+  // The XP they earn shows up in their Coach profile.
+  const after = await http('GET', '/api/ai/profile', null, token);
+  assert.equal(after.body.xp.total, sub.body.xpEarned);
+  assert.equal(after.body.xp.week, sub.body.xpEarned);
+  assert.equal(after.body.xp.answered, 1);
+  assert.equal(prof.body.xp.total, 0);
   // The AI is told it is talking to an adult.
   const prompts = require('../ai/prompts');
   assert.match(prompts.systemPrompt({ age: 'adult', locale: 'en' }), /adult/);

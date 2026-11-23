@@ -129,6 +129,16 @@ class Store {
   // ----- mastery -----
   masteryRows(userId) { return this.all('SELECT * FROM ai_mastery WHERE user_id = ?', [userId]); }
 
+  /** XP earned in the Coach: all time, the last 7 days, and how many questions were answered. */
+  async xpStats(userId) {
+    const r = await this.get(
+      `SELECT COALESCE(SUM(xp_earned), 0) AS total,
+              COALESCE(SUM(CASE WHEN completed_at >= datetime('now', '-7 days') THEN xp_earned ELSE 0 END), 0) AS week,
+              COUNT(*) AS answered, COALESCE(SUM(correct), 0) AS correct
+       FROM ai_activities WHERE user_id = ? AND status = 'done'`, [userId]);
+    return { total: r.total, week: r.week, answered: r.answered, correct: r.correct };
+  }
+
   upsertMastery(userId, { language, concept, level, p, correct, hintsUsed, mastered }) {
     return this.run(
       `INSERT INTO ai_mastery (user_id, language, concept_id, bloom_level, p_known, attempts, correct, streak_wrong, hints_used, mastered_at, last_practiced)

@@ -57,6 +57,10 @@ const adult = {
     // dashboard
     'ad.welcomeName': 'Welcome back, {{name}}',
     'ad.welcomeNew': 'Welcome, {{name}}',
+    'adc.xpTotal': 'Coach XP earned',
+    'adc.xpWeek': '+{{xp}} this week',
+    'adc.xpAnswered_one': '{{count}} question answered',
+    'adc.xpAnswered_other': '{{count}} questions answered',
     'adc.preparing': 'Preparing your next question…',
     'adc.preparingHint': 'Coach Kodi is choosing a question that fits your level. This can take a few seconds.',
     'adc.chatSafety': 'Coach Kodi is an AI and can make mistakes. Never share passwords, M-Pesa PINs or ID numbers.',
@@ -400,6 +404,10 @@ const adult = {
 
     'ad.welcomeName': 'Karibu tena, {{name}}',
     'ad.welcomeNew': 'Karibu, {{name}}',
+    'adc.xpTotal': 'XP ulizopata kwa Kocha',
+    'adc.xpWeek': '+{{xp}} wiki hii',
+    'adc.xpAnswered_one': 'swali {{count}} limejibiwa',
+    'adc.xpAnswered_other': 'maswali {{count}} yamejibiwa',
     'adc.preparing': 'Tunaandaa swali lako linalofuata…',
     'adc.preparingHint': 'Kocha Kodi anachagua swali linalolingana na kiwango chako. Hii inaweza kuchukua sekunde chache.',
     'adc.chatSafety': 'Coach Kodi ni AI na anaweza kukosea. Usishiriki nywila, PIN za M-Pesa wala nambari za kitambulisho.',

@@ -90,6 +90,7 @@ const AdultCoach = () => {
   const currentLevel = rec ? levels.find((b) => b.id === rec.level) : null;
   const lesson = current?.lesson;
   const aiOn = Boolean(profile.ai?.aiEnabled);
+  const xp = profile.xp || { total: 0, week: 0, answered: 0 };
 
   return (
     <Page wide>
@@ -116,8 +117,14 @@ const AdultCoach = () => {
               </div>
             </div>
           </div>
-          <div className="flex lg:flex-col items-center gap-3 justify-center">
+          <div className="flex flex-wrap lg:flex-col items-center gap-4 justify-center">
             <Ring pct={profile.summary.percent} label={t('adc.mastery', { lang: langInfo ? langInfo.name : '' })} />
+            {/* XP earned here: every correct answer adds points (fewer when hints were used). */}
+            <div className="rounded-2xl bg-white/10 border border-white/20 px-4 py-3 text-center min-w-[11rem]" aria-live="polite">
+              <p className="text-3xl font-bold text-amber-300">⭐ {xp.total.toLocaleString()}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-indigo-100">{t('adc.xpTotal')}</p>
+              <p className="text-xs text-indigo-200 mt-1">{t('adc.xpWeek', { xp: xp.week })} · {t('adc.xpAnswered', { count: xp.answered })}</p>
+            </div>
           </div>
         </div>
       </section>

@@ -102,7 +102,8 @@ class LearningEngine {
     const l = ctx.locale;
     summary.concepts = summary.concepts.map((c) => ({ ...c, name: c.name[l] }));
     const overview = LANGUAGES.map((x) => ({ id: x.id, percent: model.summarise(rows, x.id).percent })).filter((x) => x.percent > 0 || x.id === ctx.language);
-    return { language: ctx.language, locale: l, age: ctx.age, summary, overview, ai: this.status() };
+    const xp = await this.store.xpStats(userId).catch(() => null);
+    return { language: ctx.language, locale: l, age: ctx.age, summary, overview, xp, ai: this.status() };
   }
 
   /** The life-long Coding Journey: stages from newbie to pro, then endless Legend levels. */

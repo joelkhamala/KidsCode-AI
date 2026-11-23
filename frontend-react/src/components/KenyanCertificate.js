@@ -18,6 +18,9 @@ const H = 794;
 const NAVY = '#0b1f3a';
 const RED = '#bb0000';
 const GREEN = '#006600';
+// Everything readable stays at least this far from the edges, inside the corner brackets
+// (their three lines sit 44-68 px in) and clear of the flag corners.
+const SAFE = 92;
 
 export const DEFAULT_LABELS = {
   certificate: 'CERTIFICATE',
@@ -127,7 +130,7 @@ const KenyanCertificate = ({
       .then(setQr).catch(() => setQr(''));
   }, [verifyUrl]);
 
-  const nameSize = !name ? 60 : name.length > 28 ? 46 : name.length > 20 ? 54 : 64;
+  const nameSize = !name ? 54 : name.length > 28 ? 42 : name.length > 20 ? 48 : 56;
 
   return (
     <div ref={wrapRef} className="kc-cert-wrap w-full" style={{ height: H * scale }}>
@@ -155,8 +158,8 @@ const KenyanCertificate = ({
         </svg>
 
         {/* Header */}
-        <img src="/kidscode_logo.png" alt="KidsCode" className="absolute" style={{ left: 92, top: 58, width: 124, height: 124, objectFit: 'contain' }} />
-        <div className="absolute text-center" style={{ left: 340, right: 340, top: 56 }}>
+        <img src="/kidscode_logo.png" alt="KidsCode" className="absolute" style={{ left: SAFE + 4, top: 70, width: 112, height: 112, objectFit: 'contain' }} />
+        <div className="absolute text-center" style={{ left: 340, right: 340, top: 54 }}>
           {/* Organisation name on two short lines so it never runs into the details on the right. */}
           {String(L.org).split(' · ').map((part, i) => (
             <div key={part} style={{ fontSize: i === 0 ? 15 : 11, letterSpacing: i === 0 ? '0.18em' : '0.3em', fontWeight: i === 0 ? 800 : 600, color: i === 0 ? GREEN : NAVY, marginTop: i ? 2 : 0 }}>{part.toUpperCase()}</div>
@@ -165,41 +168,41 @@ const KenyanCertificate = ({
             <span style={{ width: 46, height: 4, background: '#000' }} /><span style={{ width: 46, height: 4, background: RED }} /><span style={{ width: 46, height: 4, background: GREEN }} />
           </div>
         </div>
-        <div className="absolute text-right" style={{ right: 78, top: 70, fontSize: 14, lineHeight: 1.6 }}>
+        <div className="absolute text-right" style={{ right: SAFE + 4, top: SAFE, fontSize: 13.5, lineHeight: 1.55 }}>
           <div><span style={{ opacity: 0.7 }}>{L.certificateNo}: </span><b>{certificateNumber}</b></div>
           <div><span style={{ opacity: 0.7 }}>{L.duration}: </span><b>{hours} {L.hoursUnit}</b></div>
           <div><span style={{ opacity: 0.7 }}>{L.curriculum}: </span><b>{curriculumCode}</b></div>
         </div>
 
         {/* Title + name */}
-        <div className="absolute text-center" style={{ left: 230, right: 230, top: 178 }}>
-          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 800, fontSize: 78, letterSpacing: '0.2em', lineHeight: 1, paddingLeft: '0.2em', whiteSpace: 'nowrap' }}>{L.certificate}</div>
-          <div style={{ fontSize: 28, marginTop: 6, fontWeight: 500 }}>{L.ofCompletion}</div>
-          <div style={{ fontSize: 19, marginTop: 14, opacity: 0.85 }}>{L.presentedTo}</div>
-          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontSize: nameSize, marginTop: 4, lineHeight: 1.15, minHeight: 70 }}>{name}</div>
+        <div className="absolute text-center" style={{ left: 230, right: 230, top: 176 }}>
+          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 800, fontSize: 70, letterSpacing: '0.2em', lineHeight: 1, paddingLeft: '0.2em', whiteSpace: 'nowrap' }}>{L.certificate}</div>
+          <div style={{ fontSize: 25, marginTop: 4, fontWeight: 500 }}>{L.ofCompletion}</div>
+          <div style={{ fontSize: 17, marginTop: 10, opacity: 0.85 }}>{L.presentedTo}</div>
+          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontSize: nameSize, marginTop: 2, lineHeight: 1.15, minHeight: 64 }}>{name}</div>
           <div style={{ width: 560, height: 2, margin: '6px auto 0', background: `linear-gradient(90deg, transparent, ${NAVY} 15%, ${NAVY} 85%, transparent)` }} />
-          <div style={{ fontSize: 19, marginTop: 12, opacity: 0.85 }}>{L.forCompleting}</div>
-          <div style={{ fontSize: 30, marginTop: 4, fontWeight: 700, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{String(courseName).toUpperCase()}</div>
+          <div style={{ fontSize: 17, marginTop: 8, opacity: 0.85 }}>{L.forCompleting}</div>
+          <div style={{ fontSize: 27, marginTop: 2, fontWeight: 700, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{String(courseName).toUpperCase()}</div>
         </div>
 
         {/* Technology badges */}
-        <svg className="absolute" style={{ left: W / 2 - 128, top: 560 }} width="256" height="70" aria-hidden="true">
+        <svg className="absolute" style={{ left: W / 2 - 128, top: 478 }} width="256" height="70" aria-hidden="true">
           <TechBadge x={0} label="HTML" colour="#e34f26" />
           <TechBadge x={97} label="CSS" colour="#1572b6" />
           <TechBadge x={194} label="JS" colour="#d4a017" />
         </svg>
 
         {/* Bottom left: QR + issue date */}
-        <div className="absolute text-center" style={{ left: 96, bottom: 70, width: 150 }}>
-          {qr ? <img src={qr} alt={L.scanToVerify} style={{ width: 118, height: 118, margin: '0 auto' }} /> : <div style={{ width: 118, height: 118, margin: '0 auto', border: `2px dashed ${NAVY}`, opacity: 0.3 }} />}
+        <div className="absolute text-center" style={{ left: SAFE + 8, bottom: SAFE, width: 168 }}>
+          {qr ? <img src={qr} alt={L.scanToVerify} style={{ width: 100, height: 100, margin: '0 auto' }} /> : <div style={{ width: 100, height: 100, margin: '0 auto', border: `2px dashed ${NAVY}`, opacity: 0.3 }} />}
           <div style={{ fontSize: 11, marginTop: 4, opacity: 0.7 }}>{L.scanToVerify}</div>
-          <div style={{ fontSize: 13, marginTop: 4, opacity: 0.75 }}>{L.issueDate}</div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>{issueDate}</div>
+          <div style={{ fontSize: 12, marginTop: 4, opacity: 0.75 }}>{L.issueDate}</div>
+          <div style={{ fontSize: 14.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{issueDate}</div>
         </div>
 
         {/* Bottom centre: course facts */}
-        <div className="absolute text-center" style={{ left: W / 2 - 300, width: 600, bottom: 62, background: '#f1f5f9', borderRadius: 22, padding: '14px 20px' }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>{L.modulesLessons.replace('{m}', modules).replace('{l}', lessons)}</div>
+        <div className="absolute text-center" style={{ left: W / 2 - 280, width: 560, bottom: SAFE, background: '#f1f5f9', borderRadius: 20, padding: '12px 18px' }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{L.modulesLessons.replace('{m}', modules).replace('{l}', lessons)}</div>
           <div style={{ fontSize: 13, marginTop: 4, opacity: 0.8 }}>
             {L.overallScore}: <b>{score}{score !== '—' ? '%' : ''}</b> · {L.duration}: <b>{hours} {L.hoursUnit}</b>
           </div>
@@ -207,8 +210,8 @@ const KenyanCertificate = ({
         </div>
 
         {/* Bottom right: seal */}
-        <div className="absolute text-center" style={{ right: 92, bottom: 66, width: 170 }}>
-          <svg width="150" height="150" viewBox="-75 -75 150 150" style={{ margin: '0 auto' }} aria-hidden="true">
+        <div className="absolute text-center" style={{ right: SAFE + 4, bottom: SAFE, width: 168 }}>
+          <svg width="124" height="124" viewBox="-75 -75 150 150" style={{ margin: '0 auto' }} aria-hidden="true">
             <defs><path id="seal-arc" d="M -54 0 A 54 54 0 1 1 54 0 A 54 54 0 1 1 -54 0" /></defs>
             <circle r="72" fill={GREEN} />
             <circle r="68" fill="none" stroke="#ffffff" strokeWidth="2" />
@@ -219,7 +222,7 @@ const KenyanCertificate = ({
             </text>
             <Shield cx={0} cy={0} s={0.82} />
           </svg>
-          <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4 }}>{L.hongera}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginTop: 2 }}>{L.hongera}</div>
           <div style={{ fontSize: 11, opacity: 0.75 }}>{L.verified}</div>
           {verificationCode && <div style={{ fontSize: 10, opacity: 0.6, fontFamily: "'Fira Code', monospace" }}>{verificationCode}</div>}
         </div>
