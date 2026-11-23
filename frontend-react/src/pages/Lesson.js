@@ -690,7 +690,7 @@ const Lesson = () => {
           </div>
 
           {/* AI code check (works offline too) */}
-          <CodeCheck code={code} language="javascript" task={lesson.challenge} />
+          <CodeCheck code={code} language={isHtmlLesson ? 'html_css' : 'javascript'} task={lesson.challenge} />
 
           {/* Turtle Canvas (not used by HTML lessons) */}
           <div className="card p-6" style={isHtmlLesson ? { display: 'none' } : undefined}>
@@ -752,7 +752,7 @@ const Lesson = () => {
           </div>
         </div>
       </div>
-      <CoachChat context={{ task: lesson.challenge, code, language: 'javascript' }} />
+      <CoachChat context={{ task: lesson.challenge, code, language: isHtmlLesson ? 'html_css' : 'javascript' }} />
 
       {celebration && (
         <div className="modal-backdrop">
