@@ -111,7 +111,8 @@ export const createTurtle = (canvas, overlay) => {
   /** Draw the commands. With animate, it draws a few per frame and resolves when done. */
   const run = (commands = [], { animate = true } = {}) => new Promise((resolve) => {
     if (frame) cancelAnimationFrame(frame);
-    if (!animate || commands.length === 0) {
+    // Browsers pause animation frames in hidden tabs, so draw instantly when nobody is watching.
+    if (!animate || commands.length === 0 || (typeof document !== 'undefined' && document.hidden)) {
       commands.forEach(apply);
       drawTurtle();
       resolve();
@@ -120,11 +121,31 @@ export const createTurtle = (canvas, overlay) => {
     // Finish in about 1.5 seconds however long the drawing is.
     const perFrame = Math.max(1, Math.ceil(commands.length / 90));
     let i = 0;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      document.removeEventListener('visibilitychange', onHidden);
+      frame = null;
+      resolve();
+    };
+    // Hidden tabs get no animation frames: if the page is hidden part-way through, draw the rest at once.
+    const onHidden = () => {
+      if (!document.hidden || done) return;
+      if (frame) cancelAnimationFrame(frame);
+      while (i < commands.length) apply(commands[i++]);
+      drawTurtle();
+      finish();
+    };
+    document.addEventListener('visibilitychange', onHidden);
+    const started = Date.now();
     const step = () => {
-      for (let n = 0; n < perFrame && i < commands.length; n++) apply(commands[i++]);
+      // Safety net: if frames are slow (busy or background window), finish after 3 seconds.
+      const batch = Date.now() - started > 3000 ? commands.length : perFrame;
+      for (let n = 0; n < batch && i < commands.length; n++) apply(commands[i++]);
       drawTurtle();
       if (i < commands.length) frame = requestAnimationFrame(step);
-      else { frame = null; resolve(); }
+      else finish();
     };
     frame = requestAnimationFrame(step);
   });

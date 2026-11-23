@@ -7,6 +7,7 @@ import { useRestrictions } from '../context/RestrictionsContext';
 import { Play, RotateCcw, Lock } from 'feather-icons-react';
 import { getTranslatedLesson } from '../translations/lessons';
 import CodeCheck from '../components/ai/CodeCheck';
+import CodeEditor from '../components/CodeEditor';
 import CoachChat from '../components/ai/CoachChat';
 import { useToast } from '../context/ToastContext';
 import { nextAfterLesson, lessonPosition } from '../utils/learningPath';
@@ -666,13 +667,14 @@ const Lesson = () => {
                 </button>
               </div>
             </div>
-            <textarea
+            <CodeEditor
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              className="w-full h-64 p-4 font-code text-sm bg-slate-900 text-green-400 rounded-xl border-2 border-slate-700 focus:border-indigo-500 outline-none resize-none"
-              spellCheck="false"
-              disabled={requiresApproval() && !approvalStatus?.approved}
+              onChange={setCode}
+              language={isHtmlLesson ? 'html' : 'javascript'}
+              height={280}
+              readOnly={requiresApproval() && !approvalStatus?.approved}
               placeholder={requiresApproval() && !approvalStatus?.approved ? "🔒 " + t('lesson.requestApprovalPlaceholder') : t('lesson.codePlaceholder')}
+              onRun={runCode}
             />
           </div>
 

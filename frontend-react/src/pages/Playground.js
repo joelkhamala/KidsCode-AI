@@ -8,6 +8,8 @@ import {
 } from '../playground/blocks';
 import { TEMPLATES, GUIDED_CHALLENGES } from '../playground/templates';
 import { createTurtle } from '../playground/turtle';
+import CodeEditor from '../components/CodeEditor';
+import { runPython, isPythonLoaded } from '../utils/pythonRunner';
 
 const STORAGE = { code: 'playground_code', blocks: 'playground_blocks', mode: 'playground_mode', visited: 'playground_visited', lang: 'playground_view_lang' };
 const store = {
@@ -330,6 +332,28 @@ const Playground = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blocksVersion, viewLang, editorMode, blocksBacked, code]);
 
+  // Run the Python version of the blocks with real Python (Pyodide) in the browser.
+  const runPythonView = async () => {
+    const turtle = turtleRef.current;
+    setIsRunning(true);
+    setHasError(false);
+    turtle?.reset();
+    try {
+      const r = await runPython(translated, {
+        onStatus: (s) => setOutput(s === 'loading' && !isPythonLoaded() ? t('pg.pyLoading') : t('pg.running')),
+      });
+      const lines = [...r.output, ...(r.error ? [r.error] : [])];
+      setOutput(lines.join('\n') || (r.turtle.length ? t('pg.drawingDone') : t('pg.ranOk')));
+      setHasError(Boolean(r.error));
+      if (r.turtle.length) await turtle?.run(r.turtle, { animate: true });
+    } catch (err) {
+      setOutput('❌ ' + err.message);
+      setHasError(true);
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
   const copyTranslated = async () => {
     try {
       await navigator.clipboard.writeText(translated);
@@ -489,15 +513,14 @@ const Playground = () => {
               </div>
             ) : (
               <>
-                <label htmlFor="pg-code" className="sr-only">{t('pg.typeCode')}</label>
-                <textarea
-                  id="pg-code"
+                <CodeEditor
                   value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  className="w-full p-4 font-code text-sm bg-slate-900 text-green-300 rounded-2xl border-2 border-slate-700 focus:border-indigo-400 outline-none resize-y"
-                  style={{ height: 480 }}
-                  spellCheck="false"
+                  onChange={setCode}
+                  language="javascript"
+                  height={480}
                   placeholder={t('pg.codePlaceholder')}
+                  ariaLabel={t('pg.typeCode')}
+                  onRun={runCode}
                 />
                 <p className="text-xs text-slate-500 font-semibold mt-2">⌨️ {t('pg.codeModeHint')}</p>
               </>
@@ -508,9 +531,16 @@ const Playground = () => {
           <section className="card p-4 md:p-5" aria-labelledby="langs-title">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <h2 id="langs-title" className="font-display text-xl text-slate-800">🌍 {t('pg.inLanguages')}</h2>
-              {translated && (
-                <button type="button" onClick={copyTranslated} className="btn-secondary text-xs py-1 px-3">📋 {t('pg.copy')}</button>
-              )}
+              <div className="flex flex-wrap gap-2">
+                {translated && viewLang === 'python' && blocksBacked && (
+                  <button type="button" onClick={runPythonView} disabled={isRunning} className="btn-primary text-xs py-1 px-3">
+                    🐍 {isRunning ? t('pg.running') : t('pg.runPython')}
+                  </button>
+                )}
+                {translated && (
+                  <button type="button" onClick={copyTranslated} className="btn-secondary text-xs py-1 px-3">📋 {t('pg.copy')}</button>
+                )}
+              </div>
             </div>
             {blocksBacked && langs.length > 0 ? (
               <>

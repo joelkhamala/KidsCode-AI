@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdultBlocklyEditor from '../components/AdultBlocklyEditor';
+import CodeEditor from '../components/CodeEditor';
 
 const PG_KEY = 'adult_playground_state';
 const loadPgState = () => {
@@ -321,31 +322,19 @@ const AdultPlayground = () => {
               </div>
               <div className="flex-1 overflow-hidden">
                 {codeTab === 'html' && (
-                  <textarea
-                    value={htmlCode}
-                    onChange={e => setHtmlCode(e.target.value)}
-                    className="w-full h-full p-3 font-mono text-xs bg-gray-900 text-green-400 resize-none focus:outline-none"
-                    placeholder="<h1>Hello World</h1>"
-                    spellCheck="false"
-                  />
+                  <div className="h-full p-2">
+                    <CodeEditor value={htmlCode} onChange={setHtmlCode} language="html" height="calc(100% - 32px)" placeholder="<h1>Hello World</h1>" ariaLabel="HTML" />
+                  </div>
                 )}
                 {codeTab === 'css' && (
-                  <textarea
-                    value={cssCode}
-                    onChange={e => setCssCode(e.target.value)}
-                    className="w-full h-full p-3 font-mono text-xs bg-gray-900 text-blue-400 resize-none focus:outline-none"
-                    placeholder="h1 { color: blue; }"
-                    spellCheck="false"
-                  />
+                  <div className="h-full p-2">
+                    <CodeEditor value={cssCode} onChange={setCssCode} language="css" height="calc(100% - 32px)" placeholder="h1 { color: blue; }" ariaLabel="CSS" />
+                  </div>
                 )}
                 {codeTab === 'js' && (
-                  <textarea
-                    value={jsCode}
-                    onChange={e => setJsCode(e.target.value)}
-                    className="w-full h-full p-3 font-mono text-xs bg-gray-900 text-yellow-400 resize-none focus:outline-none"
-                    placeholder="console.log('Hello!');"
-                    spellCheck="false"
-                  />
+                  <div className="h-full p-2">
+                    <CodeEditor value={jsCode} onChange={setJsCode} language="javascript" height="calc(100% - 32px)" placeholder="console.log('Hello!');" ariaLabel="JavaScript" />
+                  </div>
                 )}
               </div>
             </div>
@@ -372,14 +361,14 @@ const AdultPlayground = () => {
               </div>
               <div className="flex-1 overflow-hidden">
                 {codeTab === 'html' && (
-                  <textarea value={htmlCode} onChange={e => setHtmlCode(e.target.value)}
-                    className="w-full h-full p-3 font-mono text-xs bg-gray-900 text-green-400 resize-none focus:outline-none"
-                    spellCheck="false" />
+                  <div className="h-full p-2">
+                    <CodeEditor value={htmlCode} onChange={setHtmlCode} language="html" height="calc(100% - 32px)" ariaLabel="HTML" />
+                  </div>
                 )}
                 {codeTab === 'css' && (
-                  <textarea value={cssCode} onChange={e => setCssCode(e.target.value)}
-                    className="w-full h-full p-3 font-mono text-xs bg-gray-900 text-blue-400 resize-none focus:outline-none"
-                    spellCheck="false" />
+                  <div className="h-full p-2">
+                    <CodeEditor value={cssCode} onChange={setCssCode} language="css" height="calc(100% - 32px)" ariaLabel="CSS" />
+                  </div>
                 )}
                 {codeTab === 'js' && (
                   <div className="relative w-full h-full">

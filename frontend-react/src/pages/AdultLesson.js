@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import AdultBlocklyEditor from '../components/AdultBlocklyEditor';
+import CodeEditor from '../components/CodeEditor';
 
 const loadLessonState = (lessonId) => {
   try { return JSON.parse(localStorage.getItem(`adult_lesson_state_${lessonId}`)) || {}; } catch { return {}; }
@@ -466,13 +467,9 @@ const AdultLesson = () => {
                   <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
                     <span className="text-sm font-medium text-gray-700">HTML</span>
                   </div>
-                  <textarea
-                    value={htmlCode}
-                    onChange={(e) => setHtmlCode(e.target.value)}
-                    className="w-full h-32 p-4 font-mono text-sm bg-gray-900 text-green-400 resize-none focus:outline-none"
-                    placeholder="<h1>Hello World</h1>"
-                    spellCheck="false"
-                  />
+                  <div className="p-2">
+                    <CodeEditor value={htmlCode} onChange={setHtmlCode} language="html" height={180} placeholder="<h1>Hello World</h1>" ariaLabel="HTML" />
+                  </div>
                 </div>
 
                 {/* CSS Editor */}
@@ -480,13 +477,9 @@ const AdultLesson = () => {
                   <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
                     <span className="text-sm font-medium text-gray-700">CSS</span>
                   </div>
-                  <textarea
-                    value={cssCode}
-                    onChange={(e) => setCssCode(e.target.value)}
-                    className="w-full h-32 p-4 font-mono text-sm bg-gray-900 text-blue-400 resize-none focus:outline-none"
-                    placeholder="h1 { color: blue; }"
-                    spellCheck="false"
-                  />
+                  <div className="p-2">
+                    <CodeEditor value={cssCode} onChange={setCssCode} language="css" height={150} placeholder="h1 { color: blue; }" ariaLabel="CSS" showSwitches={false} />
+                  </div>
                 </div>
 
                 {/* JavaScript Editor */}
@@ -494,13 +487,9 @@ const AdultLesson = () => {
                   <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
                     <span className="text-sm font-medium text-gray-700">JavaScript</span>
                   </div>
-                  <textarea
-                    value={jsCode}
-                    onChange={(e) => setJsCode(e.target.value)}
-                    className="w-full h-32 p-4 font-mono text-sm bg-gray-900 text-yellow-400 resize-none focus:outline-none"
-                    placeholder="console.log('Hello!');"
-                    spellCheck="false"
-                  />
+                  <div className="p-2">
+                    <CodeEditor value={jsCode} onChange={setJsCode} language="javascript" height={150} placeholder="console.log('Hello!');" ariaLabel="JavaScript" showSwitches={false} />
+                  </div>
                 </div>
               </div>
             )}

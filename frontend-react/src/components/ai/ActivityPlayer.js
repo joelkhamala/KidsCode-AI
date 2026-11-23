@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { aiAPI, codeAPI } from '../../services/api';
+import CodeEditor from '../CodeEditor';
+import { runPython, preloadPython, isPythonLoaded } from '../../utils/pythonRunner';
 
 /**
  * Renders one adaptive activity of any type and handles hints, running code,
@@ -58,9 +60,16 @@ const ActivityPlayer = ({ activityId, activity, onFinished, onNext, levelNames =
     if (result && resultRef.current) resultRef.current.focus();
   }, [result]);
 
+  // Start downloading Python as soon as a Python coding activity opens, so Run feels quick.
+  useEffect(() => {
+    if (CODE_TYPES.includes(activity.type) && activity.language === 'python') preloadPython().catch(() => {});
+  }, [activity.type, activity.language]);
+
   const isCode = CODE_TYPES.includes(activity.type);
   const isOptions = OPTION_TYPES.includes(activity.type);
-  const canRun = isCode && activity.language === 'javascript';
+  // JavaScript runs in the server sandbox; Python runs for real in the browser (Pyodide).
+  const canRun = isCode && ['javascript', 'python'].includes(activity.language);
+  const editorLanguage = { javascript: 'javascript', python: 'python', html_css: 'html' }[activity.language] || 'text';
   const learnerAnswer = isCode ? code : activity.type === 'predict_output' ? text : null;
 
   const askHint = async () => {
@@ -79,10 +88,17 @@ const ActivityPlayer = ({ activityId, activity, onFinished, onNext, levelNames =
   const runCode = async () => {
     setRunning(true);
     try {
+      if (activity.language === 'python') {
+        if (!isPythonLoaded()) setRunOutput({ text: t('coach.pyLoading'), error: false });
+        const r = await runPython(code);
+        const lines = [...r.output, ...(r.error ? [r.error] : [])];
+        setRunOutput({ text: lines.join('\n') || t('coach.noOutput'), error: Boolean(r.error) });
+        return;
+      }
       const res = await codeAPI.runCode(code, 'javascript');
       setRunOutput({ text: res.data.output, error: res.data.error });
-    } catch {
-      setRunOutput({ text: t('coach.error'), error: true });
+    } catch (err) {
+      setRunOutput({ text: err && err.message ? err.message : t('coach.error'), error: true });
     } finally {
       setRunning(false);
     }
@@ -186,25 +202,15 @@ const ActivityPlayer = ({ activityId, activity, onFinished, onNext, levelNames =
 
       {isCode && (
         <div className="space-y-2">
-          <textarea
+          <CodeEditor
             value={code}
-            onChange={(e) => setCode(e.target.value)}
-            disabled={Boolean(result)}
-            rows={Math.min(18, Math.max(8, code.split('\n').length + 2))}
-            className="w-full p-4 font-code text-sm bg-slate-900 text-green-400 rounded-xl border-2 border-slate-700 focus:border-indigo-500 outline-none"
+            onChange={setCode}
+            language={editorLanguage}
+            height={Math.min(420, Math.max(200, code.split('\n').length * 22 + 60))}
+            readOnly={Boolean(result)}
             placeholder={t('coach.writeCode')}
-            spellCheck="false"
-            aria-label={t('coach.writeCode')}
-            onKeyDown={(e) => {
-              if (e.key === 'Tab') { // keep focus in the editor and insert spaces
-                e.preventDefault();
-                const el = e.target;
-                const { selectionStart: s, selectionEnd: en } = el;
-                const next = `${code.slice(0, s)}    ${code.slice(en)}`;
-                setCode(next);
-                requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = s + 4; });
-              }
-            }}
+            ariaLabel={t('coach.writeCode')}
+            onRun={canRun ? runCode : undefined}
           />
           {canRun ? (
             <div className="flex items-start gap-3">
