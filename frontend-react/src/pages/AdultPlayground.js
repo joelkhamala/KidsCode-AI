@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import WebWorkbench from '../components/WebWorkbench';
 import { SERVER_LANGUAGES } from '../components/codeLanguages';
 import { Page, PageHeader, Button } from '../components/AdultUi';
@@ -28,8 +29,11 @@ const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; }
 const AdultPlayground = () => {
   const { t } = useTranslation();
   const saved = load();
+  const [params] = useSearchParams();
+  const asked = params.get('lang');
   const [code, setCode] = useState({ ...STARTER, ...(saved.code || {}) });
-  const [language, setLanguage] = useState(saved.language || 'web');
+  // ?lang=java (from the dashboard) opens the playground on that language.
+  const [language, setLanguage] = useState(LANGUAGES.some((l) => l.id === asked) ? asked : saved.language || 'web');
   const [mode, setMode] = useState(saved.mode || 'code');
   const [blocksXml, setBlocksXml] = useState(saved.blocksXml || '');
   const [jquery, setJquery] = useState(Boolean(saved.jquery));

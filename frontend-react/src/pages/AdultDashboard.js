@@ -3,12 +3,39 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { adultAPI } from '../services/api';
 import { getAdultUser } from '../utils/authStorage';
-import { Page, Card, Loading, ErrorBox, studyTime, Ring, COURSES } from '../components/AdultUi';
+import { Page, Card, Bar, Loading, ErrorBox, studyTime, Ring, COURSES, courseOf, PASS_MARK as PASS } from '../components/AdultUi';
+import { SERVER_LANGUAGES } from '../components/codeLanguages';
 
 /**
- * Adult learner dashboard: grid of 4 clickable course cards,
- * each with progress, hours, and status. Clicking a card opens the course view.
+ * Adult learner home:
+ *   - hero: greeting, the lesson to continue, overall progress
+ *   - key numbers (lessons, study time, average score, certificate)
+ *   - the four courses (Web, Java, Python & AI, Databases), each opening its course page
+ *   - side column: road to the certificate, practise any language, shortcuts
  */
+
+/** What each course is practised in (shown as a badge on its card). */
+const COURSE_LANGUAGE = {
+  1: { label: 'HTML · CSS · JS', chip: 'bg-orange-100 text-orange-800', playground: 'web', icon: '🌐' },
+  2: { label: 'Java', chip: SERVER_LANGUAGES.java.chip, playground: 'java', icon: SERVER_LANGUAGES.java.icon },
+  3: { label: 'Python', chip: SERVER_LANGUAGES.python.chip, playground: 'python', icon: SERVER_LANGUAGES.python.icon },
+  4: { label: 'SQL', chip: SERVER_LANGUAGES.sql.chip, playground: 'sql', icon: SERVER_LANGUAGES.sql.icon },
+};
+
+/** A small progress ring for the course cards. */
+const MiniRing = ({ pct, color }) => {
+  const r = 22;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg width="56" height="56" viewBox="0 0 56 56" className="shrink-0" aria-hidden="true">
+      <circle cx="28" cy="28" r={r} fill="none" stroke="#e2e8f0" strokeWidth="6" />
+      <circle cx="28" cy="28" r={r} fill="none" stroke={color} strokeWidth="6" strokeLinecap="round"
+        strokeDasharray={c} strokeDashoffset={c - (c * pct) / 100} transform="rotate(-90 28 28)" style={{ transition: 'stroke-dashoffset 0.7s' }} />
+      <text x="28" y="32" textAnchor="middle" fontSize="12" fontWeight="700" fill="#0f172a">{pct}%</text>
+    </svg>
+  );
+};
+
 const AdultDashboard = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -27,24 +54,100 @@ const AdultDashboard = () => {
 
   const { stats, curriculum } = data;
   const started = stats.completedLessons > 0;
+  const returning = started || (stats.minutesLogged || 0) >= 5;
+
+  // Every lesson in course order, with its module.
+  const allLessons = curriculum.flatMap((m) => m.lessons.map((l, i) => ({ ...l, module: m, position: i + 1 })));
+  // Continue a lesson the learner has opened but not finished; otherwise the first unfinished one.
+  const resume = allLessons.find((l) => l.started && !l.completed) || allLessons.find((l) => !l.completed) || null;
+  const resumeCourse = resume ? courseOf(resume.module.id) : null;
+
+  const courses = COURSES.map((course) => {
+    const modules = curriculum.filter((m) => course.modules.includes(m.id));
+    const lessons = modules.flatMap((m) => m.lessons);
+    const done = lessons.filter((l) => l.completed).length;
+    const total = lessons.length;
+    const status = total > 0 && done === total ? 'done' : done > 0 || lessons.some((l) => l.started) ? 'active' : 'new';
+    return {
+      ...course, modules, done, total, status,
+      pct: total ? Math.round((100 * done) / total) : 0,
+      hours: modules.reduce((sum, m) => sum + (m.estimated_hours || 0), 0),
+    };
+  });
+
+  const scoreOk = started && stats.averageScore >= PASS;
+  const requirements = [
+    { key: 'lessons', icon: '📚', label: t('ad.reqAllLessons'), value: `${stats.completedLessons}/${stats.totalLessons}`, pct: (100 * stats.completedLessons) / (stats.totalLessons || 1), met: stats.completedLessons >= stats.totalLessons && stats.totalLessons > 0 },
+    { key: 'score', icon: '📝', label: t('ad.reqAverage', { n: PASS }), value: started ? `${stats.averageScore}%` : '—', pct: started ? Math.min(100, (100 * stats.averageScore) / PASS) : 0, met: scoreOk },
+    { key: 'hours', icon: '⏱️', label: t('ad.reqHours', { n: stats.requiredHours }), value: studyTime(stats.minutesLogged, stats.hoursLogged), pct: Math.min(100, (100 * stats.hoursLogged) / (stats.requiredHours || 1)), met: stats.hoursLogged >= stats.requiredHours },
+  ];
+  const metCount = requirements.filter((r) => r.met).length;
+
+  const heroAction = resume
+    ? { to: `/adult/lesson/${resume.id}`, label: `${returning ? t('ad.continue') : t('ad.startCourse')} →` }
+    : stats.certificateIssued || stats.eligible
+      ? { to: '/adult/certificate', label: `🎓 ${stats.certificateIssued ? t('ad.viewCertificate') : t('ad.certificate')}` }
+      : { to: '/adult/playground', label: `💻 ${t('ad.playground')}` };
+  const heroTitle = resume ? resume.title
+    : stats.certificateIssued ? t('ad.certificateIssuedTitle')
+      : stats.eligible ? t('ad.getCertificateNow') : t('ad.moreHoursNeeded', { n: stats.requiredHours });
+
+  const STATUS = {
+    new: { text: t('ad.notStarted'), chip: 'bg-slate-100 text-slate-600', cta: t('ad.start') },
+    active: { text: t('ad.inProgress'), chip: 'bg-indigo-100 text-indigo-800', cta: t('ad.continue') },
+    done: { text: `✓ ${t('ad.completed')}`, chip: 'bg-emerald-100 text-emerald-800', cta: t('ad.review') },
+  };
 
   return (
     <Page wide>
-      {/* ===== Header ===== */}
-      <div className="mb-8">
-        <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
-          {t('ad.hello', { name: user?.firstName || 'Learner' })} 👋
-        </h1>
-        <p className="text-slate-600">{t('ad.coursesAvailable', { count: COURSES.length })}</p>
-      </div>
+      {/* ===== Hero ===== */}
+      <section className="relative overflow-hidden rounded-3xl p-6 md:p-8 mb-6 text-white shadow-lg"
+        style={{ background: 'radial-gradient(circle at 85% 15%, rgba(129,140,248,0.45), transparent 45%), linear-gradient(135deg, #0f172a 0%, #312e81 60%, #4c1d95 100%)' }}
+        aria-labelledby="dash-title">
+        <div className="absolute -right-10 -bottom-16 text-[180px] leading-none opacity-[0.06] select-none font-mono" aria-hidden="true">{'</>'}</div>
+        <div className="relative grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_auto] gap-8 items-center">
+          <div className="min-w-0">
+            <p className="text-indigo-200 text-sm font-semibold">{t('ad.programmeName')} · {t('ad.coursesAvailable', { count: COURSES.length })}</p>
+            <h1 id="dash-title" className="text-2xl md:text-4xl font-bold mt-1">
+              {t(returning ? 'ad.welcomeName' : 'ad.welcomeNew', { name: user?.firstName || '' })} 👋
+            </h1>
 
-      {/* ===== Quick Stats ===== */}
+            {/* Continue */}
+            <div className="mt-6 rounded-2xl bg-white/10 border border-white/15 backdrop-blur-sm p-4 md:p-5 max-w-2xl">
+              <p className="text-xs font-bold uppercase tracking-wider text-indigo-200">
+                {resume ? (returning ? t('ad.continueWhere') : t('ad.startHere')) : t('ad.allLessonsDone')}
+              </p>
+              <div className="flex flex-wrap items-center gap-4 mt-2">
+                <div className="flex-1 min-w-[12rem]">
+                  <h2 className="text-xl md:text-2xl font-bold leading-snug">{heroTitle}</h2>
+                  {resume && (
+                    <p className="text-sm text-indigo-100 mt-1">
+                      {resumeCourse.icon} {t(`ad.stage.${resumeCourse.id}`)} · {resume.module.title} · {t('ad.lessonNofM', { n: resume.position, total: resume.module.lessons.length })}
+                      {resume.minutes ? ` · ⏱️ ${t('ad.aboutMinutes', { n: resume.minutes })}` : ''}
+                    </p>
+                  )}
+                </div>
+                <button type="button" onClick={() => navigate(heroAction.to)}
+                  className="px-6 py-3 rounded-xl bg-white text-indigo-800 font-bold shadow-md hover:bg-indigo-50 hover:-translate-y-0.5 transition">
+                  {heroAction.label}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="flex lg:flex-col items-center gap-4 justify-center">
+            <Ring pct={stats.progressPercentage} label={t('ad.courseProgress')} />
+            <p className="text-sm text-indigo-100 text-center">{t('ad.lessonsDoneOf', { done: stats.completedLessons, total: stats.totalLessons })}</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== Key numbers ===== */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
         {[
           { icon: '📚', tint: 'bg-indigo-100 text-indigo-700', label: t('ad.lessons'), value: `${stats.completedLessons}/${stats.totalLessons}`, sub: t('ad.completed') },
-          { icon: '⏱️', tint: 'bg-emerald-100 text-emerald-700', label: t('ad.studyTime'), value: studyTime(stats.minutesLogged, stats.hoursLogged), sub: t('ad.logged') },
-          { icon: '🎯', tint: 'bg-violet-100 text-violet-700', label: t('ad.averageScore'), value: started ? `${stats.averageScore}%` : '—', sub: t('ad.inProgress') },
-          { icon: '🏆', tint: 'bg-amber-100 text-amber-700', label: t('ad.courses'), value: COURSES.length, sub: t('ad.available') },
+          { icon: '⏱️', tint: 'bg-emerald-100 text-emerald-700', label: t('ad.studyTime'), value: studyTime(stats.minutesLogged, stats.hoursLogged), sub: t('ad.ofHours', { n: stats.requiredHours }) },
+          { icon: '🎯', tint: 'bg-violet-100 text-violet-700', label: t('ad.averageScore'), value: started ? `${stats.averageScore}%` : '—', sub: started ? (scoreOk ? t('ad.passing') : t('ad.keepImproving')) : t('ad.noScoresYet') },
+          { icon: '🎓', tint: stats.certificateIssued || stats.eligible ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700', label: t('ad.certificate'), value: stats.certificateIssued || stats.eligible ? '✓' : `${metCount}/3`, sub: stats.certificateIssued ? t('ad.issuedShort') : stats.eligible ? t('ad.readyToIssue') : t('ad.requirementsMet') },
         ].map((s) => (
           <Card key={s.label} className="p-4 md:p-5 flex items-center gap-3 md:gap-4">
             <span className={`w-11 h-11 md:w-12 md:h-12 shrink-0 rounded-xl flex items-center justify-center text-xl ${s.tint}`} aria-hidden="true">{s.icon}</span>
@@ -57,113 +160,118 @@ const AdultDashboard = () => {
         ))}
       </div>
 
-      {/* ===== Course Grid ===== */}
-      <div className="mb-12">
-        <h2 className="text-2xl font-bold text-slate-900 mb-6">{t('ad.learningPath')}</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-          {COURSES.map((course) => {
-            const courseModules = curriculum.filter((m) => course.modules.includes(m.id));
-            const courseLessons = courseModules.flatMap((m) => m.lessons);
-            const done = courseLessons.filter((l) => l.completed).length;
-            const total = courseLessons.length;
-            const complete = total > 0 && done === total;
-            const pct = total ? Math.round((100 * done) / total) : 0;
-
-            return (
-              <button
-                key={course.id}
-                onClick={() => navigate(`/adult/course/${course.id}/view`)}
-                className="group flex flex-col h-full text-left rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-lg hover:border-indigo-300 transition transform hover:-translate-y-1"
-              >
-                {/* Course Header */}
-                <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className="w-14 h-14 rounded-xl flex items-center justify-center text-3xl flex-shrink-0" style={{ background: `${course.color}20` }}>
-                    {course.icon}
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">
-                      {t('ad.courseN', { n: course.id })}
-                    </span>
-                    {complete && (
-                      <span className="inline-block px-2 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                        ✓ {t('ad.done')}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Title & Description */}
-                <h3 className="text-lg font-bold text-slate-900 mb-2 group-hover:text-indigo-600 transition line-clamp-2">
-                  {course.title}
-                </h3>
-                <p className="text-sm text-slate-600 mb-4 flex-1 line-clamp-2">
-                  {`Learn ${course.title.toLowerCase()} with ${courseModules.length} module${courseModules.length !== 1 ? 's' : ''} and ${total} lesson${total !== 1 ? 's' : ''}.`}
-                </p>
-
-                {/* Stats */}
-                <div className="grid grid-cols-3 gap-2 mb-4 py-4 border-t border-b border-slate-100">
-                  <div>
-                    <span className="text-xs text-slate-500 block">{t('ad.lessons')}</span>
-                    <span className="text-sm font-bold text-slate-900">{done}/{total}</span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-500 block">{t('ad.hours')}</span>
-                    <span className="text-sm font-bold text-slate-900">{courseModules.reduce((sum, m) => sum + (m.estimated_hours || 0), 0)}h</span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-500 block">{t('ad.modules')}</span>
-                    <span className="text-sm font-bold text-slate-900">{courseModules.length}</span>
-                  </div>
-                </div>
-
-                {/* Progress Bar */}
-                <div className="mb-4">
-                  <div className="flex justify-between items-center mb-1.5">
-                    <span className="text-xs font-semibold text-slate-700">{t('ad.progress')}</span>
-                    <span className="text-xs font-bold text-indigo-600">{pct}%</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${complete ? 'bg-emerald-500' : 'bg-indigo-600'}`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Action Button */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    navigate(`/adult/course/${course.id}/view`);
-                  }}
-                  className="w-full px-4 py-2 rounded-xl bg-indigo-50 text-indigo-600 font-semibold hover:bg-indigo-100 transition group-hover:bg-indigo-600 group-hover:text-white"
-                >
-                  {complete ? t('ad.review') : done > 0 ? t('ad.continue') : t('ad.start')} →
-                </button>
-              </button>
-            );
-          })}
-        </div>
-        </div>
-      {/* ===== Bottom Action ===== */}
-      <div className="mt-12 text-center">
-        <Card className="p-8 bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
-          <div className="flex flex-col items-center gap-3 md:flex-row md:justify-center md:gap-4">
-            <div className="text-left md:text-center">
-              <h2 className="text-lg font-bold text-slate-900 mb-1">{t('ad.needHelp')}</h2>
-              <p className="text-sm text-slate-600">{t('ad.haveQuestions')}</p>
-            </div>
-            <div className="flex gap-2 w-full md:w-auto md:flex-col">
-              <Link to="/adult/coach" className="flex-1 md:flex-none px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition">
-                🤖 {t('adc.title')}
-              </Link>
-              <Link to="/adult/progress" className="flex-1 md:flex-none px-4 py-2 rounded-lg bg-white border border-indigo-300 text-indigo-600 font-semibold hover:bg-indigo-50 transition">
-                📈 {t('ad.myProgress')}
-              </Link>
-            </div>
+      {/* minmax(0,1fr) on every screen size so long text can never widen the page. */}
+      <div className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+        {/* ===== Courses ===== */}
+        <section aria-labelledby="courses-title" className="min-w-0">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-4">
+            <h2 id="courses-title" className="text-xl font-bold text-slate-900">{t('ad.yourCourses')}</h2>
+            <p className="text-sm text-slate-500">{t('ad.yourCoursesHelp')}</p>
           </div>
-        </Card>
+          <ul className="grid grid-cols-[minmax(0,1fr)] md:grid-cols-2 gap-4">
+            {courses.map((c) => {
+              const lang = COURSE_LANGUAGE[c.id];
+              const st = STATUS[c.status];
+              const isResume = resumeCourse && resumeCourse.id === c.id;
+              return (
+                <li key={c.id} className="min-w-0">
+                  <Link to={`/adult/course/${c.id}/view`}
+                    className={`group relative flex flex-col h-full rounded-2xl border bg-white p-5 shadow-sm transition hover:shadow-lg hover:-translate-y-0.5 overflow-hidden ${isResume ? 'border-indigo-300 ring-4 ring-indigo-100' : 'border-slate-200 hover:border-indigo-200'}`}>
+                    <span className="absolute inset-x-0 top-0 h-1.5" style={{ background: c.color }} aria-hidden="true" />
+                    <div className="flex items-start gap-4">
+                      <span className="w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center text-3xl" style={{ background: `${c.color}1f` }} aria-hidden="true">{c.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{t('ad.courseN', { n: c.id })}</p>
+                        <h3 className="text-lg font-bold text-slate-900 leading-snug group-hover:text-indigo-700 transition">{t(`ad.stage.${c.id}`)}</h3>
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${lang.chip}`}>{lang.icon} {lang.label}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${st.chip}`}>{st.text}</span>
+                        </div>
+                      </div>
+                      <MiniRing pct={c.pct} color={c.status === 'done' ? '#10b981' : c.color} />
+                    </div>
+
+                    <p className="text-sm text-slate-600 mt-3 flex-1">{t(`ad.courseDesc.${c.id}`)}</p>
+
+                    {/* One segment per module, filled by how much of it is done. */}
+                    <div className="flex gap-1 mt-4" aria-label={t('ad.lessonsDoneOf', { done: c.done, total: c.total })}>
+                      {c.modules.map((m) => {
+                        const d = m.lessons.filter((l) => l.completed).length;
+                        const p = m.lessons.length ? (100 * d) / m.lessons.length : 0;
+                        return (
+                          <span key={m.id} className="h-1.5 flex-1 rounded-full bg-slate-100 overflow-hidden" title={`${m.title}: ${d}/${m.lessons.length}`}>
+                            <span className="block h-full rounded-full" style={{ width: `${p}%`, background: p === 100 ? '#10b981' : c.color }} />
+                          </span>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-3 border-t border-slate-100">
+                      <span className="text-xs text-slate-500">
+                        {t('ad.lessonsDoneOf', { done: c.done, total: c.total })} · {c.modules.length} {t('ad.modules').toLowerCase()} · ⏱️ {t('ad.hoursN', { n: c.hours })}
+                      </span>
+                      <span className="text-sm font-semibold text-indigo-600 group-hover:translate-x-0.5 transition whitespace-nowrap">{st.cta} →</span>
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
+        {/* ===== Side column ===== */}
+        <aside className="space-y-4 lg:sticky lg:top-4">
+          <Card className="p-5">
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <h2 className="font-bold text-slate-900">🎓 {t('ad.roadToCertificate')}</h2>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${metCount === 3 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>{metCount}/3</span>
+            </div>
+            <ul className="space-y-4">
+              {requirements.map((r) => (
+                <li key={r.key}>
+                  <div className="flex items-start justify-between gap-2 text-sm mb-1.5">
+                    <span className={`font-medium ${r.met ? 'text-emerald-700' : 'text-slate-700'}`}>{r.met ? '✅' : r.icon} {r.label}</span>
+                    <span className="text-slate-500 whitespace-nowrap">{r.value}</span>
+                  </div>
+                  <Bar value={r.pct} color={r.met ? 'bg-emerald-500' : 'bg-indigo-600'} label={r.label} />
+                </li>
+              ))}
+            </ul>
+            <Link to="/adult/certificate" className="mt-5 block text-center px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              {stats.certificateIssued ? t('ad.viewCertificate') : t('ad.aboutCertificate')} →
+            </Link>
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="font-bold text-slate-900">💻 {t('ad.practiseAny')}</h2>
+            <p className="text-xs text-slate-500 mt-1 mb-3">{t('ad.practiseAnyHelp')}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.values(COURSE_LANGUAGE).map((l) => (
+                <Link key={l.playground} to={`/adult/playground?lang=${l.playground}`}
+                  className={`flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-sm font-semibold transition hover:shadow-sm hover:-translate-y-0.5 ${l.chip}`}>
+                  <span aria-hidden="true">{l.icon}</span> {l.playground === 'web' ? 'Web' : l.label}
+                </Link>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-2">
+            {[
+              ['/adult/coach', '🤖', t('adc.title'), t('adc.shortcut'), 'bg-sky-100'],
+              ['/adult/progress', '📈', t('ad.myProgress'), t('ad.myProgressText'), 'bg-violet-100'],
+              ['/adult/profile', '👤', t('ad.profileSettings'), t('ad.profileShortcut'), 'bg-slate-100'],
+            ].map(([to, icon, title, text, tint]) => (
+              <Link key={to} to={to} className="flex items-center gap-3 rounded-xl p-3 hover:bg-slate-50 transition">
+                <span className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center text-lg ${tint}`} aria-hidden="true">{icon}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block font-semibold text-slate-900 text-sm">{title}</span>
+                  <span className="block text-xs text-slate-500 truncate">{text}</span>
+                </span>
+                <span className="text-slate-400" aria-hidden="true">›</span>
+              </Link>
+            ))}
+          </Card>
+        </aside>
       </div>
     </Page>
   );
