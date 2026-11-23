@@ -219,7 +219,8 @@ export const approvalAPI = {
 };
 
 // AI Coach API (adaptive learning engine)
-export const aiAPI = {
+/** The AI Coach endpoints, for whichever login (children or adult) the client carries. */
+const makeAiAPI = (api) => ({
   status: () => api.get('/ai/status'),
   catalog: (locale) => api.get('/ai/catalog', { params: { locale } }),
   profile: (language, locale) => api.get('/ai/profile', { params: { language, locale } }),
@@ -237,6 +238,10 @@ export const aiAPI = {
   learnerInsights: (learnerId, { narrative, locale } = {}) =>
     api.get(`/ai/insights/learner/${learnerId}`, { params: { narrative: narrative ? 1 : undefined, locale } }),
   classInsights: () => api.get('/ai/insights/class'),
-};
+});
+
+export const aiAPI = makeAiAPI(api);
+// Adult learners use the same Coach through their own (adult) login.
+export const adultAiAPI = makeAiAPI(adultHttp);
 
 export default api;

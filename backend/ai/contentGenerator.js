@@ -26,7 +26,7 @@ const { randInt } = require('./random');
 
 const EXPECTED_TYPE = { remember: 'mcq', understand: 'mcq', apply: 'write_code', analyze: 'predict_output', create: 'create' };
 const CACHE_VARIANTS = Number(process.env.AI_CACHE_VARIANTS || 4);
-const ageBand = (age) => (!age ? 'any' : age <= 9 ? '7-9' : age <= 12 ? '10-12' : '13-16');
+const ageBand = (age) => (age === 'adult' ? 'adult' : !age ? 'any' : age <= 9 ? '7-9' : age <= 12 ? '10-12' : '13-16');
 
 const str = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 

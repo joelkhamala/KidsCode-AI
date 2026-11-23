@@ -745,3 +745,15 @@ a.kid-map-row:hover { border-color: #a5b4fc; background: #eef2ff; }
   .journey-path::before { left: 18px; }
 }
 @media (prefers-reduced-motion: reduce) { .journey-dot-open { animation: none; } }
+
+/* ===== Adult certificate: print exactly one A4 landscape page ===== */
+@media print {
+  @page { size: A4 landscape; margin: 0; }
+  html, body { background: #ffffff !important; margin: 0 !important; }
+  body * { visibility: hidden; }
+  #certificate, #certificate * { visibility: visible; }
+  #certificate { position: fixed; left: 0; top: 0; width: 297mm; height: 210mm; margin: 0; }
+  #certificate .kc-cert-wrap { height: auto !important; }
+  #certificate .kc-cert { transform: none !important; box-shadow: none !important; }
+  #certificate, #certificate * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

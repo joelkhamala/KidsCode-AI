@@ -399,8 +399,15 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
        FROM learning_hours_log WHERE user_id = ? AND created_at >= date('now', '-56 days') GROUP BY week ORDER BY week`, [userId],
     );
     const cert = await get('SELECT certificate_number AS number FROM certificates WHERE user_id = ? ORDER BY id DESC LIMIT 1', [userId]);
+    // Average and best score per kind of assessment, across every attempt.
+    const byType = await all(
+      `SELECT assessment_type AS type, COUNT(*) AS attempts, ROUND(AVG(percentage)) AS average, MAX(percentage) AS best,
+         SUM(CASE WHEN passed = 1 THEN 1 ELSE 0 END) AS passed
+       FROM assessment_results WHERE user_id = ? GROUP BY assessment_type`, [userId],
+    );
     return {
       progress: {
+        assessmentSummary: byType.map((r) => ({ type: r.type, attempts: r.attempts, average: r.average || 0, best: r.best || 0, passed: r.passed || 0 })),
         completedLessons: s.completedLessons, totalLessons: s.totalLessons, averageScore: s.averageScore, hoursLogged: s.hoursLogged, minutesLogged: s.minutesLogged,
         requiredHours: course.REQUIRED_HOURS, progressPercentage: s.progressPercentage,
         completedModules: perModule.filter((m) => m.total && m.completed === m.total).length, totalModules: perModule.length,

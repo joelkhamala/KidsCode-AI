@@ -46,7 +46,8 @@ function createRoutes(engine, { authenticateToken }) {
 
   router.get('/catalog', wrap(async (req) => {
     const user = await engine.store.getUser(req.user.id);
-    return engine.catalog(user && user.age, locale(req.query.locale) || 'en');
+    const age = user && user.account_type === 'adult_learner' ? 'adult' : user && user.age;
+    return engine.catalog(age, locale(req.query.locale) || 'en');
   }));
 
   router.get('/profile', wrap(async (req) => engine.profile(req.user.id, { language: lang(req.query.language), locale: locale(req.query.locale) })));

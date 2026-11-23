@@ -27,6 +27,7 @@ import AdultDashboard from './pages/AdultDashboard';
 import AdultModule from './pages/AdultModule';
 import AdultLesson from './pages/AdultLesson';
 import AdultPlayground from './pages/AdultPlayground';
+import AdultCoach from './pages/AdultCoach';
 import AdultProgress from './pages/AdultProgress';
 import AdultCertificate from './pages/AdultCertificate';
 import AdultProfile from './pages/AdultProfile';
@@ -278,6 +279,14 @@ function AppRoutes({ currentUser }) {
             element={
               <AdultProtectedRoute>
                 <AdultLesson />
+              </AdultProtectedRoute>
+            }
+          />
+          <Route
+            path="/adult/coach"
+            element={
+              <AdultProtectedRoute>
+                <AdultCoach />
               </AdultProtectedRoute>
             }
           />

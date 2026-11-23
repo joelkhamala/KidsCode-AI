@@ -5,8 +5,10 @@ import { aiAPI } from '../../services/api';
 /**
  * Floating "Coach Kodi" tutor chat. Pass `context` ({ task, code, language })
  * so the coach can give hints about what the learner is working on.
+ * `client` picks the login (children's by default, adultAiAPI for adults); `adult` gives
+ * grown-up styling and greeting.
  */
-const CoachChat = ({ context }) => {
+const CoachChat = ({ context, client = aiAPI, adult = false }) => {
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -32,7 +34,7 @@ const CoachChat = ({ context }) => {
     setInput('');
     setSending(true);
     try {
-      const res = await aiAPI.tutor(text, history, context || {}, i18n.language === 'sw' ? 'sw' : 'en');
+      const res = await client.tutor(text, history, context || {}, i18n.language === 'sw' ? 'sw' : 'en');
       setMessages((m) => [...m, { role: 'assistant', content: res.data.reply }]);
     } catch {
       setMessages((m) => [...m, { role: 'assistant', content: t('coach.error') }]);
@@ -46,7 +48,7 @@ const CoachChat = ({ context }) => {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 btn-primary shadow-xl rounded-full px-4 py-3 sm:px-5"
+        className={adult ? 'fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-xl rounded-full px-4 py-3 sm:px-5' : 'fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 btn-primary shadow-xl rounded-full px-4 py-3 sm:px-5'}
         aria-label={t('coach.chatOpen')}
         title={t('coach.chatTitle')}
       >
@@ -59,11 +61,11 @@ const CoachChat = ({ context }) => {
   return (
     <div className="fixed bottom-5 right-5 z-40 w-[min(380px,calc(100vw-2.5rem))] bg-white rounded-2xl shadow-2xl border-2 border-indigo-200 flex flex-col" style={{ maxHeight: '70vh' }} role="dialog" aria-label={t('coach.chatTitle')}>
       <div className="flex justify-between items-center px-4 py-3 bg-indigo-600 text-white rounded-t-2xl">
-        <div className="font-display">🤖 {t('coach.chatTitle')}</div>
+        <div className={adult ? 'font-semibold' : 'font-display'}>🤖 {t('coach.chatTitle')}</div>
         <button type="button" onClick={() => setOpen(false)} aria-label={t('coach.chatClose')} className="text-xl leading-none">×</button>
       </div>
       <div ref={listRef} className="flex-1 overflow-y-auto p-3 space-y-2 text-sm" aria-live="polite">
-        <div className="bg-indigo-50 rounded-xl p-3 text-slate-700">{t('coach.chatHello')}</div>
+        <div className="bg-indigo-50 rounded-xl p-3 text-slate-700">{t(adult ? 'adc.chatHello' : 'coach.chatHello')}</div>
         {messages.map((m, i) => (
           <div key={i} className={`rounded-xl p-3 whitespace-pre-wrap ${m.role === 'user' ? 'bg-slate-100 ml-8' : 'bg-indigo-50 mr-8 text-slate-700'}`}>
             {m.content}
@@ -81,9 +83,9 @@ const CoachChat = ({ context }) => {
           placeholder={t('coach.chatPlaceholder')}
           aria-label={t('coach.chatPlaceholder')}
         />
-        <button type="submit" className="btn-primary py-2 px-4" disabled={sending || !input.trim()}>{t('coach.chatSend')}</button>
+        <button type="submit" className={adult ? 'px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold' : 'btn-primary py-2 px-4'} disabled={sending || !input.trim()}>{t('coach.chatSend')}</button>
       </form>
-      <p className="px-3 pb-3 text-[11px] text-slate-500">🛡️ {t('coach.chatSafety')}</p>
+      <p className="px-3 pb-3 text-[11px] text-slate-500">🛡️ {t(adult ? 'adc.chatSafety' : 'coach.chatSafety')}</p>
     </div>
   );
 };

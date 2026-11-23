@@ -72,7 +72,8 @@ class LearningEngine {
 
   async learnerContext(userId, overrides = {}) {
     const [user, prefs] = await Promise.all([this.store.getUser(userId), this.store.getPrefs(userId)]);
-    const age = user && user.age ? Number(user.age) : null;
+    // Adult learners are 'adult': grown-up wording, web/text languages and their own content cache.
+    const age = user && user.account_type === 'adult_learner' ? 'adult' : user && user.age ? Number(user.age) : null;
     const language = overrides.language || (prefs && prefs.language) || suggestedLanguage(age);
     const locale = loc(overrides.locale || (prefs && prefs.locale));
     let interests = [];

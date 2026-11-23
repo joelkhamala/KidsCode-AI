@@ -9,8 +9,12 @@ import { runPython, preloadPython, isPythonLoaded } from '../../utils/pythonRunn
  * submitting and showing feedback.
  *
  * Props: activityId, activity (public view - no answers), onFinished(result), onNext(),
- *        levelNames (optional map of Bloom level id -> display name)
+ *        levelNames (optional map of Bloom level id -> display name),
+ *        client (the Coach API to use - children's by default, adultAiAPI for adults),
+ *        adult (grown-up styling for the adult course pages)
  */
+const ADULT_PRIMARY = 'px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold shadow-sm';
+const ADULT_SECONDARY = 'px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-50 text-sm font-semibold text-slate-700';
 const CODE_TYPES = ['write_code', 'create'];
 const OPTION_TYPES = ['mcq', 'complete_code', 'find_bug'];
 
@@ -29,7 +33,10 @@ function CodeBlock({ code, lineNumbers, label }) {
   );
 }
 
-const ActivityPlayer = ({ activityId, activity, onFinished, onNext, levelNames = {} }) => {
+const ActivityPlayer = ({
+  activityId, activity, onFinished, onNext, levelNames = {}, client = aiAPI, adult = false,
+  nextLoading = false, nextLoadingLabel, nextLoadingHint,
+}) => {
   const { t } = useTranslation();
   const [selected, setSelected] = useState(null);
   const [text, setText] = useState('');
@@ -76,7 +83,7 @@ const ActivityPlayer = ({ activityId, activity, onFinished, onNext, levelNames =
     if (hints.length >= (activity.hintCount || 3)) return;
     setHintLoading(true);
     try {
-      const res = await aiAPI.hint(activityId, hints.length + 1, learnerAnswer);
+      const res = await client.hint(activityId, hints.length + 1, learnerAnswer);
       setHints((h) => [...h, res.data.hint]);
     } catch (err) {
       setError(t('coach.error'));
@@ -118,7 +125,7 @@ const ActivityPlayer = ({ activityId, activity, onFinished, onNext, levelNames =
     if (activity.type === 'predict_output') submission.text = text;
     if (isCode) submission.code = code;
     try {
-      const res = await aiAPI.submit(activityId, submission);
+      const res = await client.submit(activityId, submission);
       setResult(res.data);
       if (onFinished) onFinished(res.data);
     } catch (err) {
@@ -130,6 +137,11 @@ const ActivityPlayer = ({ activityId, activity, onFinished, onNext, levelNames =
 
   const optionClass = (i) => {
     const font = activity.codeOptions ? ' font-code text-sm whitespace-pre-wrap' : '';
+    if (adult) {
+      const base = 'w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl border transition' + font;
+      if (result) return `${base} border-slate-200 ${i === result.details?.correctIndex || i === selected ? '' : 'opacity-60'}`;
+      return `${base} ${selected === i ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200' : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50'}`;
+    }
     if (result) {
       if (i === result.details?.correctIndex) return `answer-btn${font}`;
       if (i === selected) return `answer-btn${font}`;
@@ -147,10 +159,10 @@ const ActivityPlayer = ({ activityId, activity, onFinished, onNext, levelNames =
   const isBlocks = activity.language === 'blocks' || activity.language === 'scratch';
 
   return (
-    <div className="card p-5 md:p-6 space-y-5">
+    <div className={adult ? 'bg-white rounded-2xl border border-slate-200 shadow-sm p-5 md:p-6 space-y-5' : 'card p-5 md:p-6 space-y-5'}>
       <div>
         <div className="text-sm font-bold text-indigo-600 mb-1">{activity.title}</div>
-        <p className="text-xl font-bold text-slate-800 whitespace-pre-wrap leading-snug">{activity.prompt}</p>
+        <p className={`text-xl ${adult ? 'font-semibold text-slate-900' : 'font-bold text-slate-800'} whitespace-pre-wrap leading-snug`}>{activity.prompt}</p>
       </div>
 
       {activity.expectedOutputShown && (
@@ -176,7 +188,7 @@ const ActivityPlayer = ({ activityId, activity, onFinished, onNext, levelNames =
               aria-pressed={selected === i}
               disabled={Boolean(result)}
             >
-              <span className="answer-letter">
+              <span className={adult ? 'w-7 h-7 shrink-0 rounded-lg bg-slate-100 text-slate-600 text-sm font-bold flex items-center justify-center' : 'answer-letter'}>
                 {result && i === result.details?.correctIndex ? '✓' : result && i === selected ? '✗' : String.fromCharCode(65 + i)}
               </span>
               <span className="flex-1">{opt}</span>
@@ -214,7 +226,7 @@ const ActivityPlayer = ({ activityId, activity, onFinished, onNext, levelNames =
           />
           {canRun ? (
             <div className="flex items-start gap-3">
-              <button type="button" className="btn-primary text-sm py-2" onClick={runCode} disabled={running || !code.trim()}>
+              <button type="button" className={adult ? ADULT_SECONDARY : 'btn-primary text-sm py-2'} onClick={runCode} disabled={running || !code.trim()}>
                 {running ? t('coach.running') : t('coach.run')}
               </button>
               {runOutput && (
@@ -236,10 +248,10 @@ const ActivityPlayer = ({ activityId, activity, onFinished, onNext, levelNames =
             </div>
           ))}
           <div className="flex flex-wrap gap-3">
-            <button type="button" className="btn-secondary text-sm py-2" onClick={askHint} disabled={hintLoading || hints.length >= (activity.hintCount || 3)}>
+            <button type="button" className={adult ? ADULT_SECONDARY : 'btn-secondary text-sm py-2'} onClick={askHint} disabled={hintLoading || hints.length >= (activity.hintCount || 3)}>
               💡 {hints.length >= (activity.hintCount || 3) ? t('coach.noMoreHints') : `${t('coach.hint')} (${hints.length + 1}/${activity.hintCount || 3})`}
             </button>
-            <button type="button" className="kid-go-btn" style={{ minHeight: 48, fontSize: '1.15rem', padding: '8px 24px' }} onClick={submit} disabled={!canSubmit}>
+            <button type="button" className={adult ? ADULT_PRIMARY : 'kid-go-btn'} style={adult ? undefined : { minHeight: 48, fontSize: '1.15rem', padding: '8px 24px' }} onClick={submit} disabled={!canSubmit}>
               {submitting ? t('coach.checking') : t('coach.check')}
             </button>
           </div>
@@ -252,7 +264,7 @@ const ActivityPlayer = ({ activityId, activity, onFinished, onNext, levelNames =
       {result && (
         <div ref={resultRef} tabIndex={-1} aria-live="polite" className={`rounded-xl p-4 border-2 outline-none ${result.correct ? 'bg-green-50 border-green-300' : 'bg-orange-50 border-orange-300'}`}>
           <div className="flex justify-between items-center mb-2">
-            <div className="font-display text-2xl animate-pop">{result.correct ? `🎉 ${t('coach.correct')}` : `🌱 ${t('coach.notYet')}`}</div>
+            <div className={adult ? 'text-xl font-bold' : 'font-display text-2xl animate-pop'}>{result.correct ? `🎉 ${t('coach.correct')}` : `🌱 ${t('coach.notYet')}`}</div>
             {result.xpEarned > 0 && <div className="font-bold text-indigo-600">+{result.xpEarned} {t('coach.xp')}</div>}
           </div>
           <p className="text-slate-700 mb-2">{result.feedback}</p>
@@ -310,7 +322,14 @@ const ActivityPlayer = ({ activityId, activity, onFinished, onNext, levelNames =
             </div>
           )}
 
-          <button type="button" className="kid-go-btn mt-4" onClick={onNext} autoFocus>{t('coach.next')}</button>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button type="button" className={`${adult ? ADULT_PRIMARY : 'kid-go-btn'} inline-flex items-center gap-2 disabled:cursor-wait`}
+              onClick={onNext} disabled={nextLoading} aria-busy={nextLoading} autoFocus>
+              {nextLoading && <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" aria-hidden="true" />}
+              {nextLoading ? (nextLoadingLabel || t('coach.loading')) : t('coach.next')}
+            </button>
+            {nextLoading && nextLoadingHint && <p className="text-sm text-slate-600" role="status">{nextLoadingHint}</p>}
+          </div>
         </div>
       )}
     </div>

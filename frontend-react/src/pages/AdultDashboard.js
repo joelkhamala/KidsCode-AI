@@ -204,6 +204,7 @@ const AdultDashboard = () => {
 
           <Card className="p-2">
             {[
+              ['/adult/coach', '🤖', t('adc.title'), t('adc.shortcut'), 'bg-sky-100'],
               ['/adult/progress', '📈', t('ad.myProgress'), t('ad.myProgressText'), 'bg-violet-100'],
               ['/adult/playground', '💻', t('ad.playground'), t('ad.playgroundText'), 'bg-emerald-100'],
               ['/adult/profile', '👤', t('ad.profileSettings'), t('ad.profileShortcut'), 'bg-slate-100'],

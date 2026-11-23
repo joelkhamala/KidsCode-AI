@@ -147,13 +147,18 @@ function constructPattern(concept, language) {
 const BY_ID = Object.fromEntries(LANGUAGES.map((l) => [l.id, l]));
 
 /** Languages suitable for a learner's age (unknown age -> everything). */
+/** Adult learners (age 'adult') get the text and web languages, not the children's block languages. */
+const ADULT_LANGUAGES = ['javascript', 'html_css', 'python', 'java', 'c', 'cpp', 'csharp'];
+
 function languagesForAge(age) {
+  if (age === 'adult') return LANGUAGES.filter((l) => ADULT_LANGUAGES.includes(l.id));
   if (!age) return LANGUAGES;
   return LANGUAGES.filter((l) => age >= l.minAge - 1); // allow keen learners one year early
 }
 
 /** Suggest a first language: blocks for young children, Python for older ones. */
 function suggestedLanguage(age) {
+  if (age === 'adult') return 'javascript'; // matches the adult web development course
   if (!age || age < 10) return 'blocks';
   return 'python';
 }

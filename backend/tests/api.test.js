@@ -873,3 +873,29 @@ test('adult course content: every lesson is complete and its checks can be passe
   assert.equal(lessons, 44);
   assert.ok(course.MODULES.reduce((h, m) => h + m.hours, 0) >= course.REQUIRED_HOURS);
 });
+
+test('adult learners can use the AI Coach with grown-up settings', async () => {
+  const reg = await http('POST', '/api/adult/register', { email: 'coach.adult@example.com', password: 'longpassword1', firstName: 'Achieng', lastName: 'Otieno' });
+  assert.equal(reg.status, 200, JSON.stringify(reg.body));
+  const token = reg.body.token;
+  const cat = await http('GET', '/api/ai/catalog?locale=en', null, token);
+  assert.equal(cat.status, 200);
+  assert.equal(cat.body.suggestedLanguage, 'javascript');
+  const offered = cat.body.languages.filter((l) => l.ageAppropriate).map((l) => l.id);
+  assert.ok(offered.includes('html_css') && offered.includes('javascript'));
+  assert.ok(!offered.includes('blocks') && !offered.includes('scratch'), 'no children\'s block languages for adults');
+  const prof = await http('GET', '/api/ai/profile', null, token);
+  assert.equal(prof.body.language, 'javascript');
+  const next = await http('GET', '/api/ai/next?fresh=1', null, token);
+  assert.equal(next.status, 200, JSON.stringify(next.body));
+  const sub = await http('POST', `/api/ai/activities/${next.body.activityId}/submit`, await correctSubmission(next.body.activityId), token);
+  assert.equal(sub.status, 200, JSON.stringify(sub.body));
+  assert.equal(sub.body.correct, true);
+  // The AI is told it is talking to an adult.
+  const prompts = require('../ai/prompts');
+  assert.match(prompts.systemPrompt({ age: 'adult', locale: 'en' }), /adult/);
+  assert.doesNotMatch(prompts.systemPrompt({ age: 'adult', locale: 'en' }), /children/);
+  // Children keep the children's Coach.
+  const kid = await http('POST', '/api/register', { username: 'coach_kid_check', email: 'ckc@example.com', password: 'secret123', age: 14 });
+  assert.equal((await http('GET', '/api/ai/catalog', null, kid.body.token)).body.suggestedLanguage, 'python');
+});

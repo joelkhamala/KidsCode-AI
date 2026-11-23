@@ -29,6 +29,7 @@ const AdultNavbar = () => {
   };
   const links = [
     { to: '/adult/dashboard', label: t('ad.course'), icon: '📚', match: ['/adult/dashboard', '/adult/module', '/adult/lesson'] },
+    { to: '/adult/coach', label: t('adc.navLabel'), icon: '🤖' },
     { to: '/adult/progress', label: t('ad.progress'), icon: '📈' },
     { to: '/adult/playground', label: t('ad.playground'), icon: '💻' },
     { to: '/adult/certificate', label: t('ad.certificate'), icon: '🎓' },
