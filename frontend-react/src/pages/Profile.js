@@ -6,7 +6,19 @@ import { progressAPI, curriculumAPI } from '../services/api';
 import { getTranslatedLesson } from '../translations/lessons';
 import { isDone } from '../utils/learningPath';
 
-const AVATARS = ['🦊', '🐼', '🦁', '🐸', '🐵', '🦄', '🐯', '🐙', '🐧', '🐨'];
+// How to earn each badge (keyed by the badge's condition) and where to go to do it.
+const BADGE_HOW = {
+  complete_first_lesson: { tip: 'profileUi.howFirst', to: '/', go: 'profileUi.goLesson' },
+  complete_5_lessons: { tip: 'profileUi.howFive', to: '/curriculum', go: 'profileUi.goMap' },
+  use_turtle: { tip: 'profileUi.howTurtle', to: '/playground', go: 'profileUi.goPlayground' },
+  use_loop: { tip: 'profileUi.howLoop', to: '/playground', go: 'profileUi.goPlayground' },
+  complete_module: { tip: 'profileUi.howModule', to: '/curriculum', go: 'profileUi.goMap' },
+  earn_1000_xp: { tip: 'profileUi.howXp', to: '/coach', go: 'profileUi.goCoach' },
+  try_all_modules: { tip: 'profileUi.howExplorer', to: '/curriculum', go: 'profileUi.goMap' },
+  streak_3: { tip: 'profileUi.howStreak' },
+};
+
+const AVATARS =['🦊', '🐼', '🦁', '🐸', '🐵', '🦄', '🐯', '🐙', '🐧', '🐨'];
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -130,16 +142,37 @@ const Profile = () => {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {sortedBadges.map(a => (
-                  <div key={a.id} className={`badge-tile ${a.unlocked ? 'unlocked' : 'locked'}`}>
-                    <div className="badge-icon text-4xl mb-1" aria-hidden="true">{a.icon}</div>
-                    <div className="font-extrabold text-slate-800 text-sm">{a.name}</div>
-                    <div className="text-xs text-slate-600 font-semibold mt-1">{a.description}</div>
-                    <div className={`text-xs font-extrabold mt-2 ${a.unlocked ? 'text-green-600' : 'text-slate-400'}`}>
-                      {a.unlocked ? `✓ ${t('profileUi.earned')}` : `🔒 +${a.xp_reward} XP`}
+                {sortedBadges.map(a => {
+                  const how = BADGE_HOW[a.condition];
+                  const p = a.progress;
+                  const pct = p && p.target ? Math.round((p.current / p.target) * 100) : 0;
+                  return (
+                    <div key={a.id} className={`badge-tile ${a.unlocked ? 'unlocked' : 'locked'} flex flex-col`}>
+                      <div className="badge-icon text-4xl mb-1" aria-hidden="true">{a.icon}</div>
+                      <div className="font-extrabold text-slate-800 text-sm">{a.name}</div>
+                      <div className="text-xs text-slate-600 font-semibold mt-1">{a.description}</div>
+                      {a.unlocked ? (
+                        <div className="text-xs font-extrabold mt-2 text-green-600">✓ {t('profileUi.earned')}</div>
+                      ) : (
+                        <div className="mt-2 flex-1 flex flex-col justify-end gap-2">
+                          {how && <div className="text-xs text-slate-500 font-semibold">💡 {t(how.tip)}</div>}
+                          {p && p.target > 1 && (
+                            <div>
+                              <div className="kid-bar" style={{ height: 6 }} role="progressbar" aria-valuenow={p.current} aria-valuemin={0} aria-valuemax={p.target}>
+                                <div className="kid-bar-fill" style={{ width: `${pct}%` }} />
+                              </div>
+                              <div className="text-xs font-bold text-slate-500 mt-1">{t('profileUi.progressOf', { current: p.current, target: p.target })}</div>
+                            </div>
+                          )}
+                          {how && how.to && (
+                            <Link to={how.to} className="btn-secondary text-xs py-1 px-2 justify-center">{t(how.go)} →</Link>
+                          )}
+                          <div className="text-xs font-extrabold text-slate-400">🔒 +{a.xp_reward} XP</div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>

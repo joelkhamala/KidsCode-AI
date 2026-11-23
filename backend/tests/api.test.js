@@ -154,6 +154,48 @@ test('lessons: completing needs at least 50% on the challenge, checked by the se
   }
 });
 
+test('badges: every badge can be earned, and the coding streak counts days in a row', async () => {
+  const reg = await http('POST', '/api/register', { username: 'nekesa', email: 'n@example.com', password: 'secret123', age: 13 });
+  const { token, user } = reg.body;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const dbRun = (sql, p = []) => new Promise((resolve, reject) => getDb().run(sql, p, (e) => (e ? reject(e) : resolve())));
+  const badges = async () => (await http('GET', '/api/achievements', null, token)).body.achievements;
+  const has = (list, name) => list.find((a) => a.name.startsWith(name)).unlocked;
+
+  // Running code with a for loop and the turtle -> Loop Master + Turtle Artist, and today counts.
+  await http('POST', '/api/run-code', { code: 'for (let i = 0; i < 4; i++) { forward(50); right(90); }' }, token);
+  await sleep(300);
+  let list = await badges();
+  assert.equal(has(list, 'Loop Master'), true);
+  assert.equal(has(list, 'Turtle Artist'), true);
+  assert.equal((await http('GET', '/api/progress', null, token)).body.streak, 1);
+  assert.deepEqual(list.find((a) => a.name.startsWith('Consistent Coder')).progress, { current: 1, target: 3 });
+
+  // Coding yesterday and the day before as well -> 3 days in a row -> Consistent Coder.
+  const day = (n) => new Date(Date.now() + 3 * 3600000 - n * 86400000).toISOString().slice(0, 10);
+  await dbRun('INSERT OR IGNORE INTO activity_days (user_id, day) VALUES (?, ?), (?, ?)', [user.id, day(1), user.id, day(2)]);
+  await http('POST', '/api/run-code', { code: 'console.log("hi")' }, token);
+  await sleep(300);
+  assert.equal((await http('GET', '/api/progress', null, token)).body.streak, 3);
+  list = await badges();
+  assert.equal(has(list, 'Consistent Coder'), true);
+
+  // Starting a lesson in every children's module -> Explorer.
+  const modules = await dbAll("SELECT id FROM modules WHERE target_audience IS NULL OR target_audience IN ('children','both')").catch(() => dbAll('SELECT id FROM modules'));
+  assert.ok(!has(list, 'Explorer'));
+  for (const m of modules) {
+    const lesson = await dbGet('SELECT id FROM lessons WHERE module_id = ? ORDER BY order_num LIMIT 1', [m.id]);
+    if (lesson) await dbRun('INSERT OR IGNORE INTO progress (user_id, module_id, lesson_id, completed, score) VALUES (?, ?, ?, 0, 0)', [user.id, m.id, lesson.id]);
+  }
+  list = await badges();
+  assert.equal(has(list, 'Explorer'), true);
+
+  // Badges pay their XP exactly once, however often they are checked.
+  const xpBefore = (await dbGet('SELECT xp FROM users WHERE id = ?', [user.id])).xp;
+  await badges();
+  assert.equal((await dbGet('SELECT xp FROM users WHERE id = ?', [user.id])).xp, xpBefore);
+});
+
 test('progress: XP is only awarded the first time a lesson is completed', async () => {
   const body = { module_id: 1, lesson_id: 1, completed: true, last_code: 'console.log("My name is Wanjiru");\nconsole.log("I am 11");\nconsole.log("I like maths");' };
   const first = await http('POST', '/api/progress', body, child.token);

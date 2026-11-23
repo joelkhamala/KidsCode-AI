@@ -9,6 +9,7 @@ require('./lib/loadEnv')(path.join(__dirname, '.env'));
 const { getDb, initializeDatabase } = require('./database');
 const { runJavaScript } = require('./sandbox/runJs');
 const lessonChallenges = require('./lessonChallenges');
+const achievements = require('./achievements');
 const aiEngine = require('./ai');
 
 const app = express();
@@ -55,6 +56,13 @@ function authenticateToken(req, res, next) {
     req.user = user;
     next();
   });
+}
+
+/** The logged-in user if a valid token was sent, else null (never rejects the request). */
+function optionalUser(req) {
+  const token = (req.headers['authorization'] || '').split(' ')[1];
+  if (!token) return null;
+  try { return jwt.verify(token, JWT_SECRET); } catch { return null; }
 }
 
 // Middleware to require parent account
@@ -1835,9 +1843,10 @@ app.get('/api/progress', authenticateToken, (req, res) => {
   db.all('SELECT * FROM progress WHERE user_id = ?', [req.user.id], (err, progress) => {
     if (err) return res.status(500).json({ error: 'Failed to load progress' });
 
-    db.get('SELECT xp, streak, username FROM users WHERE id = ?', [req.user.id], (err, user) => {
-      if (err) return res.status(500).json({ error: 'Failed to load user data' });
-      res.json({ progress, xp: user.xp, streak: user.streak, username: user.username });
+    db.get('SELECT xp, streak, username FROM users WHERE id = ?', [req.user.id], async (err, user) => {
+      if (err || !user) return res.status(500).json({ error: 'Failed to load user data' });
+      const streak = await achievements.currentStreak(req.user.id).catch(() => user.streak || 0);
+      res.json({ progress, xp: user.xp, streak, username: user.username });
     });
   });
 });
@@ -1872,6 +1881,7 @@ app.post('/api/lessons/:id/check', authenticateToken, async (req, res) => {
     if (!lesson) return res.status(404).json({ error: 'Lesson not found' });
     const code = typeof req.body.code === 'string' ? req.body.code : '';
     const result = await lessonChallenges.gradeChallenge(lesson, code, challengeLocale(req.body.locale));
+    achievements.noteCoding(req.user.id, { code: result.kind === 'js' ? code : '' });
     getDb().run(
       `INSERT INTO progress (user_id, module_id, lesson_id, completed, last_code, score, updated_at)
        VALUES (?, ?, ?, 0, ?, ?, datetime('now'))
@@ -2415,19 +2425,8 @@ function saveLearningMetrics(userId, lessonId, metrics, xpEarned, db) {
   );
 }
 
-function checkAndAwardAchievements(userId, db) {
-  db.get('SELECT COUNT(*) as count FROM progress WHERE user_id = ? AND completed = 1', [userId], (err, row) => {
-    if (err) return;
-    const completedCount = row.count;
-
-    if (completedCount >= 1) awardAchievement(userId, 1, db); // First lesson
-    if (completedCount >= 5) awardAchievement(userId, 2, db); // 5 lessons
-  });
-
-  db.get('SELECT xp FROM users WHERE id = ?', [userId], (err, user) => {
-    if (err || !user) return;
-    if (user.xp >= 1000) awardAchievement(userId, 6, db);
-  });
+function checkAndAwardAchievements(userId) {
+  achievements.noteCoding(userId);
 }
 
 function awardAchievement(userId, achievementId, db) {
@@ -2450,8 +2449,9 @@ function awardAchievement(userId, achievementId, db) {
 // ACHIEVEMENTS ENDPOINTS
 // =====================
 
-app.get('/api/achievements', authenticateToken, (req, res) => {
+app.get('/api/achievements', authenticateToken, async (req, res) => {
   const db = getDb();
+  const progress = await achievements.evaluateAchievements(req.user.id).catch(() => ({}));
 
   db.all('SELECT * FROM achievements', (err, achievements) => {
     if (err) return res.status(500).json({ error: 'Failed to load achievements' });
@@ -2463,7 +2463,8 @@ app.get('/api/achievements', authenticateToken, (req, res) => {
       const achievementsWithStatus = achievements.map(a => ({
         ...a,
         unlocked: unlockedIds.has(a.id),
-        unlocked_at: unlocked.find(u => u.achievement_id === a.id)?.unlocked_at || null
+        unlocked_at: unlocked.find(u => u.achievement_id === a.id)?.unlocked_at || null,
+        progress: progress[a.id] || null,
       }));
 
       res.json({ achievements: achievementsWithStatus });
@@ -2573,6 +2574,8 @@ app.post('/api/run-code', async (req, res) => {
   try {
     // Runs in an isolated worker thread with no access to the server (see sandbox/).
     const result = await runJavaScript(code, { timeoutMs: 3000 });
+    const runner = optionalUser(req);
+    if (runner) achievements.noteCoding(runner.id, { code, turtleUsed: (result.turtleCommands || []).length > 0 });
 
     if (result.error) {
       const partial = result.output.length ? result.output.join('\n') + '\n\n' : '';
@@ -3374,6 +3377,11 @@ function createSocialActivity(userId, activityType, activityData, isPublic = tru
 // =====================
 // AI LEARNING ENGINE (adaptive content, Bloom's taxonomy, tutor, insights)
 // =====================
+app.post('/api/ai/activities/:id/submit', (req, res, next) => {
+  const user = optionalUser(req);
+  if (user) achievements.noteCoding(user.id, { code: typeof req.body?.code === 'string' ? req.body.code : '' });
+  next();
+});
 app.use('/api/ai', aiEngine.createRouter({ authenticateToken, getDb }));
 
 // Unknown API routes return JSON 404 instead of the React app.
