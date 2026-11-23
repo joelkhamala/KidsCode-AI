@@ -104,7 +104,7 @@ function buildJourney(rows, language, loc, legendWins = 0) {
         id: s.id, number: index + 1, icon: s.icon, name: tr(s.name), rank: tr(s.rank), about: tr(s.about),
         state: done ? 'done' : open ? 'open' : 'locked',
         percent: Math.round((100 * cells) / total), skills, needs,
-        pro: skills.some((k) => CONCEPTS[k.id].pro),
+        pro: skills.every((k) => CONCEPTS[k.id].pro),
       };
     });
 

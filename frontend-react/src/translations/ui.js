@@ -221,6 +221,8 @@ const ui = {
     'journey.homeCard': 'Your coding journey',
     'journey.homeNext': 'Now exploring: {{stage}}',
     'journey.seeMap': 'See my journey',
+    'journey.mapTitle': 'Your journey keeps going',
+    'journey.mapText': 'These lessons are just the start. Keep climbing with the AI Coach: every stage unlocks the next one, all the way to pro coding skills - and then endless Legend levels.',
 
     // Playground
     'pg.title': 'Playground',
@@ -524,6 +526,8 @@ const ui = {
     'journey.homeCard': 'Safari yako ya msimbo',
     'journey.homeNext': 'Sasa unachunguza: {{stage}}',
     'journey.seeMap': 'Ona safari yangu',
+    'journey.mapTitle': 'Safari yako inaendelea',
+    'journey.mapText': 'Masomo haya ni mwanzo tu. Endelea kupanda na Kocha wa AI: kila hatua inafungua inayofuata, hadi ujuzi wa kitaalamu wa msimbo - kisha viwango vya Gwiji visivyo na mwisho.',
     'coachUi.youAreHere': 'Uko hapa',
 
     'pg.title': 'Uwanja wa Michezo',

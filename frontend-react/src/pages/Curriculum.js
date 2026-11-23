@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { getTranslatedModule, getTranslatedLesson } from '../translations/lessons';
 import { isDone, playableModules } from '../utils/learningPath';
+import JourneyStrip from '../components/JourneyStrip';
 
 const difficultyClass = {
   beginner: 'badge-beginner',
@@ -229,6 +230,9 @@ const Curriculum = () => {
           );
         })}
       </ol>
+
+      {/* After the lessons, the life-long Coding Journey keeps going. */}
+      <JourneyStrip />
 
       {comingSoonCount > 0 && (
         <p className="text-center text-slate-500 font-semibold mt-8">
