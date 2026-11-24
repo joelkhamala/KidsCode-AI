@@ -1010,6 +1010,10 @@ test('adult lessons say their language and grade the code in that language', asy
   };
   assert.equal((await lessonIn(101, 1)).language, 'web');
   const course = require('../adultCourse');
+  // Java lesson 2 opens once lesson 1 is completed (lessons are taken in order).
+  const dbRun = (sql, params = []) => new Promise((resolve, reject) => getDb().run(sql, params, (e) => (e ? reject(e) : resolve())));
+  const java1 = await dbGet('SELECT id FROM lessons WHERE module_id = 109 AND order_num = 1');
+  await dbRun('INSERT INTO progress (user_id, module_id, lesson_id, completed, score) VALUES (?, 109, ?, 1, 90)', [reg.body.user.id, java1.id]);
   const java = await lessonIn(109, 2);
   assert.equal(java.language, 'java');
   assert.ok(java.checks.every((c) => c.in === 'java' || c.in === 'output'));
@@ -1048,4 +1052,61 @@ test('the public adult overview reports what is offered now', async () => {
   assert.equal(r.body.requiredHours, REQUIRED_HOURS);
   assert.deepEqual(r.body.courses.map((c) => c.key), ['web', 'java', 'python', 'sql', 'algorithms', 'maths']);
   assert.equal(r.body.courses.reduce((n, c) => n + c.lessons, 0), r.body.lessons);
+});
+
+test('adult lessons open in order and need the practical, written test and oral answer', async () => {
+  const reg = await http('POST', '/api/adult/register', { email: 'order.adult@example.com', password: 'longpassword1', firstName: 'Kiprop', lastName: 'Rotich' });
+  const token = reg.body.token;
+  const course = require('../adultCourse');
+  const id = async (moduleId, order) => (await dbGet('SELECT id FROM lessons WHERE module_id = ? AND order_num = ?', [moduleId, order])).id;
+  const first = await id(115, 1);
+  const second = await id(115, 2);
+
+  // The first lesson of every course is open; the second is locked and every route refuses it.
+  assert.equal((await http('GET', `/api/adult/lesson/${first}`, null, token)).status, 200);
+  assert.equal((await http('GET', `/api/adult/lesson/${await id(118, 1)}`, null, token)).status, 200, 'courses can be started in any order');
+  const locked = await http('GET', `/api/adult/lesson/${second}`, null, token);
+  assert.equal(locked.status, 403);
+  assert.equal(locked.body.code, 'lesson_locked');
+  assert.equal(locked.body.previous.id, first);
+  for (const [method, path, body] of [['POST', 'check', { code: { sql: 'SELECT 1;' } }], ['POST', 'quiz', { answers: [0, 0, 0] }], ['POST', 'oral', { text: 'x' }], ['POST', 'complete', { code: {} }], ['POST', 'save', { code: {} }]]) {
+    assert.equal((await http(method, `/api/adult/lesson/${second}/${path}`, body, token)).status, 403, `${path} is refused while locked`);
+  }
+  const cur = await http('GET', '/api/adult/curriculum', null, token);
+  const sqlModule = cur.body.curriculum.find((m) => m.id === 115);
+  assert.equal(sqlModule.lessons[0].locked, false);
+  assert.equal(sqlModule.lessons[1].locked, true);
+  assert.equal(sqlModule.lessons[1].unlockAfter.id, first);
+  assert.equal((await http('GET', `/api/adult/lesson/${first}`, null, token)).body.lesson.next.locked, true);
+
+  // Completing needs all three: practical, written test, then the oral answer.
+  const c = course.BY_MODULE[115].lessons[0];
+  const code = { sql: c.solution.sql };
+  assert.equal((await http('POST', `/api/adult/lesson/${first}/check`, { code }, token)).body.passed, true);
+  const quiz = course.quizFor(c, first).map((q) => q.answerIndex);
+  assert.equal((await http('POST', `/api/adult/lesson/${first}/quiz`, { answers: quiz }, token)).body.passed, true);
+  const noOral = await http('POST', `/api/adult/lesson/${first}/complete`, { code }, token);
+  assert.equal(noOral.status, 400);
+  assert.equal(noOral.body.code, 'oral_not_done');
+  const oral = 'A database is an organised collection of related data managed by a database management system. It keeps one copy of each fact, lets many users work at once with access control, and answers questions quickly with SQL queries and indexes.';
+  assert.equal((await http('POST', `/api/adult/lesson/${first}/oral`, { text: oral }, token)).status, 200);
+  const done = await http('POST', `/api/adult/lesson/${first}/complete`, { code }, token);
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+
+  // Now the next lesson opens.
+  assert.equal((await http('GET', `/api/adult/lesson/${second}`, null, token)).status, 200);
+  assert.equal((await http('GET', `/api/adult/lesson/${first}`, null, token)).body.lesson.next.locked, false);
+});
+
+test('the AI client pauses after the provider is unreachable, then tries again', async () => {
+  const { LLMClient } = require('../ai/llmClient');
+  let calls = 0;
+  const failing = async () => { calls += 1; throw new TypeError('fetch failed'); };
+  const llm = new LLMClient({ AI_PROVIDER: 'openai', OPENAI_BASE_URL: 'http://localhost:1', AI_MODEL: 'test', AI_COOLDOWN_MS: '50' }, failing);
+  assert.equal(llm.allow('u1'), true);
+  await assert.rejects(() => llm.request('http://localhost:1/x', {}));
+  assert.equal(calls, 2, 'one retry');
+  assert.equal(llm.allow('u1'), false, 'skips the AI while it is unreachable');
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(llm.allow('u1'), true, 'tries again after the pause');
 });

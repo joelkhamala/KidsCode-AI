@@ -61,7 +61,7 @@ const AdultDashboard = () => {
   // Every lesson in course order, with its module.
   const allLessons = curriculum.flatMap((m) => m.lessons.map((l, i) => ({ ...l, module: m, position: i + 1 })));
   // Continue a lesson the learner has opened but not finished; otherwise the first unfinished one.
-  const resume = allLessons.find((l) => l.started && !l.completed) || allLessons.find((l) => !l.completed) || null;
+  const resume = allLessons.find((l) => l.started && !l.completed && !l.locked) || allLessons.find((l) => !l.completed && !l.locked) || null;
   const resumeCourse = resume ? courseOf(resume.module.id) : null;
 
   const courses = COURSES.map((course) => {

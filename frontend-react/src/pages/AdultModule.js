@@ -114,25 +114,29 @@ const AdultModule = () => {
             {m.lessons.map((l, i) => {
               const isNext = next && next.id === l.id;
               const last = i === total - 1;
-              const state = l.completed ? 'done' : isNext ? 'next' : l.started ? 'started' : 'todo';
+              const state = l.completed ? 'done' : l.locked ? 'locked' : isNext ? 'next' : l.started ? 'started' : 'todo';
+              // A locked lesson is shown but not linked: the lesson before it must be passed first.
+              const Row = state === 'locked' ? 'div' : Link;
               return (
                 <li key={l.id} className="relative pl-14 pb-4">
                   {!last && <span className={`absolute left-[19px] top-10 bottom-0 w-0.5 ${l.completed ? 'bg-emerald-300' : 'bg-slate-200'}`} aria-hidden="true" />}
                   <span className={`absolute left-0 top-3 w-10 h-10 rounded-full flex items-center justify-center font-bold ring-4 ring-slate-50 ${state === 'done' ? 'bg-emerald-500 text-white' : state === 'next' ? 'bg-indigo-600 text-white' : 'bg-white border-2 border-slate-200 text-slate-500'}`} aria-hidden="true">
-                    {state === 'done' ? '✓' : i + 1}
+                    {state === 'done' ? '✓' : state === 'locked' ? '🔒' : i + 1}
                   </span>
-                  <Link to={`/adult/lesson/${l.id}`}
-                    className={`group flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border bg-white p-4 md:p-5 transition hover:shadow-md ${state === 'next' ? 'border-indigo-300 ring-4 ring-indigo-100' : 'border-slate-200 hover:border-indigo-200'}`}>
+                  <Row {...(state === 'locked' ? { 'aria-disabled': true } : { to: `/adult/lesson/${l.id}` })}
+                    className={`group flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border p-4 md:p-5 transition ${state === 'locked' ? 'bg-slate-50 border-slate-200 opacity-75' : `bg-white hover:shadow-md ${state === 'next' ? 'border-indigo-300 ring-4 ring-indigo-100' : 'border-slate-200 hover:border-indigo-200'}`}`}>
                     <span className="flex-1 min-w-[12rem]">
                       <span className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-semibold text-slate-400">{t('ad.lessonNofM', { n: i + 1, total })}</span>
                         {state === 'next' && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-indigo-600 text-white">{t('ad.upNext')}</span>}
                         {state === 'started' && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">{t('ad.inProgress')}</span>}
                         {state === 'done' && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">✓ {t('ad.done')}</span>}
+                        {state === 'locked' && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600">🔒 {t('ad.locked')}</span>}
                       </span>
                       <span className="block font-bold text-slate-900 text-base md:text-lg mt-0.5">{l.title}</span>
                       <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 mt-1">
                         <span>⏱️ {t('ad.aboutMinutes', { n: l.minutes })}</span>
+                        {state === 'locked' && l.unlockAfter && <span>{t('ad.unlocksAfter', { title: l.unlockAfter.title })}</span>}
                         {state === 'done' && (
                           <span className="flex items-center gap-2">
                             <span className="h-1.5 w-20 rounded-full bg-slate-100 overflow-hidden" aria-hidden="true">
@@ -143,10 +147,10 @@ const AdultModule = () => {
                         )}
                       </span>
                     </span>
-                    <span className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition ${state === 'next' ? 'bg-indigo-600 text-white group-hover:bg-indigo-700' : state === 'done' ? 'bg-emerald-50 text-emerald-700 group-hover:bg-emerald-100' : 'bg-slate-100 text-slate-700 group-hover:bg-indigo-50 group-hover:text-indigo-700'}`}>
-                      {state === 'done' ? t('ad.review') : state === 'next' ? (l.started ? t('ad.continue') : t('ad.startLesson')) : state === 'started' ? t('ad.continue') : t('ad.open')} →
+                    <span className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition ${state === 'locked' ? 'bg-slate-200 text-slate-500' : state === 'next' ? 'bg-indigo-600 text-white group-hover:bg-indigo-700' : state === 'done' ? 'bg-emerald-50 text-emerald-700 group-hover:bg-emerald-100' : 'bg-slate-100 text-slate-700 group-hover:bg-indigo-50 group-hover:text-indigo-700'}`}>
+                      {state === 'locked' ? `🔒 ${t('ad.locked')}` : `${state === 'done' ? t('ad.review') : state === 'next' ? (l.started ? t('ad.continue') : t('ad.startLesson')) : state === 'started' ? t('ad.continue') : t('ad.open')} →`}
                     </span>
-                  </Link>
+                  </Row>
                 </li>
               );
             })}

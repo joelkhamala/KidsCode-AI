@@ -52,6 +52,7 @@ const AdultLesson = () => {
   const { t } = useTranslation();
   const [lesson, setLesson] = useState(null);
   const [error, setError] = useState('');
+  const [lockedBy, setLockedBy] = useState(null); // the lesson to finish first, when this one is locked
   const [step, setStep] = useState('learn');
   const [code, setCode] = useState(EMPTY_CODE);
   const prefsKey = `adult_lesson_prefs_${lessonId}`;
@@ -72,7 +73,7 @@ const AdultLesson = () => {
 
   const load = useCallback(async () => {
     loaded.current = false;
-    setLesson(null); setError(''); setPractical(null); setQuizResult(null); setAnswers({}); setFinished(null); setMessage(null); setOralDone(false); setOralText('');
+    setLesson(null); setError(''); setLockedBy(null); setPractical(null); setQuizResult(null); setAnswers({}); setFinished(null); setMessage(null); setOralDone(false); setOralText('');
     try {
       const r = await adultAPI.lesson(lessonId);
       const l = r.data.lesson;
@@ -83,6 +84,7 @@ const AdultLesson = () => {
       setSaveState('saved');
       setTimeout(() => { loaded.current = true; }, 0);
     } catch (e) {
+      if (e.response?.data?.code === 'lesson_locked') { setLockedBy(e.response.data.previous || {}); return; }
       setError(e.response?.status === 404 ? t('ad.lessonNotFound') : (e.response?.data?.error || t('ad.loadFailed')));
     }
   }, [lessonId, t]);
@@ -144,10 +146,28 @@ const AdultLesson = () => {
   const complete = () => run('complete', async () => {
     const r = await adultAPI.complete(lesson.id, code);
     setFinished(r.data);
-    setLesson((l) => ({ ...l, completed: true, score: r.data.score }));
+    // Completing unlocks the next lesson of the course.
+    setLesson((l) => ({ ...l, completed: true, score: r.data.score, next: l.next ? { ...l.next, locked: false } : l.next }));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 
+  if (lockedBy) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-16 text-center">
+        <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-100 flex items-center justify-center text-3xl mb-4" aria-hidden="true">🔒</div>
+        <h1 className="text-2xl font-bold text-slate-900">{t('ad.lessonLockedTitle')}</h1>
+        <p className="text-slate-600 mt-2">{lockedBy.title ? t('ad.lessonLockedText', { title: lockedBy.title }) : t('ad.lessonLockedGeneric')}</p>
+        <div className="flex flex-wrap justify-center gap-2 mt-6">
+          {lockedBy.id && (
+            <button type="button" className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold" onClick={() => navigate(`/adult/lesson/${lockedBy.id}`)}>
+              {t('ad.goToLesson', { title: lockedBy.title })} →
+            </button>
+          )}
+          <Link to="/adult/dashboard" className="px-5 py-2.5 rounded-xl border border-slate-300 font-semibold text-slate-700 hover:bg-slate-50">{t('ad.backToCourse')}</Link>
+        </div>
+      </div>
+    );
+  }
   if (error) {
     return (
       <div className="max-w-xl mx-auto px-4 py-16 text-center">
@@ -169,6 +189,14 @@ const AdultLesson = () => {
   // Learn is ticked once the learner has read it and moved on (or already has results).
   const learnDone = lesson.completed || practicalOk || writtenOk || oralDone || step !== 'learn';
   const stepDone = { learn: learnDone, practise: practicalOk, test: writtenOk, oral: oralDone };
+  // All three assessments are required: the practical, the written test and the oral answer.
+  const oralOk = oralDone || !lesson.oralRequired;
+  const missing = !practicalOk ? t('ad.passPracticalFirst') : !writtenOk ? t('ad.passTestFirst') : !oralOk ? t('ad.oralFirst') : '';
+  const nextLocked = Boolean(lesson.next && lesson.next.locked && !lesson.completed);
+  // The first step still to do (when all three are done, "Complete lesson" is the next action).
+  const nextStep = !practicalOk ? { step: 'practise', label: t('ad.startPractising') }
+    : !writtenOk ? { step: 'test', label: t('ad.goToTest') }
+      : !oralOk ? { step: 'oral', label: t('ad.goToOral') } : null;
   const saveLabel = { saved: t('ad.saved'), saving: t('ad.saving'), unsaved: t('ad.unsaved'), error: t('ad.saveError') }[saveState];
 
   return (
@@ -415,18 +443,33 @@ const AdultLesson = () => {
         <div className="flex flex-wrap gap-2 flex-1">
           <Badge ok={practicalOk}>{t('ad.reqPractical', { n: lesson.passMark })}</Badge>
           <Badge ok={writtenOk}>{t('ad.reqWritten', { n: lesson.passMark })}</Badge>
-          <Badge ok={oralDone}>{t('ad.reqOral')}</Badge>
+          <Badge ok={oralOk}>{t('ad.reqOral')}</Badge>
         </div>
         <div className="flex flex-wrap gap-2">
           {lesson.prev && <button type="button" onClick={() => navigate(`/adult/lesson/${lesson.prev.id}`)} className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50">← {t('ad.previous')}</button>}
           {!lesson.completed || finished === null ? (
-            <button type="button" disabled={busy === 'complete' || !writtenOk} onClick={complete} title={!writtenOk ? t('ad.passTestFirst') : ''}
+            <button type="button" disabled={busy === 'complete' || Boolean(missing)} onClick={complete} title={missing}
               className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold">
               {lesson.completed ? `✓ ${t('ad.saveCompletion')}` : `✓ ${t('ad.completeLesson')}`}
             </button>
           ) : null}
-          {lesson.next && <button type="button" onClick={() => navigate(`/adult/lesson/${lesson.next.id}`)} className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50">{t('ad.next')} →</button>}
+          {/* While the next lesson is locked, lead the learner to the next step they still need. */}
+          {nextLocked && nextStep && (
+            <button type="button" onClick={() => { setStep(nextStep.step); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm">
+              {nextStep.label} →
+            </button>
+          )}
+          {lesson.next && !nextLocked && (
+            <button type="button" onClick={() => navigate(`/adult/lesson/${lesson.next.id}`)}
+              className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50">
+              {t('ad.next')} →
+            </button>
+          )}
         </div>
+        {!lesson.completed && (
+          <p className="w-full text-xs text-slate-500">{missing ? `${t('ad.toCompleteLesson')} ${missing}` : t('ad.readyToComplete')}{nextLocked ? ` ${t('ad.nextLockedHint')}` : ''}</p>
+        )}
       </section>
     </div>
   );

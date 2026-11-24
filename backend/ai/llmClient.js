@@ -58,6 +58,10 @@ class LLMClient {
     this.timeoutMs = Number(env.AI_TIMEOUT_MS || 20000);
     this.maxCallsPerHour = Number(env.AI_MAX_CALLS_PER_LEARNER_PER_HOUR || 60);
     this.usage = new Map(); // userId -> { windowStart, count }
+    // After the provider cannot be reached (no internet, timeout), skip it for a while so learners
+    // get offline content at once instead of waiting for every request to time out.
+    this.cooldownMs = Number(env.AI_COOLDOWN_MS || 60000);
+    this.unreachableUntil = 0;
 
     if (this.provider === 'anthropic') {
       this.model = env.AI_MODEL || DEFAULT_ANTHROPIC_MODEL;
@@ -90,6 +94,7 @@ class LLMClient {
   /** Per-learner hourly budget. Returns false when the learner should use offline content. */
   allow(userId) {
     if (!this.enabled) return false;
+    if (Date.now() < this.unreachableUntil) return false; // provider recently unreachable: use offline content
     const key = String(userId || 'anon');
     const now = Date.now();
     const u = this.usage.get(key);
@@ -121,8 +126,13 @@ class LLMClient {
       }
       await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
     }
+    // Network errors and timeouts (not HTTP errors): pause AI calls for a while.
+    if (!/AI provider HTTP/.test(lastErr && lastErr.message)) this.unreachableUntil = Date.now() + this.cooldownMs;
     throw lastErr;
   }
+
+  /** True while the provider is being skipped after a network failure. */
+  get coolingDown() { return Date.now() < this.unreachableUntil; }
 
   /**
    * @param {{system: string, messages: {role: 'user'|'assistant', content: string}[], maxTokens?: number}} req

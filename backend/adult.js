@@ -89,6 +89,38 @@ async function hoursOf(userId) {
   return Math.round(((await minutesOf(userId)) / 60) * 10) / 10;
 }
 
+/**
+ * Lessons are taken in order within each course: a lesson opens once the lesson before it in
+ * the same course is completed (practical, written test and oral answer). The first lesson of
+ * every course is always open, so courses can be taken in any order, and a lesson the learner
+ * has already completed stays open for review.
+ * @param {{id: number, module_id: number}[]} lessons adult lessons in course order
+ * @param {Set<number>} completed ids of completed lessons
+ * @returns {Map<number, {id: number, title: string}>} locked lesson id -> the lesson to finish first
+ */
+function lockedLessons(lessons, completed) {
+  const locked = new Map();
+  for (const c of course.COURSES) {
+    const list = lessons.filter((l) => c.modules.includes(l.module_id));
+    for (let i = 1; i < list.length; i += 1) {
+      if (!completed.has(list[i].id) && !completed.has(list[i - 1].id)) {
+        locked.set(list[i].id, { id: list[i - 1].id, title: list[i - 1].title });
+      }
+    }
+  }
+  return locked;
+}
+
+/** Throws 403 'lesson_locked' (naming the lesson to finish first) if this lesson is locked for the learner. */
+async function assertUnlocked(userId, lesson) {
+  const lessons = await adultLessons();
+  const done = await all('SELECT lesson_id FROM progress WHERE user_id = ? AND completed = 1', [userId]);
+  const previous = lockedLessons(lessons, new Set(done.map((d) => d.lesson_id))).get(lesson.id);
+  if (previous) {
+    throw Object.assign(fail(403, `This lesson is locked. Pass "${previous.title}" first.`, 'lesson_locked'), { details: { previous } });
+  }
+}
+
 /** Totals used by the dashboard, progress page and certificate. */
 async function summary(userId) {
   const lessons = await adultLessons();
@@ -227,7 +259,7 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
       res.json(await fn(req, res));
     } catch (err) {
       if (!err.status) console.error('Adult route error:', err);
-      res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong. Please try again.', code: err.code });
+      res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong. Please try again.', code: err.code, ...(err.status && err.details ? err.details : {}) });
     }
   };
   const adultOnly = (req, res, next) => (req.user && req.user.accountType === 'adult_learner'
@@ -330,6 +362,7 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
     const prog = Object.fromEntries(s.progress.map((p) => [p.lesson_id, p]));
     const nextLesson = s.lessons.find((l) => !(prog[l.id] && prog[l.id].completed)) || null;
     const courses = await courseStatuses(req.user.id, s);
+    const locked = lockedLessons(s.lessons, new Set(s.progress.filter((p) => p.completed).map((p) => p.lesson_id)));
     return {
       curriculum: modules.map((m) => ({
         id: m.id, title: m.title, description: m.description, icon: m.icon, color: m.color, order_num: m.order_num,
@@ -337,6 +370,7 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
         lessons: s.lessons.filter((l) => l.module_id === m.id).map((l) => ({
           id: l.id, title: l.title, order_num: l.order_num, minutes: l.estimated_minutes,
           completed: prog[l.id] && prog[l.id].completed ? 1 : 0, started: Boolean(prog[l.id]), score: prog[l.id] ? prog[l.id].score || 0 : 0,
+          locked: locked.has(l.id), unlockAfter: locked.get(l.id) || null,
         })),
       })),
       stats: {
@@ -360,6 +394,7 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
     if (!lesson) throw fail(404, 'Lesson not found');
     const c = course.courseLesson(lesson.module_id, lesson.order_num);
     if (!c) throw fail(404, 'Lesson not found');
+    await assertUnlocked(req.user.id, lesson);
     return { lesson, c };
   }
 
@@ -385,7 +420,12 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
         best: { practical: best.practical ?? null, written: best.written ?? null, oral: best.oral ?? null },
         passMark: course.PASS_MARK,
         prev: i > 0 ? { id: order[i - 1].id, title: order[i - 1].title } : null,
-        next: i >= 0 && i < order.length - 1 ? { id: order[i + 1].id, title: order[i + 1].title } : null,
+        // The next lesson in the same course opens only after this one is completed.
+        next: i >= 0 && i < order.length - 1 ? {
+          id: order[i + 1].id, title: order[i + 1].title,
+          locked: !(p && p.completed) && course.courseOfModule(order[i + 1].module_id) === course.courseOfModule(lesson.module_id),
+        } : null,
+        oralRequired: Boolean(c.oral),
       },
     };
   }));
@@ -452,6 +492,8 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
     const best = await bestScores(req.user.id, lesson.id);
     const written = c.quiz.length ? best.written ?? null : 100;
     if (written === null || written < course.PASS_MARK) throw fail(400, `Pass the written test first (you need ${course.PASS_MARK}%).`, 'written_not_passed');
+    // The oral answer is required too (every lesson has an oral question).
+    if (c.oral && (best.oral === undefined || best.oral === null)) throw fail(400, 'Record your oral answer first (step 4: Oral practice).', 'oral_not_done');
     const score = Math.round((practical.score + written) / 2);
     const before = await get('SELECT completed, score FROM progress WHERE user_id = ? AND lesson_id = ?', [req.user.id, lesson.id]);
     await run(
