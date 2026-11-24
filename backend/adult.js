@@ -67,10 +67,12 @@ function publicUser(u, profile) {
 
 /** Adult lesson rows in course order. */
 async function adultLessons() {
-  return all(
+  const rows = await all(
     `SELECT l.id, l.module_id, l.order_num, l.title, l.estimated_minutes FROM lessons l JOIN modules m ON m.id = l.module_id
      WHERE m.target_audience IN ('adults', 'both') ORDER BY m.order_num, l.order_num`,
   );
+  // Leftover rows from an older, longer version of a module (kept only because a learner worked on them) are hidden.
+  return rows.filter((l) => course.courseLesson(l.module_id, l.order_num));
 }
 
 async function minutesOf(userId) {
@@ -220,6 +222,24 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
     return { success: true, token: sign(user), user: publicUser(user, profile) };
   }));
 
+  /** Public: what the programme offers right now (shown on the sign-in pages). */
+  router.get('/overview', (req, res) => {
+    const courses = course.COURSES.map((c) => {
+      const mods = course.MODULES.filter((m) => c.modules.includes(m.id));
+      return {
+        id: c.id, key: c.key, title: c.title, language: c.language, units: c.units, modules: mods.length,
+        lessons: mods.reduce((n, m) => n + m.lessons.length, 0), hours: mods.reduce((n, m) => n + m.hours, 0),
+      };
+    });
+    res.json({
+      courses,
+      modules: course.MODULES.length,
+      lessons: course.MODULES.reduce((n, m) => n + m.lessons.length, 0),
+      requiredHours: course.REQUIRED_HOURS,
+      certificate: true,
+    });
+  });
+
   // Everything below needs an adult learner login.
   router.use(authenticateToken, adultOnly);
 
@@ -326,7 +346,7 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
   router.post('/lesson/:id/check', wrap(async (req) => {
     const { lesson, c } = await loadLesson(req);
     const code = (req.body && req.body.code) || {};
-    const r = course.gradePractical(c, code, course.languageOf(lesson.module_id));
+    const r = await course.gradePractical(c, code, course.languageOf(lesson.module_id));
     await saveCode(req.user.id, lesson, code);
     await recordAssessment(req.user.id, lesson.id, 'practical', r.score, { results: r.results });
     return r;
@@ -373,7 +393,7 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
   router.post('/lesson/:id/complete', wrap(async (req) => {
     const { lesson, c } = await loadLesson(req);
     const code = (req.body && req.body.code) || {};
-    const practical = course.gradePractical(c, code, course.languageOf(lesson.module_id));
+    const practical = await course.gradePractical(c, code, course.languageOf(lesson.module_id));
     await saveCode(req.user.id, lesson, code);
     if (!practical.passed) throw Object.assign(fail(400, `The practical task is not finished yet (${practical.score}% - you need ${course.PASS_MARK}%). Press "Check my work" to see what is missing.`, 'practical_not_passed'), {});
     const best = await bestScores(req.user.id, lesson.id);

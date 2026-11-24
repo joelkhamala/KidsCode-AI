@@ -20,6 +20,8 @@ const COURSE_LANGUAGE = {
   2: { label: 'Java', chip: SERVER_LANGUAGES.java.chip, playground: 'java', icon: SERVER_LANGUAGES.java.icon },
   3: { label: 'Python', chip: SERVER_LANGUAGES.python.chip, playground: 'python', icon: SERVER_LANGUAGES.python.icon },
   4: { label: 'SQL', chip: SERVER_LANGUAGES.sql.chip, playground: 'sql', icon: SERVER_LANGUAGES.sql.icon },
+  5: { label: 'Java', chip: SERVER_LANGUAGES.java.chip, playground: 'java', icon: SERVER_LANGUAGES.java.icon },
+  6: { label: 'Python', chip: SERVER_LANGUAGES.python.chip, playground: 'python', icon: SERVER_LANGUAGES.python.icon },
 };
 
 /** A small progress ring for the course cards. */
@@ -246,7 +248,7 @@ const AdultDashboard = () => {
             <h2 className="font-bold text-slate-900">💻 {t('ad.practiseAny')}</h2>
             <p className="text-xs text-slate-500 mt-1 mb-3">{t('ad.practiseAnyHelp')}</p>
             <div className="grid grid-cols-2 gap-2">
-              {Object.values(COURSE_LANGUAGE).map((l) => (
+              {Object.values(COURSE_LANGUAGE).filter((l, i, all) => all.findIndex((x) => x.playground === l.playground) === i).map((l) => (
                 <Link key={l.playground} to={`/adult/playground?lang=${l.playground}`}
                   className={`flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-sm font-semibold transition hover:shadow-sm hover:-translate-y-0.5 ${l.chip}`}>
                   <span aria-hidden="true">{l.icon}</span> {l.playground === 'web' ? 'Web' : l.label}

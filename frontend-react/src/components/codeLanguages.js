@@ -31,5 +31,7 @@ export function languageForModule(moduleId) {
   if (m >= 109 && m <= 111) return 'java';
   if (m >= 112 && m <= 114) return 'python';
   if (m >= 115 && m <= 117) return 'sql';
+  if (m >= 118 && m <= 120) return 'java';      // Algorithms & Data Structures
+  if (m >= 121 && m <= 123) return 'python';    // Mathematics for Computing
   return 'web';
 }

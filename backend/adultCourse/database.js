@@ -1,755 +1,749 @@
 'use strict';
 /**
- * Adult course - Database Management (modules 115-117).
- * Based on TVET CDACC Unit: ICT/OS/CS/CR/05/6/A "Demonstrate Database Management Skills"
+ * Course 4 - Database Management (modules 115-117).
+ * TVET CDACC Computer Science L6, ICT/CU/CS/CR/05/6/A "Database Management Skills":
+ *   LO1 database fundamentals (relational model, RDBMS products, security), LO2 database design
+ *   (ER modelling, normalisation, CRUD matrix), LO3 SQL (DDL, constraints, DML, joins),
+ *   LO4 object-oriented databases, views and triggers, LO5 indexing and hashing,
+ *   LO6 database applications (DSS, data mining, distributed databases, data warehouses).
  *
- * Lesson format: see java.js
+ * Practicals run on a fresh SQLite copy of the practice database (backend/sandbox/sampleDatabase.js):
+ * Customers, Products, Orders, OrderItems, Employees, Schools, Students, Accounts.
  */
 
 const M115 = {
-  id: 115, order: 15, icon: '🗄️', color: '#336791', difficulty: 'beginner', hours: 28,
-  title: 'Database Fundamentals',
-  description: 'Understanding databases, data structures, relational model, and SQL basics.',
+  id: 115, order: 15, icon: '🗄️', color: '#336791', difficulty: 'beginner',
+  title: 'Database Fundamentals and Design',
+  description: 'The relational model, entity-relationship design, normalisation, security and integrity.',
   lessons: [
     {
-      title: 'What is a Database?', minutes: 60,
-      content: `A database is an organized collection of structured data stored and accessed electronically.
+      title: 'Databases and the Relational Model', minutes: 50,
+      content: `A {{database}} is an organised collection of related data. A {{database management system (DBMS)}} - the {{database engine}} - stores it, keeps it consistent and answers questions about it.
 
-## Why Databases?
-- Reliability: backup and recovery mechanisms
-- Efficiency: fast queries even on millions of records
-- Concurrency: multiple users access data simultaneously without conflicts
-- Security: protect sensitive information with permissions
-- Scalability: grow from thousands to billions of records
+## Why use a database instead of files?
+- One copy of each fact: less duplication and fewer contradictions
+- Many users at once, with access control
+- Fast searching, sorting and summarising with SQL
+- Backup, recovery and integrity rules built in
 
-## Example Uses
-- Banking: account balances, transactions
-- Hospitals: patient records, appointments
-- E-commerce: product catalogues, orders
-- Social networks: user profiles, connections
+## The relational model
+Data is stored in {{relations}} (tables):
+- {{Attribute}} / column / {{field}}: one property, e.g. city
+- {{Tuple}} / row / {{record}}: one item, e.g. one customer
+- {{Domain}}: the allowed values of an attribute (age: whole numbers 0-120)
+- {{Primary key (PK)}}: column(s) that uniquely identify each row (customer_id)
+- {{Foreign key (FK)}}: a column that refers to another table's primary key (Orders.customer_id)
 
-## Types of Databases
-1. {{Relational}}: organized in tables with rows and columns (SQL Server, PostgreSQL, MySQL)
-2. {{NoSQL}}: flexible structure (MongoDB, Cassandra) - for big data, real-time
-3. {{Graph}}: relationships between entities (Neo4j) - for social networks, recommendations
-4. {{Document}}: store JSON-like documents (CouchDB)
+Properties of a relation: every row is unique, every value is {{atomic}} (one value per cell), and the order of rows and columns does not matter.
 
-This course focuses on {{Relational Databases}}.
+## RDBMS products
+- {{Oracle}}: large enterprises, banks
+- {{Microsoft SQL Server}}: businesses on Windows; installed with SQL Server Management Studio
+- {{MySQL}} / MariaDB: websites and open-source systems
+- {{Microsoft Access}}: small desktop databases
+- {{SQLite}}: a database in one file, inside phones and apps - KidsCode's practice database uses it
 
-## Key Concepts
-- {{Record}}: one row of data (a customer, a transaction)
-- {{Field}}: one column (customer name, email)
-- {{Table}}: collection of related records
-- {{Database}}: collection of related tables
-- {{Schema}}: structure (which tables, fields, relationships)
-
-## Relational Model
-Data stored in tables. Each table has:
-- Rows (records): each is unique
-- Columns (fields): each has a data type (text, number, date)
-- Primary key: unique identifier for each row
-
-## DBMS (Database Management System)
-Software that manages databases:
-- Create, modify, delete tables
-- Insert, update, delete data
-- Query data efficiently
-- Enforce security and backups
-
-Examples: MySQL, PostgreSQL, SQL Server, SQLite`,
-      challenge: 'List three real-world businesses and the tables you would create for their database.',
+## Your first query
+~~~
+SELECT name, city FROM Customers WHERE city = 'Mombasa';
+~~~
+{{SELECT}} chooses columns, {{FROM}} the table and {{WHERE}} filters rows. The practice database (see the panel beside the editor) is a fresh copy every time you press Run.`,
+      example: { sql: `-- How many products are in each category?
+SELECT category, COUNT(*) AS products
+FROM Products
+GROUP BY category;` },
+      challenge: 'Write two queries. First list the name and city of every customer in Nairobi, sorted by name. Then count all customers with SELECT COUNT(*) AS customers FROM Customers;',
       checks: [
-        { label: 'Mentions three businesses', in: 'js', re: /[\w\s]+(store|bank|hospital|school|restaurant|hotel)/i },
-        { label: 'Mentions multiple tables', in: 'js', re: /(customers?|orders?|products?|employees?|accounts?|patients?){2,}/i },
-        { label: 'Describes at least one field', in: 'js', re: /field|column|name|id|date|email|address/i },
+        { label: 'Filters with WHERE city = \'Nairobi\'', in: 'code', re: /WHERE\s+city\s*=\s*'Nairobi'/i },
+        { label: 'Sorts with ORDER BY name', in: 'code', re: /ORDER\s+BY\s+name/i },
+        { label: 'Returns the three Nairobi customers in order', in: 'output', re: /Amina Wanjiru \| Nairobi\nFaith Njeri \| Nairobi\nIan Kamau \| Nairobi/ },
+        { label: 'Counts 12 customers', in: 'output', re: /customers\n12\b/ },
       ],
-      hints: ['Think of a bank: tables for customers, accounts, transactions. A hospital: patients, doctors, appointments.'],
+      hints: ['SELECT name, city FROM Customers WHERE city = \'Nairobi\' ORDER BY name;', 'End each statement with a semicolon.'],
       quiz: [
-        { q: 'What is a primary key?', options: ['A unique identifier for each row', 'The main table', 'The first column', 'A password'], why: 'Primary key uniquely identifies each record.' },
-        { q: 'Which is a Relational Database Management System?', options: ['MySQL', 'MongoDB', 'Redis', 'Hadoop'], why: 'MySQL is a popular relational DBMS.' },
-        { q: 'What is the advantage of databases over spreadsheets?', options: ['Handle millions of records efficiently, enforce security', 'Easier to use', 'Free of charge', 'Only one'], why: 'Databases scale and enforce data integrity better.' },
+        { q: 'What uniquely identifies each row in a table?', options: ['The primary key', 'The foreign key', 'The first column', 'The table name'], why: 'A primary key value is unique for every row.' },
+        { q: 'In the relational model, a row is also called a...', options: ['tuple', 'domain', 'attribute', 'relation'], why: 'Rows are tuples; columns are attributes.' },
+        { q: 'Which product keeps a whole database in a single file inside apps and phones?', options: ['SQLite', 'Oracle', 'MS SQL Server', 'MySQL'], why: 'SQLite is an embedded, single-file database.' },
       ],
-      oral: 'Explain what a relational database is and give an example of a real-world table.',
+      oral: 'Explain primary keys and foreign keys using a school\'s students and classes as an example.',
+      solution: { sql: `SELECT name, city FROM Customers WHERE city = 'Nairobi' ORDER BY name;
+SELECT COUNT(*) AS customers FROM Customers;` },
     },
     {
-      title: 'Relational Model and Database Design', minutes: 90,
-      content: `The relational model organises data to minimize redundancy and maintain integrity.
+      title: 'Database Design and ER Modelling', minutes: 60,
+      content: `Good databases are designed before they are built. Database design has three phases:
 
-## Entities and Relationships
-An {{entity}} is something we track (Customer, Order, Product). A {{relationship}} is a connection between entities.
+## 1. Conceptual design - the Entity-Relationship Model (ERM)
+- {{Entity}}: a thing we store data about (Member, Book)
+- {{Attribute}}: a property of an entity (title, author)
+- {{Relationship}}: how entities are linked (a Member borrows Books)
+- {{Cardinality}}: one-to-one (1:1), one-to-many (1:N), many-to-many (M:N)
 
-## Entity-Relationship (ER) Model
-Visual design before creating tables. Shows entities as boxes and relationships as lines.
+In {{UML}} notation each entity is a box listing its attributes, and lines show relationships with multiplicities such as {{1}} and {{0..*}}.
 
-{{Example}}
+## 2. Logical design - tables
+- Each entity becomes a table; each attribute a column
+- A 1:N relationship becomes a foreign key on the "many" side
+- An M:N relationship becomes a {{junction table}} with two foreign keys (Loans links Members and Books)
+
+## 3. Physical design
+Choose data types, indexes and storage for a particular DBMS.
+
 ~~~
-┌─────────────┐          ┌─────────┐
-│  Customer   │          │  Order  │
-├─────────────┤          ├─────────┤
-│ customer_id │◄─────────│ order_id│
-│ name        │ 1    *   │ order_date│
-│ email       │          │ total   │
-└─────────────┘          └─────────┘
-
-One customer can have many orders.
-~~~
-
-## Table Structure
-~~~
-CREATE TABLE Customers (
-  customer_id INT PRIMARY KEY AUTO_INCREMENT,
-  name VARCHAR(100) NOT NULL,
-  email VARCHAR(100) UNIQUE,
-  phone VARCHAR(20),
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE Members (
+  member_id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL
 );
-
-CREATE TABLE Orders (
-  order_id INT PRIMARY KEY AUTO_INCREMENT,
-  customer_id INT NOT NULL,
-  order_date DATE,
-  total DECIMAL(10, 2),
-  FOREIGN KEY (customer_id) REFERENCES Customers(customer_id)
+CREATE TABLE Books (
+  book_id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  author TEXT
+);
+CREATE TABLE Loans (
+  loan_id INTEGER PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES Members(member_id),
+  book_id INTEGER NOT NULL REFERENCES Books(book_id),
+  loan_date TEXT
 );
 ~~~
 
-## Keys
-- {{Primary Key (PK)}}: uniquely identifies a row (e.g., customer_id)
-- {{Foreign Key (FK)}}: references a PK in another table (links tables together)
-- {{Unique Key}}: ensures no duplicates (e.g., email)
-
-## Relationships
-1. {{One-to-Many}} (1:*): One customer has many orders
-   - Most common
-   - FK in the "many" table points to PK in the "one" table
-
-2. {{One-to-One}} (1:1): One person has one passport
-   - FK in either table
-
-3. {{Many-to-Many}} (*:*): Many students enroll in many courses
-   - Requires a {{junction table}}
-   ~~~
-   Student ──┬────── Enrollment ────┬──── Course
-             │   student_id   │     course_id  │
-             │   course_id    │
-   ~~~
-
-## Normalization
-Process of organizing data to reduce redundancy:
-
-{{First Normal Form (1NF)}}: Remove repeating groups
-- Each field holds only one value (not a list)
-
-{{Second Normal Form (2NF)}}: 1NF + remove partial dependencies
-- Non-key fields depend on the entire primary key
-
-{{Third Normal Form (3NF)}}: 2NF + remove transitive dependencies
-- Non-key fields depend only on the PK
-
-Example of denormalization (bad):
-~~~
-Order(order_id, customer_name, customer_email, customer_phone, ...)
-╲ Repeats customer info for each order → redundancy
-~~~
-
-Normalized (good):
-~~~
-Customer(customer_id, name, email, phone)
-Order(order_id, customer_id, order_date)
-╲ Each customer stored once, FK links orders
-~~~`,
-      challenge: 'Draw an ER diagram for a library system: Library, Book, Member, BorrowRecord. Show relationships.',
+## Validating the model - the CRUD matrix
+List each transaction against each table and mark whether it Creates, Reads, Updates or Deletes rows. Every table should be created by something and read by something; gaps show missing features.`,
+      example: { sql: `-- 1:N - one school has many students
+SELECT sc.name AS school, COUNT(st.student_id) AS students
+FROM Schools sc
+LEFT JOIN Students st ON st.school_id = sc.school_id
+GROUP BY sc.name;` },
+      challenge: 'Build the library design: create tables Members, Books and Loans (Loans has foreign keys to both). Insert member "Achieng", book "Kifo Kisimani" by "Kithaka wa Mberia", and a loan linking them. Then join the three tables to show the member name and book title.',
       checks: [
-        { label: 'Mentions four entities', in: 'js', re: /(library|book|member|borrowrecord)/i },
-        { label: 'Shows at least two relationships', in: 'js', re: /(has|contains|borrows|many)/i },
-        { label: 'Mentions primary or foreign keys', in: 'js', re: /(primary key|foreign key|pk|fk|id)/i },
+        { label: 'Creates the three tables', in: 'code', re: /CREATE\s+TABLE\s+Members[\s\S]*CREATE\s+TABLE\s+Books[\s\S]*CREATE\s+TABLE\s+Loans/i },
+        { label: 'Loans has foreign keys', in: 'code', re: /CREATE\s+TABLE\s+Loans[\s\S]*?(REFERENCES|FOREIGN\s+KEY)[\s\S]*?(REFERENCES|FOREIGN\s+KEY)/i },
+        { label: 'Joins the tables', in: 'code', re: /JOIN[\s\S]*JOIN/i },
+        { label: 'Shows the loan', in: 'output', re: /Achieng \| Kifo Kisimani/ },
       ],
-      hints: ['A library has many books. A member borrows many books over time. Each borrow record links member, book, and date.'],
+      hints: ['INSERT INTO Members (member_id, name) VALUES (1, \'Achieng\');', 'SELECT m.name, b.title FROM Loans l JOIN Members m ON ... JOIN Books b ON ...;'],
       quiz: [
-        { q: 'What is a foreign key?', options: ['A reference to a primary key in another table', 'A key that is hidden', 'The main identifier', 'A temporary key'], why: 'FK creates relationships between tables.' },
-        { q: 'Which relationship is "many students, many courses"?', options: ['Many-to-Many', 'One-to-Many', 'One-to-One', 'Many-to-One'], why: 'Many students can enroll in many courses.' },
-        { q: 'What does normalization reduce?', options: ['Data redundancy', 'Query speed', 'Table count', 'Storage size'], why: 'Normalization minimizes storing the same data multiple times.' },
+        { q: 'How is a many-to-many relationship stored in tables?', options: ['With a junction table holding two foreign keys', 'With one big table', 'With two primary keys in each table', 'It cannot be stored'], why: 'A junction table (like Loans) links the two entities.' },
+        { q: 'Which design phase produces the ER model?', options: ['Conceptual design', 'Physical design', 'Logical design', 'Testing'], why: 'The ER model is the conceptual design.' },
+        { q: 'What does a CRUD matrix check?', options: ['Which transactions create, read, update or delete each table', 'How fast queries run', 'Which users have passwords', 'The size of each table'], why: 'It validates the model against the transactions it must support.' },
       ],
-      oral: 'Explain a one-to-many relationship with an example (e.g., customers and orders).',
+      oral: 'Describe the entities, relationships and cardinalities you would use for a hospital appointments system.',
+      solution: { sql: `CREATE TABLE Members (member_id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+CREATE TABLE Books (book_id INTEGER PRIMARY KEY, title TEXT NOT NULL, author TEXT);
+CREATE TABLE Loans (
+  loan_id INTEGER PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES Members(member_id),
+  book_id INTEGER NOT NULL REFERENCES Books(book_id),
+  loan_date TEXT
+);
+INSERT INTO Members (member_id, name) VALUES (1, 'Achieng');
+INSERT INTO Books (book_id, title, author) VALUES (1, 'Kifo Kisimani', 'Kithaka wa Mberia');
+INSERT INTO Loans (member_id, book_id, loan_date) VALUES (1, 1, '2026-11-24');
+SELECT m.name, b.title
+FROM Loans l
+JOIN Members m ON m.member_id = l.member_id
+JOIN Books b ON b.book_id = l.book_id;` },
     },
     {
-      title: 'SQL Basics: SELECT and WHERE', minutes: 75,
-      content: `SQL (Structured Query Language) retrieves and manipulates data.
+      title: 'Normalisation', minutes: 55,
+      content: `{{Normalisation}} organises tables to remove duplicated data and the problems it causes.
 
-## SELECT: Retrieve Data
-~~~
-SELECT * FROM Customers;              # All rows, all columns
-SELECT name, email FROM Customers;    # Specific columns
-SELECT DISTINCT city FROM Customers;  # Unique cities only
-~~~
+## Anomalies in an unnormalised table
+| order | customer | phone | product | price |
+- {{Update anomaly}}: a customer's phone is repeated on every order; changing it in one row leaves the others wrong
+- {{Insert anomaly}}: you cannot store a new customer until they order
+- {{Delete anomaly}}: deleting a customer's only order deletes the customer too
 
-## WHERE: Filter Rows
-~~~
-SELECT * FROM Customers WHERE age >= 18;
-SELECT * FROM Orders WHERE total > 1000;
-SELECT * FROM Orders WHERE order_date BETWEEN '2024-01-01' AND '2024-12-31';
-~~~
+## The normal forms
+- {{1NF}}: every cell holds one atomic value and there are no repeating groups (no "products: tea, sugar" in one cell)
+- {{2NF}}: 1NF, and every non-key column depends on the {{whole}} primary key (no partial dependency on part of a composite key)
+- {{3NF}}: 2NF, and non-key columns depend {{only}} on the key - not on other non-key columns (no transitive dependency such as order -> customer -> phone)
 
-## Comparison Operators
-{{=}}, {{!=}}, {{<}}, {{>}}, {{<=}}, {{>=}}
-{{LIKE}} (pattern matching), {{IN}}, {{BETWEEN}}
+"The key, the whole key and nothing but the key."
 
+## Example
+Unnormalised: Sales(sale_id, client_name, client_phone, item, amount)
+3NF:
 ~~~
-SELECT * FROM Products WHERE price > 100;
-SELECT * FROM Customers WHERE name LIKE 'A%';    # Names starting with A
-SELECT * FROM Customers WHERE city IN ('Nairobi', 'Mombasa');
+CREATE TABLE Clients (client_id INTEGER PRIMARY KEY, name TEXT, phone TEXT);
+CREATE TABLE Sales (sale_id INTEGER PRIMARY KEY,
+                    client_id INTEGER REFERENCES Clients(client_id),
+                    item TEXT, amount REAL);
 ~~~
+Now the phone is stored once, and a join brings the data back together when needed.
 
-## Logical Operators
-{{AND}}, {{OR}}, {{NOT}}
-
-~~~
-SELECT * FROM Customers 
-WHERE age >= 18 AND city = 'Nairobi';
-
-SELECT * FROM Orders 
-WHERE status = 'completed' OR status = 'pending';
-
-SELECT * FROM Products 
-WHERE NOT (price < 50);
-~~~
-
-## ORDER BY: Sort Results
-~~~
-SELECT * FROM Products ORDER BY price;              # Ascending
-SELECT * FROM Products ORDER BY price DESC;         # Descending
-SELECT * FROM Customers ORDER BY last_name, first_name;  # Multiple columns
-~~~
-
-## LIMIT: Restrict Rows
-~~~
-SELECT * FROM Customers LIMIT 10;              # First 10 rows
-SELECT * FROM Customers LIMIT 10 OFFSET 20;    # Skip 20, get next 10 (pagination)
-~~~
-
-## Aggregate Functions
-{{COUNT()}}, {{SUM()}}, {{AVG()}}, {{MIN()}}, {{MAX()}}
-
-~~~
-SELECT COUNT(*) FROM Orders;
-SELECT AVG(price) FROM Products;
-SELECT MAX(salary) FROM Employees;
-~~~
-
-## GROUP BY and HAVING
-~~~
-SELECT department, COUNT(*) FROM Employees 
-GROUP BY department;
-# Count employees by department
-
-SELECT department, AVG(salary) FROM Employees 
-GROUP BY department 
-HAVING AVG(salary) > 50000;
-# Show departments with average salary > 50,000
-~~~`,
-      challenge: 'Write SQL to list all products priced 100-500, ordered by price (lowest first), limit 20.',
+Higher forms ({{BCNF}}, 4NF) exist; most business databases aim for 3NF, sometimes {{denormalising}} on purpose for speed in reporting.`,
+      example: { sql: `-- The practice database is already normalised:
+-- Orders store customer_id, not the customer's name and phone.
+SELECT o.order_id, c.name, c.phone, o.total
+FROM Orders o JOIN Customers c ON c.customer_id = o.customer_id
+LIMIT 3;` },
+      challenge: 'Normalise this data into Clients(client_id, name, phone) and Sales(sale_id, client_id, item, amount): Wekesa 0711000001 bought Tea 300 and Sugar 165; Zawadi 0722000002 bought Milk 65. Insert it, then show each client\'s name and total spent (SUM) ordered by name: "Wekesa | 465" and "Zawadi | 65".',
       checks: [
-        { label: 'Uses SELECT', in: 'js', re: /SELECT/i },
-        { label: 'Uses WHERE with BETWEEN or >= and <=', in: 'js', re: /(BETWEEN|>=|<=)/i },
-        { label: 'Uses ORDER BY', in: 'js', re: /ORDER\s+BY/i },
-        { label: 'Uses LIMIT', in: 'js', re: /LIMIT/i },
+        { label: 'Creates Clients and Sales', in: 'code', re: /CREATE\s+TABLE\s+Clients[\s\S]*CREATE\s+TABLE\s+Sales/i },
+        { label: 'Sales refers to Clients with a foreign key', in: 'code', re: /CREATE\s+TABLE\s+Sales[\s\S]*REFERENCES\s+Clients/i },
+        { label: 'Totals per client with SUM and GROUP BY', in: 'code', re: /SUM\s*\([\s\S]*GROUP\s+BY/i },
+        { label: 'Shows the totals', in: 'output', re: /Wekesa \| 465(\.0)?\nZawadi \| 65(\.0)?/ },
       ],
-      hints: ['Pattern: SELECT... FROM... WHERE price BETWEEN 100 AND 500 ORDER BY price ASC LIMIT 20;'],
+      hints: ['Each phone number appears once, in Clients.', 'SELECT c.name, SUM(s.amount) FROM Clients c JOIN Sales s ON ... GROUP BY c.name ORDER BY c.name;'],
       quiz: [
-        { q: 'Which clause filters rows?', options: ['WHERE', 'SELECT', 'ORDER BY', 'LIMIT'], why: 'WHERE filters rows based on conditions.' },
-        { q: 'What does DISTINCT do?', options: ['Returns only unique values', 'Sorts results', 'Groups rows', 'Counts rows'], why: 'DISTINCT removes duplicates.' },
-        { q: 'Which function counts rows?', options: ['COUNT()', 'SUM()', 'AVG()', 'MAX()'], why: 'COUNT() counts matching rows.' },
+        { q: 'Which normal form requires atomic values with no repeating groups?', options: ['1NF', '2NF', '3NF', 'BCNF'], why: 'First normal form deals with atomic values.' },
+        { q: 'A column that depends on another non-key column breaks which normal form?', options: ['3NF', '1NF', '2NF', 'None'], why: '3NF removes transitive dependencies.' },
+        { q: 'Changing a phone number in one row but not the others is an...', options: ['update anomaly', 'insert anomaly', 'delete anomaly', 'integrity constraint'], why: 'Repeated data gets out of step when updated.' },
       ],
-      oral: 'Explain how you would find customers from Nairobi who spent more than 10,000.',
+      oral: 'Explain the three anomalies normalisation prevents, using a school fees spreadsheet as the example.',
+      solution: { sql: `CREATE TABLE Clients (client_id INTEGER PRIMARY KEY, name TEXT NOT NULL, phone TEXT);
+CREATE TABLE Sales (sale_id INTEGER PRIMARY KEY,
+                    client_id INTEGER NOT NULL REFERENCES Clients(client_id),
+                    item TEXT, amount REAL);
+INSERT INTO Clients VALUES (1, 'Wekesa', '0711000001'), (2, 'Zawadi', '0722000002');
+INSERT INTO Sales (client_id, item, amount) VALUES (1, 'Tea', 300), (1, 'Sugar', 165), (2, 'Milk', 65);
+SELECT c.name, SUM(s.amount) AS total
+FROM Clients c JOIN Sales s ON s.client_id = c.client_id
+GROUP BY c.name
+ORDER BY c.name;` },
+    },
+    {
+      title: 'Database Security and Integrity', minutes: 50,
+      content: `{{Database security}} protects data from unauthorised access, change or loss.
+
+## Security measures
+- {{Authentication}}: proving who you are (username and password, two-factor codes)
+- {{Access control}}: deciding what each user may do. In SQL Server, MySQL and Oracle:
+~~~
+GRANT SELECT, INSERT ON Orders TO cashier;
+REVOKE DELETE ON Orders FROM cashier;
+~~~
+  Give each user the {{least privilege}} they need. (SQLite has no users, so these commands do not run here.)
+- {{Encryption}} of data on disk and in transit (TLS)
+- {{Auditing}}: logging who changed what (you will build this with a trigger)
+- {{Backup}} and recovery: regular copies stored elsewhere, and tested restores
+
+## Integrity control
+Rules that keep data correct:
+- {{Entity integrity}}: every row has a unique, non-null primary key
+- {{Referential integrity}}: a foreign key must point to an existing row
+- {{Domain integrity}}: CHECK, NOT NULL, UNIQUE, DEFAULT and data types
+
+## Transactions
+A {{transaction}} groups statements so they all succeed or none do ({{ACID}}: Atomic, Consistent, Isolated, Durable). Sending money must debit one account and credit another together:
+~~~
+BEGIN TRANSACTION;
+UPDATE Accounts SET balance = balance - 500 WHERE account_id = 1;
+UPDATE Accounts SET balance = balance + 500 WHERE account_id = 2;
+COMMIT;          -- or ROLLBACK; to cancel everything since BEGIN
+~~~
+The practice Accounts table has {{CHECK (balance >= 0)}}, so an overdraft fails instead of corrupting data.`,
+      example: { sql: `-- ROLLBACK cancels a transaction: the balance is unchanged afterwards
+BEGIN TRANSACTION;
+UPDATE Accounts SET balance = 0 WHERE account_id = 5;
+ROLLBACK;
+SELECT account_id, balance FROM Accounts WHERE account_id = 5;
+-- Try it: UPDATE Accounts SET balance = -1 WHERE account_id = 7;  (the CHECK constraint refuses it)` },
+      challenge: 'In a transaction (BEGIN TRANSACTION ... COMMIT), move 2000 from account 1 to account 3 in the Accounts table. Then show account_id and balance for accounts 1 and 3: account 1 should be 43000 and account 3 should be 130000.',
+      checks: [
+        { label: 'Uses a transaction', in: 'code', re: /BEGIN(\s+TRANSACTION)?\s*;[\s\S]*COMMIT\s*;/i },
+        { label: 'Updates both accounts', in: 'code', re: /UPDATE\s+Accounts[\s\S]*UPDATE\s+Accounts/i },
+        { label: 'Shows the new balances', in: 'output', re: /1 \| 43000(\.0)?\n3 \| 130000(\.0)?/ },
+      ],
+      hints: ['balance = balance - 2000 WHERE account_id = 1', 'SELECT account_id, balance FROM Accounts WHERE account_id IN (1, 3) ORDER BY account_id;'],
+      quiz: [
+        { q: 'What does ROLLBACK do?', options: ['Cancels every change since BEGIN', 'Saves the changes', 'Deletes the table', 'Restores last week\'s backup'], why: 'ROLLBACK undoes the open transaction.' },
+        { q: 'Which principle says users get only the access they need?', options: ['Least privilege', 'Normalisation', 'Referential integrity', 'Atomicity'], why: 'Least privilege limits the damage of mistakes or attacks.' },
+        { q: 'A foreign key that points to a missing row breaks...', options: ['referential integrity', 'entity integrity', 'authentication', '1NF'], why: 'Referential integrity requires referenced rows to exist.' },
+      ],
+      oral: 'Explain why sending money between M-Pesa accounts must happen inside a transaction.',
+      solution: { sql: `BEGIN TRANSACTION;
+UPDATE Accounts SET balance = balance - 2000 WHERE account_id = 1;
+UPDATE Accounts SET balance = balance + 2000 WHERE account_id = 3;
+COMMIT;
+SELECT account_id, balance FROM Accounts WHERE account_id IN (1, 3) ORDER BY account_id;` },
     },
   ],
 };
 
 const M116 = {
-  id: 116, order: 16, icon: '📝', color: '#336791', difficulty: 'intermediate', hours: 32,
-  title: 'SQL DDL and Joins',
-  description: 'Creating/altering tables (DDL), JOINs to combine data from multiple tables.',
+  id: 116, order: 16, icon: '📝', color: '#336791', difficulty: 'intermediate',
+  title: 'Structured Query Language (SQL)',
+  description: 'Defining tables, changing data, querying with filters and groups, and joining tables.',
   lessons: [
     {
-      title: 'SQL DDL: CREATE, ALTER, DROP', minutes: 75,
-      content: `DDL (Data Definition Language) creates and modifies table structure.
+      title: 'Data Definition: CREATE, ALTER and DROP', minutes: 55,
+      content: `{{SQL}} (Structured Query Language) is the standard language of relational databases. Its parts are:
+- {{DDL}} - Data Definition Language: CREATE, ALTER, DROP
+- {{DML}} - Data Manipulation Language: SELECT, INSERT, UPDATE, DELETE
+- {{DCL}} - Data Control Language: GRANT, REVOKE
+- {{TCL}} - Transaction Control: COMMIT, ROLLBACK
 
-## CREATE TABLE
+## CREATE TABLE with constraints
 ~~~
-CREATE TABLE Customers (
-  customer_id INT PRIMARY KEY AUTO_INCREMENT,
-  name VARCHAR(100) NOT NULL,
-  email VARCHAR(100) UNIQUE NOT NULL,
-  phone VARCHAR(20),
-  age INT CHECK (age >= 0),
-  city VARCHAR(50) DEFAULT 'Nairobi',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE Suppliers (
+  supplier_id INTEGER PRIMARY KEY,                 -- PRIMARY KEY
+  name TEXT NOT NULL,                              -- NOT NULL
+  email TEXT UNIQUE,                               -- UNIQUE
+  county TEXT DEFAULT 'Nairobi',                   -- DEFAULT
+  rating INTEGER CHECK (rating BETWEEN 1 AND 5),   -- CHECK
+  product_id INTEGER REFERENCES Products(product_id)   -- FOREIGN KEY
 );
 ~~~
 
-## Constraints
-- {{PRIMARY KEY}}: uniquely identifies each row
-- {{UNIQUE}}: no duplicates (but can have NULL)
-- {{NOT NULL}}: field must have a value
-- {{CHECK}}: value must satisfy condition
-- {{DEFAULT}}: default value if not specified
-- {{FOREIGN KEY}}: reference to another table
-
-## Data Types
-- {{INT}}, {{BIGINT}}, {{DECIMAL(10,2)}}: numbers
-- {{VARCHAR(100)}}, {{TEXT}}: text
-- {{DATE}}, {{DATETIME}}, {{TIMESTAMP}}: date/time
-- {{BOOLEAN}}: true/false
-
-## ALTER TABLE: Modify Structure
+## ALTER TABLE
 ~~~
-ALTER TABLE Customers ADD COLUMN middle_name VARCHAR(50);
-ALTER TABLE Customers DROP COLUMN phone;
-ALTER TABLE Customers MODIFY COLUMN age INT DEFAULT 18;
-ALTER TABLE Customers ADD CONSTRAINT chk_age CHECK (age >= 18);
+ALTER TABLE Suppliers ADD COLUMN phone TEXT;            -- add an attribute
+ALTER TABLE Suppliers RENAME COLUMN county TO region;   -- rename
+ALTER TABLE Suppliers DROP COLUMN phone;                -- drop an attribute
 ~~~
+Changing a column's domain (type) is {{ALTER TABLE ... MODIFY}} in MySQL or {{ALTER COLUMN}} in SQL Server; SQLite instead rebuilds the table.
 
 ## DROP TABLE
 ~~~
-DROP TABLE Orders;         # Delete table and data
-DROP TABLE IF EXISTS Temp; # Delete only if exists
+DROP TABLE IF EXISTS Suppliers;    -- removes the table and all its rows
 ~~~
-
-## CREATE with FOREIGN KEY
-~~~
-CREATE TABLE Orders (
-  order_id INT PRIMARY KEY AUTO_INCREMENT,
-  customer_id INT NOT NULL,
-  order_date DATE,
-  total DECIMAL(10, 2),
-  FOREIGN KEY (customer_id) REFERENCES Customers(customer_id)
-    ON DELETE CASCADE   # delete orders if customer deleted
-    ON UPDATE CASCADE   # update order if customer_id changes
+DROP cannot be undone outside a transaction - always double-check the table name.`,
+      example: { sql: `CREATE TABLE Courses (
+  course_id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  fee REAL CHECK (fee >= 0)
 );
-~~~
-
-## Best Practices
-- Use meaningful names (not {{t1}}, {{col1}})
-- Use correct data types (not TEXT for numbers)
-- Add NOT NULL for essential fields
-- Use FOREIGN KEY to maintain referential integrity`,
-      challenge: 'Create a Students table: id (PK), name, enrollment_date, gpa, school_id (FK to Schools).',
+INSERT INTO Courses (title, fee) VALUES ('ICT Level 6', 45000);
+SELECT * FROM Courses;` },
+      challenge: 'Create a table Suppliers with supplier_id (primary key), name (NOT NULL), email (UNIQUE), county (DEFAULT \'Nairobi\') and rating (CHECK between 1 and 5). Add a phone column with ALTER TABLE. Insert supplier "Unga Millers" with rating 4 (no county), then SELECT name, county, rating FROM Suppliers.',
       checks: [
-        { label: 'Uses CREATE TABLE', in: 'js', re: /CREATE\s+TABLE/i },
-        { label: 'Has primary key', in: 'js', re: /PRIMARY\s+KEY/i },
-        { label: 'Has foreign key', in: 'js', re: /FOREIGN\s+KEY|REFERENCES/i },
-        { label: 'Uses NOT NULL', in: 'js', re: /NOT\s+NULL/i },
+        { label: 'Uses PRIMARY KEY, NOT NULL and UNIQUE', in: 'code', re: /PRIMARY\s+KEY[\s\S]*NOT\s+NULL[\s\S]*UNIQUE/i },
+        { label: 'Uses DEFAULT and CHECK', in: 'code', re: /DEFAULT\s+'Nairobi'[\s\S]*CHECK\s*\(|CHECK\s*\([\s\S]*DEFAULT\s+'Nairobi'/i },
+        { label: 'Adds a column with ALTER TABLE', in: 'code', re: /ALTER\s+TABLE\s+Suppliers\s+ADD(\s+COLUMN)?\s+phone/i },
+        { label: 'The default county is applied', in: 'output', re: /Unga Millers \| Nairobi \| 4/ },
       ],
-      hints: ['Columns: student_id (INT, PK, AUTO_INCREMENT), name (VARCHAR, NOT NULL), enrollment_date (DATE), gpa (DECIMAL), school_id (INT, FK).'],
+      hints: ['county TEXT DEFAULT \'Nairobi\'', 'Leave county out of the INSERT so the default is used.'],
       quiz: [
-        { q: 'Which constraint ensures no duplicate values?', options: ['UNIQUE', 'PRIMARY KEY', 'NOT NULL', 'CHECK'], why: 'UNIQUE prevents duplicates (NULL allowed); PK also prevents duplicates.' },
-        { q: 'What is a FOREIGN KEY?', options: ['A reference to a PK in another table', 'An encrypted key', 'A temporary key', 'A backup key'], why: 'FK links tables and maintains referential integrity.' },
-        { q: 'Which data type for email?', options: ['VARCHAR(100)', 'INT', 'DATE', 'BOOLEAN'], why: 'Email is text, so VARCHAR is appropriate.' },
+        { q: 'Which SQL part do CREATE, ALTER and DROP belong to?', options: ['DDL', 'DML', 'DCL', 'TCL'], why: 'They define the structure, not the data.' },
+        { q: 'Which constraint fills in a value when none is given?', options: ['DEFAULT', 'CHECK', 'UNIQUE', 'NOT NULL'], why: 'DEFAULT supplies a value automatically.' },
+        { q: 'What does DROP TABLE do?', options: ['Deletes the table and all its data', 'Empties the table but keeps it', 'Hides the table', 'Renames the table'], why: 'DROP removes the whole table.' },
       ],
-      oral: 'Explain the difference between UNIQUE and PRIMARY KEY constraints.',
+      oral: 'Explain each constraint you used in the Suppliers table and what mistake it prevents.',
+      solution: { sql: `CREATE TABLE Suppliers (
+  supplier_id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT UNIQUE,
+  county TEXT DEFAULT 'Nairobi',
+  rating INTEGER CHECK (rating BETWEEN 1 AND 5)
+);
+ALTER TABLE Suppliers ADD COLUMN phone TEXT;
+INSERT INTO Suppliers (name, email, rating) VALUES ('Unga Millers', 'sales@unga.example', 4);
+SELECT name, county, rating FROM Suppliers;` },
     },
     {
-      title: 'SQL JOINs: Combining Tables', minutes: 90,
-      content: `JOINs combine data from multiple tables using relationships.
+      title: 'Data Manipulation: INSERT, UPDATE and DELETE', minutes: 50,
+      content: `DML statements change the rows in a table.
 
-## INNER JOIN (most common)
-Returns rows with matching values in both tables.
-
+## INSERT
 ~~~
-SELECT Customers.name, Orders.order_id, Orders.total
+INSERT INTO Products (name, category, price, stock)
+VALUES ('Avocado', 'Food', 30, 200);
+
+INSERT INTO Products (name, price) VALUES          -- several rows at once
+  ('Pen', 20),
+  ('Radio', 1800);
+~~~
+List the columns so the statement still works if the table changes.
+
+## UPDATE ... SET
+~~~
+UPDATE Products SET price = 35 WHERE name = 'Avocado';
+UPDATE Products SET stock = stock - 1 WHERE product_id = 3;
+~~~
+
+## DELETE
+~~~
+DELETE FROM Products WHERE price < 50;
+~~~
+
+## The most important rule
+{{UPDATE and DELETE without WHERE change every row.}} Write the WHERE first, test it with a SELECT, then change SELECT to UPDATE or DELETE:
+~~~
+SELECT * FROM Products WHERE price < 50;    -- check what will be deleted
+DELETE FROM Products WHERE price < 50;
+~~~
+The console tells you how many rows each statement changed - check it matches what you expected.`,
+      example: { sql: `INSERT INTO Products (name, category, price) VALUES ('Mango', 'Food', 25);
+SELECT name, price FROM Products WHERE name = 'Mango';` },
+      challenge: 'Insert three products: Avocado (Food, 30), Pen (Stationery, 20) and Radio (Electronics, 1800). Update the price of Avocado to 35. Delete all products cheaper than 50. Finally SELECT COUNT(*) AS products FROM Products; - the answer should be 16.',
+      checks: [
+        { label: 'Inserts products', in: 'code', re: /INSERT\s+INTO\s+Products/i },
+        { label: 'Updates with WHERE', in: 'code', re: /UPDATE\s+Products\s+SET[\s\S]*WHERE/i },
+        { label: 'Deletes with WHERE', in: 'code', re: /DELETE\s+FROM\s+Products\s+WHERE/i },
+        { label: 'Leaves 16 products', in: 'output', re: /products\n16\b/ },
+      ],
+      hints: ['The practice database starts with 15 products; you add 3 and delete the 2 below 50.', 'Run a SELECT with the same WHERE first to see which rows will change.'],
+      quiz: [
+        { q: 'What happens if you run DELETE FROM Products; with no WHERE?', options: ['Every row is deleted', 'Nothing happens', 'Only the first row is deleted', 'The table is dropped'], why: 'Without WHERE the statement applies to all rows.' },
+        { q: 'Which statement changes existing values?', options: ['UPDATE', 'INSERT', 'ALTER', 'SELECT'], why: 'UPDATE ... SET changes values in rows.' },
+        { q: 'Why list the column names in an INSERT?', options: ['It keeps working if the table gains columns', 'It is faster', 'SQL requires it', 'It skips constraints'], why: 'Naming columns makes the statement independent of column order.' },
+      ],
+      oral: 'Describe a safe routine for deleting data from a live database.',
+      solution: { sql: `INSERT INTO Products (name, category, price) VALUES
+  ('Avocado', 'Food', 30),
+  ('Pen', 'Stationery', 20),
+  ('Radio', 'Electronics', 1800);
+UPDATE Products SET price = 35 WHERE name = 'Avocado';
+DELETE FROM Products WHERE price < 50;
+SELECT COUNT(*) AS products FROM Products;` },
+    },
+    {
+      title: 'Querying: Filters, Sorting and Grouping', minutes: 60,
+      content: `## Filtering rows with WHERE
+~~~
+SELECT * FROM Customers WHERE age >= 18 AND city = 'Nairobi';
+SELECT * FROM Products WHERE price BETWEEN 100 AND 500;
+SELECT * FROM Customers WHERE city IN ('Kisumu', 'Mombasa');
+SELECT * FROM Customers WHERE name LIKE 'A%';      -- starts with A
+SELECT * FROM Customers WHERE email IS NULL;       -- missing values
+~~~
+
+## Sorting and limiting
+~~~
+SELECT name, price FROM Products ORDER BY price DESC LIMIT 5;
+~~~
+
+## Aggregate functions
+{{COUNT, SUM, AVG, MIN, MAX}} summarise many rows into one value:
+~~~
+SELECT COUNT(*), AVG(salary), MAX(salary) FROM Employees;
+~~~
+
+## GROUP BY and HAVING
+{{GROUP BY}} makes one summary row per group. {{HAVING}} filters the groups (WHERE filters rows before grouping; HAVING filters after):
+~~~
+SELECT department, COUNT(*) AS staff, ROUND(AVG(salary), 2) AS avg_salary
+FROM Employees
+GROUP BY department
+HAVING COUNT(*) >= 2
+ORDER BY avg_salary DESC;
+~~~
+
+## Order of a SELECT
+SELECT columns → FROM table → WHERE row filter → GROUP BY → HAVING group filter → ORDER BY → LIMIT
+
+## Column aliases
+{{AS}} renames a result column: {{SUM(total) AS revenue}}.`,
+      example: { sql: `SELECT city, COUNT(*) AS customers
 FROM Customers
-INNER JOIN Orders ON Customers.customer_id = Orders.customer_id
-WHERE Orders.total > 1000;
+GROUP BY city
+ORDER BY customers DESC;` },
+      challenge: 'Show each department\'s average salary, rounded to 2 decimals, but only departments whose average is above 90000, highest first. Columns: department, avg_salary. Expected rows: "Management | 250000" then "IT | 107666.67".',
+      checks: [
+        { label: 'Groups by department', in: 'code', re: /GROUP\s+BY\s+department/i },
+        { label: 'Filters groups with HAVING', in: 'code', re: /HAVING\s+(ROUND\s*\()?\s*AVG\s*\(/i },
+        { label: 'Sorts highest first', in: 'code', re: /ORDER\s+BY[\s\S]*DESC/i },
+        { label: 'Returns Management then IT', in: 'output', re: /department \| avg_salary\nManagement \| 250000(\.0)?\nIT \| 107666\.67$/m },
+      ],
+      hints: ['ROUND(AVG(salary), 2) AS avg_salary', 'HAVING AVG(salary) > 90000 - Sales averages exactly 90000, so it is left out.'],
+      quiz: [
+        { q: 'What is the difference between WHERE and HAVING?', options: ['WHERE filters rows before grouping; HAVING filters groups after', 'They are the same', 'HAVING filters rows; WHERE filters groups', 'HAVING is only for text'], why: 'HAVING works on aggregated groups.' },
+        { q: 'Which pattern finds names starting with A?', options: ["LIKE 'A%'", "LIKE '%A'", "= 'A*'", "IN ('A')"], why: '% matches any characters after A.' },
+        { q: 'Which function counts rows?', options: ['COUNT(*)', 'SUM(*)', 'TOTAL()', 'ROWS()'], why: 'COUNT(*) counts the rows in each group.' },
+      ],
+      oral: 'Explain the order in which the parts of a SELECT statement are applied.',
+      solution: { sql: `SELECT department, ROUND(AVG(salary), 2) AS avg_salary
+FROM Employees
+GROUP BY department
+HAVING AVG(salary) > 90000
+ORDER BY avg_salary DESC;` },
+    },
+    {
+      title: 'Joining Tables', minutes: 60,
+      content: `A {{join}} combines rows from two or more tables using a related column, usually a foreign key matching a primary key.
 
-╲ Shows customers and their orders (only customers who ordered)
+## INNER JOIN - only matching rows
 ~~~
-
-## LEFT JOIN
-All rows from left table + matching rows from right table (NULLs if no match).
-
+SELECT o.order_id, c.name, o.total
+FROM Orders o
+INNER JOIN Customers c ON c.customer_id = o.customer_id
+WHERE o.total > 5000;
 ~~~
-SELECT Customers.name, Orders.order_id
-FROM Customers
-LEFT JOIN Orders ON Customers.customer_id = Orders.customer_id;
+{{o}} and {{c}} are {{table aliases}} that keep the query short.
 
-╲ Shows all customers even if they haven't ordered (order_id is NULL)
+## LEFT JOIN - every row from the left table
+Rows with no match get NULL on the right:
 ~~~
-
-## RIGHT JOIN
-All rows from right table + matching rows from left table.
-
+SELECT s.name, sc.name AS school
+FROM Students s
+LEFT JOIN Schools sc ON sc.school_id = s.school_id;
 ~~~
-SELECT Customers.name, Orders.order_id
-FROM Customers
-RIGHT JOIN Orders ON Customers.customer_id = Orders.customer_id;
+Students without a school show {{NULL}}.
 
-╲ Shows all orders and their customers (rarely used; use LEFT JOIN instead)
-~~~
-
-## FULL OUTER JOIN
-All rows from both tables. (Not in all DBMSs; use UNION instead)
-
-~~~
-SELECT * FROM Customers
-FULL OUTER JOIN Orders ON Customers.customer_id = Orders.customer_id;
-
-╲ All customers and all orders, NULLs where no match
-~~~
-
-## Cross Join
-Cartesian product: every row from table A with every row from table B (rarely needed).
-
-~~~
-SELECT * FROM Customers CROSS JOIN Products;
-~~~
-
-## Multiple JOINs
-~~~
-SELECT 
-  Customers.name,
-  Orders.order_id,
-  Products.product_name
-FROM Customers
-INNER JOIN Orders ON Customers.customer_id = Orders.customer_id
-INNER JOIN OrderItems ON Orders.order_id = OrderItems.order_id
-INNER JOIN Products ON OrderItems.product_id = Products.product_id;
-
-╲ Customer → Order → OrderItem → Product (4-way join)
-~~~
-
-## Join Syntax Alternatives
-~~~
--- Explicit JOIN (recommended)
-SELECT * FROM A INNER JOIN B ON A.id = B.a_id;
-
--- Implicit JOIN (older style - use ON, not WHERE)
-SELECT * FROM A, B WHERE A.id = B.a_id;
-~~~
-
-## Aliases
-Shorter names for readability:
-~~~
-SELECT c.name, o.order_id
-FROM Customers c
-INNER JOIN Orders o ON c.customer_id = o.customer_id;
-~~~
-
-## Self Join
-A table joined with itself (e.g., employee and their manager):
+## Other joins
+- {{RIGHT JOIN}}: every row from the right table
+- {{FULL OUTER JOIN}}: every row from both
+- {{CROSS JOIN}}: every combination (rarely wanted)
+- {{Self join}}: a table joined to itself, e.g. employees and their managers:
 ~~~
 SELECT e.name AS employee, m.name AS manager
+FROM Employees e LEFT JOIN Employees m ON m.employee_id = e.manager_id;
+~~~
+
+## Joining several tables
+~~~
+SELECT c.name, p.name AS product, oi.quantity
+FROM Orders o
+JOIN Customers c ON c.customer_id = o.customer_id
+JOIN OrderItems oi ON oi.order_id = o.order_id
+JOIN Products p ON p.product_id = oi.product_id;
+~~~
+A join without an ON condition multiplies every row by every row - always check the ON clause.`,
+      example: { sql: `SELECT e.name AS employee, m.name AS manager
 FROM Employees e
-LEFT JOIN Employees m ON e.manager_id = m.employee_id;
-~~~`,
-      challenge: 'Write SQL to show all students and their schools, including students with no school assigned.',
+LEFT JOIN Employees m ON m.employee_id = e.manager_id
+LIMIT 4;` },
+      challenge: 'Write two queries. First, with an INNER JOIN, list the customer name and total of every order over 10000, biggest first (expect "Ian Kamau | 16950" then "Amina Wanjiru | 14500"). Second, with a LEFT JOIN, list every student\'s name and school name, ordered by student name - the two students without a school must appear with NULL.',
       checks: [
-        { label: 'Uses JOIN (any type)', in: 'js', re: /(INNER|LEFT|RIGHT|FULL|CROSS)?\s*JOIN/i },
-        { label: 'Uses ON to match tables', in: 'js', re: /ON\s+\w+\.\w+\s*=\s*\w+\.\w+/ },
-        { label: 'Selects from both tables', in: 'js', re: /students?|schools?/i },
+        { label: 'Uses an INNER JOIN', in: 'code', re: /INNER\s+JOIN|\bJOIN\b[\s\S]*ON/i },
+        { label: 'Uses a LEFT JOIN', in: 'code', re: /LEFT\s+(OUTER\s+)?JOIN/i },
+        { label: 'Lists the big orders', in: 'output', re: /Ian Kamau \| 16950(\.0)?\nAmina Wanjiru \| 14500(\.0)?/ },
+        { label: 'Shows students without a school', in: 'output', re: /Njambi Githinji \| NULL[\s\S]*Omar Farah \| NULL/ },
       ],
-      hints: ['LEFT JOIN Schools: students on left, so all students show (school is NULL if not assigned).'],
+      hints: ['ON c.customer_id = o.customer_id', 'LEFT JOIN keeps every row of the first table (Students).'],
       quiz: [
-        { q: 'What does INNER JOIN return?', options: ['Rows with matches in both tables', 'All rows from both tables', 'Only rows from the left table', 'Only rows from the right table'], why: 'INNER JOIN returns only matching rows.' },
-        { q: 'Which JOIN shows all left table rows + matches from right?', options: ['LEFT JOIN', 'INNER JOIN', 'RIGHT JOIN', 'CROSS JOIN'], why: 'LEFT JOIN includes all left rows, even if no match.' },
-        { q: 'When is CROSS JOIN useful?', options: ['Rarely; it produces a huge result set', 'Always use it', 'For filtering', 'For sorting'], why: 'CROSS JOIN multiplies rows, rarely needed.' },
+        { q: 'Which join keeps every row of the first table even without a match?', options: ['LEFT JOIN', 'INNER JOIN', 'CROSS JOIN', 'SELF JOIN'], why: 'LEFT JOIN keeps all left rows and fills gaps with NULL.' },
+        { q: 'What does a join without an ON condition produce?', options: ['Every combination of rows', 'No rows', 'Only matching rows', 'An error in every DBMS'], why: 'It becomes a cross join.' },
+        { q: 'A query joining Employees to Employees to find managers is a...', options: ['self join', 'full join', 'natural join', 'subquery'], why: 'The table is joined to itself.' },
       ],
-      oral: 'Explain LEFT JOIN vs INNER JOIN with an example (customers and orders).',
-    },
-    {
-      title: 'SQL DML: INSERT, UPDATE, DELETE', minutes: 75,
-      content: `DML (Data Manipulation Language) modifies data.
-
-## INSERT: Add Rows
-~~~
-INSERT INTO Customers (name, email, age, city)
-VALUES ('Alice', 'alice@example.com', 28, 'Nairobi');
-
--- Multiple rows
-INSERT INTO Customers (name, email, age) VALUES
-  ('Bob', 'bob@example.com', 35),
-  ('Charlie', 'charlie@example.com', 42);
-
--- From another table
-INSERT INTO CustomerBackup
-SELECT * FROM Customers WHERE created_at < '2023-01-01';
-~~~
-
-## UPDATE: Modify Data
-~~~
-UPDATE Customers SET age = 29 WHERE customer_id = 1;
-
-UPDATE Customers 
-SET city = 'Mombasa', age = age + 1 
-WHERE country = 'Kenya';
-
--- Dangerous: updates ALL rows without WHERE
-UPDATE Customers SET active = 0;  ⚠️
-~~~
-
-## DELETE: Remove Rows
-~~~
-DELETE FROM Customers WHERE customer_id = 5;
-
-DELETE FROM Customers WHERE age < 18;
-
--- Dangerous: deletes ALL rows
-DELETE FROM Customers;  ⚠️
-~~~
-
-## Transactions
-Ensure all-or-nothing execution:
-~~~
-BEGIN TRANSACTION;
-  UPDATE Accounts SET balance = balance - 100 WHERE account_id = 1;
-  UPDATE Accounts SET balance = balance + 100 WHERE account_id = 2;
-COMMIT;  -- both succeed or both fail
-
-ROLLBACK;  -- undo changes
-~~~
-
-## Best Practices
-- Always use WHERE (except for bulk operations)
-- Test SELECT before UPDATE/DELETE with the same WHERE
-- Use transactions for related operations
-- Backup before major changes
-- Use LIMIT to test before large operations
-
-## Validating Updates
-~~~
--- Bad: might violate constraints
-UPDATE Customers SET email = NULL WHERE age < 18;
-
--- Good: check NOT NULL constraint first
-UPDATE Customers SET email = 'student@school.com' WHERE age < 18 AND email IS NULL;
-~~~`,
-      challenge: 'Write SQL to insert 3 products, then update the price of one, then delete products below 50.',
-      checks: [
-        { label: 'Uses INSERT', in: 'js', re: /INSERT/i },
-        { label: 'Uses UPDATE with WHERE', in: 'js', re: /UPDATE.*WHERE/i },
-        { label: 'Uses DELETE with WHERE', in: 'js', re: /DELETE.*WHERE/i },
-      ],
-      hints: ['INSERT INTO Products (name, price) VALUES (...); UPDATE Products SET price=... WHERE...; DELETE FROM Products WHERE price < 50;'],
-      quiz: [
-        { q: 'What must follow UPDATE to avoid changing all rows?', options: ['WHERE clause', 'SELECT', 'LIMIT', 'ORDER BY'], why: 'WHERE limits which rows are updated.' },
-        { q: 'What does ROLLBACK do?', options: ['Undoes changes in a transaction', 'Saves changes', 'Deletes rows', 'Closes database'], why: 'ROLLBACK reverts uncommitted changes.' },
-        { q: 'Which is most dangerous?', options: ['DELETE FROM table;', 'UPDATE table SET...WHERE...', 'INSERT INTO table', 'SELECT * FROM table'], why: 'DELETE without WHERE deletes everything.' },
-      ],
-      oral: 'Explain the importance of WHERE clause in UPDATE and DELETE statements.',
+      oral: 'Explain the difference between an INNER JOIN and a LEFT JOIN with a students-and-schools example.',
+      solution: { sql: `SELECT c.name, o.total
+FROM Orders o
+INNER JOIN Customers c ON c.customer_id = o.customer_id
+WHERE o.total > 10000
+ORDER BY o.total DESC;
+SELECT s.name, sc.name AS school
+FROM Students s
+LEFT JOIN Schools sc ON sc.school_id = s.school_id
+ORDER BY s.name;` },
     },
   ],
 };
 
 const M117 = {
-  id: 117, order: 17, icon: '🔍', color: '#336791', difficulty: 'advanced', hours: 32,
-  title: 'Advanced Queries and Indexing',
-  description: 'Subqueries, views, stored procedures, indexing, and query optimization.',
+  id: 117, order: 17, icon: '🔍', color: '#336791', difficulty: 'advanced',
+  title: 'Advanced Database Concepts',
+  description: 'Object-oriented databases and views, triggers, indexing and hashing, and database applications.',
   lessons: [
     {
-      title: 'Subqueries and Views', minutes: 90,
-      content: `Subqueries and views simplify complex queries and provide abstraction.
+      title: 'Object-Oriented Databases and Views', minutes: 50,
+      content: `## Object-oriented databases (OODB)
+An {{object-oriented database}} stores data as {{objects}}, as in Java or Python, instead of rows in tables.
+- {{Classes}} describe objects; {{objects}} are stored with their {{attributes}} and methods
+- {{Inheritance}}: a Lecturer class can inherit from Person
+- Objects can contain other objects directly (no joins needed)
 
-## Subqueries (Inner Queries)
-A query inside another query:
+Comparison:
+- Relational: tables, SQL, strong for reporting and many users (most business systems)
+- Object-oriented: objects, good for complex, nested data (CAD drawings, multimedia)
+- Document / NoSQL (MongoDB): flexible JSON documents for web apps
 
+Most applications keep a relational database and use an {{ORM}} (object-relational mapper) such as Hibernate or SQLAlchemy to turn rows into objects.
+
+## Views
+A {{view}} is a saved query that behaves like a table. It gives users a simple, object-like picture and hides columns they should not see:
 ~~~
--- Find customers who spent more than average
-SELECT name, (SELECT AVG(total) FROM Orders) as avg_order
-FROM Customers
-WHERE customer_id IN (
-  SELECT customer_id FROM Orders 
-  WHERE total > (SELECT AVG(total) FROM Orders)
-);
+CREATE VIEW StudentReport AS
+SELECT s.name, s.gpa, sc.name AS school
+FROM Students s
+JOIN Schools sc ON sc.school_id = s.school_id;
 
--- Scalar subquery (returns one value)
-SELECT name FROM Customers 
-WHERE age > (SELECT AVG(age) FROM Customers);
-
--- Table subquery (returns rows)
-SELECT * FROM Customers 
-WHERE customer_id IN (SELECT customer_id FROM Orders WHERE total > 1000);
+SELECT * FROM StudentReport WHERE gpa >= 3.5;
 ~~~
-
-## EXISTS
-Check if rows exist:
-~~~
-SELECT name FROM Customers c
-WHERE EXISTS (
-  SELECT 1 FROM Orders o WHERE o.customer_id = c.customer_id
-);
-
-╲ Show customers who have at least one order
-~~~
-
-## Correlated Subquery
-Subquery references columns from outer query:
-~~~
-SELECT name, age FROM Customers c1
-WHERE age > (
-  SELECT AVG(age) FROM Customers c2 
-  WHERE c2.city = c1.city
-);
-
-╲ Customers older than average in their city
-~~~
-
-## UNION
-Combine results from multiple queries:
-~~~
-SELECT name, 'Premium' as type FROM PremiumCustomers
-UNION
-SELECT name, 'Regular' as type FROM RegularCustomers;
-
-UNION ALL  -- keeps duplicates; UNION removes them
-~~~
-
-## Views: Saved Queries
-A virtual table created from a query:
-~~~
-CREATE VIEW HighValueOrders AS
-SELECT o.order_id, c.name, o.total
-FROM Orders o
-INNER JOIN Customers c ON o.customer_id = c.customer_id
-WHERE o.total > 5000;
-
--- Use it like a table
-SELECT * FROM HighValueOrders;
-SELECT * FROM HighValueOrders WHERE total > 10000;
-
--- Drop view
-DROP VIEW HighValueOrders;
-~~~
-
-## Benefits of Views
-- Simplify complex queries (hide complexity)
-- Security (expose only needed columns)
-- Reusable logic
-- Abstraction (table structure can change)
-
-## Example: Real Estate View
-~~~
-CREATE VIEW PropertyListings AS
-SELECT 
-  p.property_id,
-  p.address,
-  p.price,
-  COUNT(v.viewing_id) as views
-FROM Properties p
-LEFT JOIN Viewings v ON p.property_id = v.property_id
-GROUP BY p.property_id;
-
--- Now agents use: SELECT * FROM PropertyListings WHERE price < 1000000;
-~~~`,
-      challenge: 'Create a view showing students with grade GPA >= 3.5 and their school names.',
+Benefits: simpler queries, security (show only some columns), and one place to change logic. A view stores no data - it runs its query each time.`,
+      example: { sql: `CREATE VIEW CustomerOrders AS
+SELECT c.name, COUNT(o.order_id) AS orders
+FROM Customers c LEFT JOIN Orders o ON o.customer_id = c.customer_id
+GROUP BY c.name;
+SELECT * FROM CustomerOrders ORDER BY orders DESC LIMIT 3;` },
+      challenge: 'Create a view TopStudents showing the name, gpa and school name of students with a GPA of 3.5 or more. Then SELECT * FROM TopStudents ORDER BY gpa DESC; - the first row should be "Akinyi Adhiambo | 3.9 | Kisumu Girls High School".',
       checks: [
-        { label: 'Uses CREATE VIEW', in: 'js', re: /CREATE\s+VIEW/i },
-        { label: 'Uses SELECT with WHERE', in: 'js', re: /SELECT.*WHERE.*>=/i },
-        { label: 'Uses JOIN', in: 'js', re: /JOIN/i },
+        { label: 'Creates the view', in: 'code', re: /CREATE\s+VIEW\s+TopStudents\s+AS/i },
+        { label: 'Filters on gpa >= 3.5', in: 'code', re: /gpa\s*>=\s*3\.5/i },
+        { label: 'Queries the view', in: 'code', re: /SELECT[\s\S]*FROM\s+TopStudents/i },
+        { label: 'Returns the top student first', in: 'output', re: /Akinyi Adhiambo \| 3\.9 \| Kisumu Girls High School/ },
       ],
-      hints: ['CREATE VIEW HighAchievers AS SELECT s.name, sc.school_name FROM Students s JOIN Schools sc ON s.school_id = sc.school_id WHERE s.gpa >= 3.5;'],
+      hints: ['CREATE VIEW TopStudents AS SELECT ... FROM Students s JOIN Schools sc ON ... WHERE s.gpa >= 3.5;', 'Students with no school are left out by an INNER JOIN.'],
       quiz: [
-        { q: 'What is a view?', options: ['A virtual table created from a query', 'A physical table', 'A backup', 'A security log'], why: 'Views are saved queries that act like tables.' },
-        { q: 'What does UNION do?', options: ['Combines results from multiple queries', 'Joins two tables', 'Creates a view', 'Updates rows'], why: 'UNION stacks query results vertically.' },
-        { q: 'What is a correlated subquery?', options: ['A subquery that references the outer query', 'A subquery with UNION', 'A simple subquery', 'A view'], why: 'It references columns from the outer query.' },
+        { q: 'Does a view store its own copy of the data?', options: ['No, it runs its query each time', 'Yes, always', 'Only for numbers', 'Only the first time'], why: 'A (non-materialised) view is a saved query.' },
+        { q: 'Which database type stores data as objects with inheritance?', options: ['Object-oriented database', 'Relational database', 'Spreadsheet', 'Flat file'], why: 'OODBs store objects directly.' },
+        { q: 'What does an ORM do?', options: ['Maps database rows to program objects', 'Backs up the database', 'Encrypts passwords', 'Draws ER diagrams'], why: 'ORMs bridge relational tables and objects in code.' },
       ],
-      oral: 'Explain how you would use a view to simplify data access for non-technical users.',
+      oral: 'Explain two reasons a bank might give tellers access to a view instead of the full customer table.',
+      solution: { sql: `CREATE VIEW TopStudents AS
+SELECT s.name, s.gpa, sc.name AS school
+FROM Students s
+JOIN Schools sc ON sc.school_id = s.school_id
+WHERE s.gpa >= 3.5;
+SELECT * FROM TopStudents ORDER BY gpa DESC;` },
     },
     {
-      title: 'Indexing and Query Optimization', minutes: 90,
-      content: `Indexing speeds up queries dramatically.
-
-## What is an Index?
-Like a book index: jumps to relevant pages instead of reading every page.
+      title: 'Triggers', minutes: 50,
+      content: `A {{trigger}} is SQL that runs automatically when a row is inserted, updated or deleted.
 
 ~~~
--- Without index: scan all 1 million customer rows (slow)
-SELECT * FROM Customers WHERE email = 'alice@example.com';
+CREATE TABLE PriceLog (
+  product_id INTEGER,
+  old_price REAL,
+  new_price REAL,
+  changed_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
 
--- With index on email: jump directly (fast)
-CREATE INDEX idx_email ON Customers(email);
+CREATE TRIGGER log_price_change
+AFTER UPDATE OF price ON Products
+BEGIN
+  INSERT INTO PriceLog (product_id, old_price, new_price)
+  VALUES (OLD.product_id, OLD.price, NEW.price);
+END;
 ~~~
+- {{BEFORE}} or {{AFTER}} the change
+- {{INSERT}}, {{UPDATE}} (optionally {{OF column}}) or {{DELETE}}
+- {{OLD}} is the row before the change; {{NEW}} the row after
 
-## Types of Indexes
-1. {{Primary Key}}: automatic, unique, ordered
-2. {{Unique Index}}: ensures no duplicates
-3. {{Composite Index}}: index on multiple columns
-4. {{Full-text Index}}: for text search
+## Uses
+- {{Auditing}}: record who changed what and when
+- {{Keeping totals in step}}: reduce stock when an order item is added
+- {{Enforcing rules}} that constraints cannot express (in SQLite: {{SELECT RAISE(ABORT, 'message')}} stops the change)
 
-## Creating Indexes
-~~~
--- Single column
-CREATE INDEX idx_customer_id ON Orders(customer_id);
-CREATE UNIQUE INDEX idx_email ON Customers(email);
-
--- Multiple columns
-CREATE INDEX idx_order_date_total ON Orders(order_date, total);
-
--- Drop index
-DROP INDEX idx_customer_id ON Orders;
-~~~
-
-## When to Index
-✓ Columns used in WHERE, JOIN, ORDER BY
-✓ Foreign keys
-✓ Columns with many unique values
-✓ Large tables
-
-✗ Small tables (< 10,000 rows)
-✗ Columns with few unique values (yes/no, gender)
-✗ Updated frequently (index maintenance overhead)
-
-## Example: Good Index
-~~~
--- Customer queries: find by email, filter by city
-CREATE INDEX idx_city ON Customers(city);
-CREATE UNIQUE INDEX idx_email ON Customers(email);
-
--- Now these are fast:
-SELECT * FROM Customers WHERE email = 'alice@example.com';
-SELECT COUNT(*) FROM Customers WHERE city = 'Nairobi';
-~~~
-
-## EXPLAIN: Check Query Performance
-~~~
-EXPLAIN SELECT * FROM Orders WHERE customer_id = 5;
-
-╲ Shows: type, possible indexes, rows examined
-╲ Look for: "Using index" (good), "Using filesort" (slow)
-~~~
-
-## Query Optimization Tips
-1. Use specific columns in SELECT (not *)
-2. Add WHERE conditions to filter early
-3. Index WHERE, JOIN, ORDER BY columns
-4. Avoid functions in WHERE (prevents index use)
-5. Join on indexed columns
-6. Consider denormalization for read-heavy queries
-
-## Example: Slow Query
-~~~
-SELECT * FROM Orders WHERE YEAR(order_date) = 2024;  -- Function prevents index use
-╲ Better:
-SELECT * FROM Orders WHERE order_date >= '2024-01-01' AND order_date < '2025-01-01';
-~~~
-
-## Execution Plan
-Database shows how it executes a query:
-- Seq Scan: reads entire table (slow)
-- Index Scan: uses index (fast)
-- Hash Join: matches rows quickly
-- Sort: expensive operation (use ORDER BY wisely)`,
-      challenge: 'Identify which columns in a Students table should be indexed and why.',
+## Cautions
+Triggers run invisibly, so document them, keep them short, and avoid triggers that fire other triggers in long chains.`,
+      example: { sql: `CREATE TRIGGER reduce_stock
+AFTER INSERT ON OrderItems
+BEGIN
+  UPDATE Products SET stock = stock - NEW.quantity WHERE product_id = NEW.product_id;
+END;
+INSERT INTO OrderItems (order_id, product_id, quantity, unit_price) VALUES (1, 1, 5, 210);
+SELECT name, stock FROM Products WHERE product_id = 1;` },
+      challenge: 'Create a PriceLog table (product_id, old_price, new_price) and an AFTER UPDATE trigger on Products that logs price changes using OLD and NEW. Raise the price of product 2 (Cooking oil, 380) to 420, then SELECT product_id, old_price, new_price FROM PriceLog; - expect "2 | 380 | 420".',
       checks: [
-        { label: 'Mentions student_id', in: 'js', re: /student_id|id|primary\s+key/i },
-        { label: 'Mentions lookup columns', in: 'js', re: /email|name|enrollment|foreign\s+key/i },
-        { label: 'Explains reason', in: 'js', re: /(where|join|filter|lookup|search|fast)/i },
+        { label: 'Creates the log table', in: 'code', re: /CREATE\s+TABLE\s+PriceLog/i },
+        { label: 'Creates an AFTER UPDATE trigger', in: 'code', re: /CREATE\s+TRIGGER[\s\S]*AFTER\s+UPDATE[\s\S]*ON\s+Products/i },
+        { label: 'Uses OLD and NEW', in: 'code', re: /OLD\.\w+[\s\S]*NEW\.\w+|NEW\.\w+[\s\S]*OLD\.\w+/i },
+        { label: 'Logs the change', in: 'output', re: /2 \| 380(\.0)? \| 420(\.0)?/ },
       ],
-      hints: ['Primary key (student_id): automatic. Email: unique lookups. School_id: foreign key joins. Enrollment_date: range queries.'],
+      hints: ['The trigger body goes between BEGIN and END; (with a semicolon after END).', 'UPDATE Products SET price = 420 WHERE product_id = 2;'],
       quiz: [
-        { q: 'What is an index?', options: ['A data structure that speeds up lookups', 'A table backup', 'A query log', 'A primary key'], why: 'Indexes act like a book index for fast searches.' },
-        { q: 'Which type of query benefits most from indexes?', options: ['WHERE, JOIN, ORDER BY', 'Simple SELECT *', 'INSERT', 'UPDATE'], why: 'Indexes speed up filtering and joining.' },
-        { q: 'When should you NOT create an index?', options: ['On small tables or low-cardinality columns', 'On foreign keys', 'On unique columns', 'On WHERE clauses'], why: 'Indexes have overhead; small tables don\'t benefit.' },
+        { q: 'In an UPDATE trigger, what does OLD contain?', options: ['The row before the change', 'The row after the change', 'The oldest row in the table', 'The previous trigger'], why: 'OLD is the before-image; NEW is the after-image.' },
+        { q: 'Which is a good use of a trigger?', options: ['Recording an audit log of changes', 'Drawing an ER diagram', 'Choosing an RDBMS', 'Writing the user manual'], why: 'Triggers react to data changes automatically.' },
+        { q: 'When does an AFTER INSERT trigger run?', options: ['After each new row is added', 'Before the table is created', 'Only when you call it', 'Once a day'], why: 'It fires after the INSERT.' },
       ],
-      oral: 'Explain how an index speeds up a query to find a customer by email.',
+      oral: 'Describe how a supermarket could use triggers to keep stock levels correct.',
+      solution: { sql: `CREATE TABLE PriceLog (product_id INTEGER, old_price REAL, new_price REAL);
+CREATE TRIGGER log_price_change
+AFTER UPDATE OF price ON Products
+BEGIN
+  INSERT INTO PriceLog (product_id, old_price, new_price)
+  VALUES (OLD.product_id, OLD.price, NEW.price);
+END;
+UPDATE Products SET price = 420 WHERE product_id = 2;
+SELECT product_id, old_price, new_price FROM PriceLog;` },
+    },
+    {
+      title: 'Indexing and Hashing', minutes: 55,
+      content: `Without help, the database reads {{every row}} to find a match (a full table scan). {{Indexes}} and {{hashing}} find rows quickly - like the index at the back of a textbook.
+
+## Indexing
+An {{index}} is a sorted structure (usually a {{B-tree}}) of a column's values with pointers to the rows.
+- {{Dense index}}: one entry for every record
+- {{Sparse index}}: one entry per block of records (needs the data sorted)
+- {{Primary / clustered index}}: on the column the rows are stored in order of
+- {{Secondary index}}: on any other column you search often
+
+~~~
+CREATE INDEX idx_customers_city ON Customers(city);
+EXPLAIN QUERY PLAN SELECT * FROM Customers WHERE city = 'Nairobi';
+-- detail: SEARCH Customers USING INDEX idx_customers_city (city=?)
+~~~
+{{EXPLAIN QUERY PLAN}} shows whether SQLite scans the table or uses an index.
+
+Trade-off: indexes speed up reads but slow down inserts and updates and use space. Index columns used in WHERE, JOIN and ORDER BY - not every column.
+
+## Hashing
+A {{hash function}} turns a key into a bucket number, so a lookup goes straight to the right bucket.
+- {{Static hashing}}: a fixed number of buckets; overflow chains grow as data grows
+- {{Dynamic hashing}} (extendible, linear hashing): buckets split as the data grows, keeping lookups fast
+Hashing is excellent for exact matches (account_id = 1042) but cannot help with ranges (BETWEEN) - B-tree indexes can.`,
+      example: { sql: `EXPLAIN QUERY PLAN SELECT * FROM Customers WHERE city = 'Nairobi';
+-- Without an index the plan says SCAN Customers` },
+      challenge: 'Create an index idx_customers_city on Customers(city). Then run EXPLAIN QUERY PLAN for SELECT name FROM Customers WHERE city = \'Nairobi\'; and confirm the plan says it is USING INDEX idx_customers_city.',
+      checks: [
+        { label: 'Creates the index', in: 'code', re: /CREATE\s+INDEX\s+idx_customers_city\s+ON\s+Customers\s*\(\s*city\s*\)/i },
+        { label: 'Uses EXPLAIN QUERY PLAN', in: 'code', re: /EXPLAIN\s+QUERY\s+PLAN/i },
+        { label: 'The plan uses the index', in: 'output', re: /USING (COVERING )?INDEX idx_customers_city/i },
+      ],
+      hints: ['CREATE INDEX idx_customers_city ON Customers(city);', 'Put EXPLAIN QUERY PLAN in front of the SELECT.'],
+      quiz: [
+        { q: 'What is the main cost of adding an index?', options: ['Slower inserts and updates, and more storage', 'Slower SELECT queries', 'Less data integrity', 'It deletes duplicates'], why: 'Every change must also update the index.' },
+        { q: 'Which index has an entry for every record?', options: ['Dense index', 'Sparse index', 'Hash bucket', 'Clustered key'], why: 'Dense indexes list every key.' },
+        { q: 'Hashing is best for which kind of search?', options: ['Exact matches such as id = 1042', 'Ranges such as BETWEEN 1 AND 100', 'Sorting', 'LIKE \'%abc%\''], why: 'A hash jumps straight to one bucket.' },
+      ],
+      oral: 'Explain how you would decide which columns of an M-Pesa transactions table to index.',
+      solution: { sql: `CREATE INDEX idx_customers_city ON Customers(city);
+EXPLAIN QUERY PLAN SELECT name FROM Customers WHERE city = 'Nairobi';` },
+    },
+    {
+      title: 'Database Applications and Data Warehouses', minutes: 55,
+      content: `Databases power more than day-to-day transactions.
+
+## Kinds of database applications
+- {{Decision support systems (DSS)}}: help managers decide using summaries and "what-if" analysis
+- {{Data mining}}: finding hidden patterns (customers who buy X also buy Y, fraud signals)
+- {{Distributed databases}}: data stored across several sites that act as one database (bank branches); features: replication, fragmentation, location transparency
+- {{Spatial and geographical databases}}: locations and shapes (county boundaries, delivery routes) - e.g. PostGIS
+- {{Multimedia databases}}: images, audio and video with metadata
+- {{Mobile and personal databases}}: SQLite on phones, synchronising when online
+
+## Data warehouses
+A {{data warehouse}} collects historical data from many systems for analysis (OLAP), separate from the live transaction system (OLTP). Data is loaded by {{ETL}}: Extract, Transform, Load.
+
+A {{star schema}} has a central {{fact table}} of measurements (sales amounts) linked to {{dimension tables}} that describe them (product, region, date):
+~~~
+CREATE TABLE DimRegion (region_id INTEGER PRIMARY KEY, region TEXT);
+CREATE TABLE DimProduct (product_id INTEGER PRIMARY KEY, product TEXT);
+CREATE TABLE FactSales (
+  region_id INTEGER REFERENCES DimRegion(region_id),
+  product_id INTEGER REFERENCES DimProduct(product_id),
+  amount REAL
+);
+SELECT r.region, SUM(f.amount) AS revenue
+FROM FactSales f JOIN DimRegion r ON r.region_id = f.region_id
+GROUP BY r.region ORDER BY revenue DESC;
+~~~
+Warehouses are often {{denormalised}} on purpose so reports need fewer joins.`,
+      example: { sql: `-- A quick "decision support" summary from the live tables
+SELECT status, COUNT(*) AS orders, SUM(total) AS value
+FROM Orders
+GROUP BY status;` },
+      challenge: 'Build a small star schema: DimRegion (Coast, Rift, Nairobi), DimProduct (Tea, Sugar) and FactSales with these sales: Coast-Tea 1200, Coast-Sugar 950, Rift-Tea 800, Nairobi-Sugar 2000, Rift-Sugar 1100. Report revenue per region, highest first: "Coast | 2150", "Nairobi | 2000", "Rift | 1900".',
+      checks: [
+        { label: 'Creates dimension tables', in: 'code', re: /CREATE\s+TABLE\s+Dim\w+[\s\S]*CREATE\s+TABLE\s+Dim\w+/i },
+        { label: 'Creates a fact table with foreign keys', in: 'code', re: /CREATE\s+TABLE\s+Fact\w+[\s\S]*REFERENCES/i },
+        { label: 'Aggregates with SUM and GROUP BY', in: 'code', re: /SUM\s*\([\s\S]*GROUP\s+BY/i },
+        { label: 'Reports revenue per region', in: 'output', re: /Coast \| 2150(\.0)?\nNairobi \| 2000(\.0)?\nRift \| 1900(\.0)?/ },
+      ],
+      hints: ['Give each dimension row an id, then insert facts using those ids.', 'ORDER BY revenue DESC'],
+      quiz: [
+        { q: 'In a star schema, which table holds the measurements such as sales amounts?', options: ['The fact table', 'A dimension table', 'The index', 'The view'], why: 'Facts are surrounded by descriptive dimensions.' },
+        { q: 'What does ETL stand for?', options: ['Extract, Transform, Load', 'Enter, Test, Launch', 'Export, Table, Link', 'Encrypt, Transfer, Lock'], why: 'ETL moves data into the warehouse.' },
+        { q: 'Finding that customers who buy bread also buy milk is an example of...', options: ['data mining', 'normalisation', 'hashing', 'authentication'], why: 'Data mining discovers patterns.' },
+      ],
+      oral: 'Explain how a supermarket chain could use a data warehouse to decide what to stock in each branch.',
+      solution: { sql: `CREATE TABLE DimRegion (region_id INTEGER PRIMARY KEY, region TEXT);
+CREATE TABLE DimProduct (product_id INTEGER PRIMARY KEY, product TEXT);
+CREATE TABLE FactSales (
+  region_id INTEGER REFERENCES DimRegion(region_id),
+  product_id INTEGER REFERENCES DimProduct(product_id),
+  amount REAL
+);
+INSERT INTO DimRegion VALUES (1, 'Coast'), (2, 'Rift'), (3, 'Nairobi');
+INSERT INTO DimProduct VALUES (1, 'Tea'), (2, 'Sugar');
+INSERT INTO FactSales VALUES (1, 1, 1200), (1, 2, 950), (2, 1, 800), (3, 2, 2000), (2, 2, 1100);
+SELECT r.region, SUM(f.amount) AS revenue
+FROM FactSales f JOIN DimRegion r ON r.region_id = f.region_id
+GROUP BY r.region
+ORDER BY revenue DESC;` },
     },
   ],
 };

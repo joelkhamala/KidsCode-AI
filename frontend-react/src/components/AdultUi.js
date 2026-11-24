@@ -9,6 +9,8 @@ export const COURSES = [
   { id: 2, title: 'Java Programming', icon: '☕', color: '#3b82f6', modules: [109, 110, 111], dot: 'bg-sky-500', chip: 'bg-sky-100 text-sky-800' },
   { id: 3, title: 'Python & Artificial Intelligence', icon: '🐍', color: '#a855f7', modules: [112, 113, 114], dot: 'bg-purple-500', chip: 'bg-purple-100 text-purple-800' },
   { id: 4, title: 'Database Management', icon: '🗄️', color: '#6366f1', modules: [115, 116, 117], dot: 'bg-indigo-500', chip: 'bg-indigo-100 text-indigo-800' },
+  { id: 5, title: 'Algorithms & Data Structures', icon: '🧮', color: '#0f766e', modules: [118, 119, 120], dot: 'bg-teal-600', chip: 'bg-teal-100 text-teal-800' },
+  { id: 6, title: 'Mathematics for Computing', icon: '🔢', color: '#7c3aed', modules: [121, 122, 123], dot: 'bg-violet-500', chip: 'bg-violet-100 text-violet-800' },
 ];
 
 /** Deprecated: use COURSES instead. Kept for backwards compatibility. */

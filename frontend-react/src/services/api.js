@@ -144,6 +144,7 @@ export const adultAPI = {
   register: (data) => adultHttp.post('/adult/register', data),
   login: (email, password) => adultHttp.post('/adult/login', { email, password }),
   me: () => adultHttp.get('/adult/me'),
+  overview: () => adultHttp.get('/adult/overview'),
   updateProfile: (data) => adultHttp.put('/adult/profile', data),
   changePassword: (currentPassword, newPassword) => adultHttp.put('/adult/password', { currentPassword, newPassword }),
   curriculum: () => adultHttp.get('/adult/curriculum'),

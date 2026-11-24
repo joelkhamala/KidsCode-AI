@@ -1,794 +1,816 @@
 'use strict';
 /**
- * Adult course - Python Programming & AI (modules 112-114).
- * Based on TVET CDACC Units:
- *   - ICT/OS/CS/CR/08/6/A "Understand Artificial Intelligence Concepts"
- *   - Programming with Python for AI and machine learning
+ * Course 3 - Python & Artificial Intelligence (modules 112-114).
+ * TVET CDACC Computer Science L6, ICT/CU/CS/CR/08/6/A "Artificial Intelligence":
+ *   LO1 AI fundamentals, LO2 problem-solving techniques (logic, inferencing, machine learning),
+ *   LO3 the Python programming environment (syntax, PEP 8, data types, control structures,
+ *       functions, OOP, NumPy, pandas, Matplotlib), LO4 AI programs in Python (K-Nearest
+ *       Neighbours and Naive Bayes - built from scratch so the mathematics is visible).
  *
- * Lesson format: see java.js
+ * Lesson format: see adultCourse/index.js. Checks with in: 'output' run the learner's program.
  */
 
 const M112 = {
-  id: 112, order: 12, icon: '🐍', color: '#3776ab', difficulty: 'beginner', hours: 28,
-  title: 'Python Basics and Data Types',
-  description: 'Python syntax, variables, data types (integers, floats, strings, lists, dictionaries), and basic operations.',
+  id: 112, order: 12, icon: '🐍', color: '#3776ab', difficulty: 'beginner',
+  title: 'Python Foundations',
+  description: 'The Python environment, PEP 8, data types, control structures and functions.',
   lessons: [
     {
-      title: 'Introduction to Python', minutes: 60,
-      content: `Python is a popular, beginner-friendly language used in web development, data science, artificial intelligence, and automation.
+      title: 'The Python Environment and Syntax', minutes: 45,
+      content: `Python is a popular language for automation, data analysis and artificial intelligence because its code reads almost like English.
 
-## Why Python?
-- Simple, readable syntax (looks like English)
-- Powerful: used by Google, NASA, Netflix
-- Great for AI and machine learning
-- Cross-platform: runs on Windows, Mac, Linux
+## Installing Python
+On your own computer: download the installer from python.org, tick {{Add python.exe to PATH}}, run it, then check with {{python --version}} in Command Prompt. In KidsCode, Python is ready on the server - just write and press Run.
 
-## Installation
-1. Download from python.org
-2. Run the installer (tick "Add to PATH" on Windows)
-3. Verify: open Command Prompt or Terminal, type {{python --version}}
+## The Zen of Python and PEP 8
+Type {{import this}} to read the Zen of Python ("Beautiful is better than ugly. Readability counts."). {{PEP 8}} is the official style guide:
+- 4 spaces per indent (never mix tabs and spaces)
+- {{snake_case}} names for variables and functions: {{total_sales}}
+- {{CapWords}} for classes: {{BankAccount}}
+- Spaces around operators: {{x = a + b}}
+- Lines no longer than 79 characters
 
-## Your First Program
+## Syntax basics
 ~~~
-print("Habari, Dunia!")
-print("2 + 3 =", 2 + 3)
+# A comment starts with #
+shop = "Duka la Mama"     # a variable: no type needed
+items = 3
+price = 120.5
+print("Welcome to", shop)
+print(f"{items} items cost {items * price} shillings")   # f-string
 ~~~
-
-Run it:
-~~~
-python hello.py
-~~~
-
-## Indentation
-Python uses indentation (spaces at the start of lines) to show code blocks. This is mandatory:
-~~~
-if 5 > 3:
-    print("True")    # indented 4 spaces
-else:
-    print("False")   # indented 4 spaces
-~~~
-
-## Comments
-~~~
-# This is a single-line comment
-"""
-This is a multi-line comment
-used for documentation
-"""
-~~~
-
-## Why is Python Good for AI?
-- Clear syntax helps focus on logic, not syntax
-- Rich libraries: NumPy, Pandas, Scikit-Learn, TensorFlow
-- Fast to prototype and test ideas`,
-      challenge: 'Write a Python program that prints your name and three things you want to learn.',
+- {{Indentation}} is part of the syntax: the lines inside an if or a loop must be indented
+- Variables are created by assigning to them; Python works out the type
+- {{print()}} writes to the screen; {{input()}} reads a line the user types`,
+      example: { python: `# Greeting a customer
+customer = "Achieng"
+balance = 1500
+print("Habari", customer)
+print(f"Your balance is KES {balance}")` },
+      challenge: 'Write a short receipt. Store a customer name, an item and a price of 250 in variables, add a comment, and print "Customer: <name>", "Item: <item>" and "Total: KES 250" using an f-string for the total.',
       checks: [
-        { label: 'Uses print()', in: 'js', re: /print\s*\(/ },
-        { label: 'Prints at least 3 lines', in: 'js', re: /print.*print.*print/s },
-        { label: 'Has a comment', in: 'js', re: /#/ },
+        { label: 'Has a comment', in: 'code', re: /^\s*#/m },
+        { label: 'Uses an f-string', in: 'code', re: /\bf["']/ },
+        { label: 'Prints the customer and item', in: 'output', re: /Customer:\s*\S+[\s\S]*Item:\s*\S+/ },
+        { label: 'Prints "Total: KES 250"', in: 'output', re: /Total:\s*KES\s*250\b/ },
       ],
-      hints: ['Each print() on a new line prints on a separate line.'],
+      hints: ['price = 250', 'print(f"Total: KES {price}")'],
       quiz: [
-        { q: 'What character indicates a comment in Python?', options: ['#', '//', '/*', '--'], why: '# starts a Python comment.' },
-        { q: 'Why is indentation important in Python?', options: ['It defines code blocks (if, loops, functions)', 'It makes code run faster', 'It is optional', 'It only affects readability'], why: 'Indentation is mandatory in Python for structure.' },
-        { q: 'What does print() do?', options: ['Prints text to the screen', 'Saves to a file', 'Checks if something is true', 'Declares a variable'], why: 'print() displays output.' },
+        { q: 'According to PEP 8, how many spaces should one indent level use?', options: ['4', '2', '8', 'One tab'], why: 'PEP 8 recommends 4 spaces per indentation level.' },
+        { q: 'Which name follows PEP 8 for a variable?', options: ['total_sales', 'TotalSales', 'totalSales', 'TOTAL-SALES'], why: 'Variables and functions use snake_case.' },
+        { q: 'What starts a comment in Python?', options: ['#', '//', '--', '/*'], why: 'Everything after # on a line is a comment.' },
       ],
-      oral: 'Explain why Python is a good choice for learning AI and machine learning.',
+      oral: 'Explain why indentation matters more in Python than in Java.',
+      solution: { python: `# A simple receipt
+name = "Wanjiku"
+item = "Maize flour"
+price = 250
+print(f"Customer: {name}")
+print(f"Item: {item}")
+print(f"Total: KES {price}")` },
     },
     {
-      title: 'Variables and Data Types', minutes: 90,
-      content: `Variables store data. Python automatically detects the data type.
+      title: 'Python Data Types', minutes: 55,
+      content: `Every value in Python has a type. Use {{type(x)}} to see it.
 
-## Naming Variables
-Like Java: start with a letter, use snake_case ({{first_name}}, {{age}}) or camelCase.
+## Numbers, text and truth
+- {{int}}: 42
+- {{float}}: 3.75
+- {{bool}}: True / False
+- {{str}}: "Nakuru" - text, with methods such as {{.upper()}}, {{.split()}}, {{len(s)}}
 
-## Primitive Data Types
+## Collections
 ~~~
-# Integer (whole numbers)
-age = 25
-year = 2024
-
-# Float (decimal numbers)
-height = 1.75
-price = 99.99
-
-# String (text)
-name = "Alice"
-message = 'Hello world'
-quote = """Line 1
-Line 2"""
-
-# Boolean (True/False)
-is_active = True
-has_license = False
+marks = [67, 82, 45, 90]            # list: ordered, can change
+marks.append(73)
+point = (36.8, -1.28)               # tuple: ordered, cannot change
+towns = {"Nairobi", "Kisumu", "Nairobi"}   # set: no duplicates -> 2 items
+student = {"name": "Kamau", "age": 19, "course": "ICT"}   # dict: key -> value
+print(student["name"])              # Kamau
+student["age"] = 20                 # update a value
 ~~~
 
-## Type Function
-Check the type:
-~~~
-print(type(age))        # <class 'int'>
-print(type(height))     # <class 'float'>
-print(type(name))       # <class 'str'>
-print(type(is_active))  # <class 'bool'>
-~~~
+## Useful built-in functions
+- {{len()}}, {{sum()}}, {{min()}}, {{max()}}, {{sorted()}}, {{round(x, 2)}}
+- {{int("5")}}, {{float("2.5")}}, {{str(10)}} convert between types
 
-## String Operations
-~~~
-greeting = "Hello"
-name = "Kenya"
-message = greeting + ", " + name     # concatenation
-print(message)                        # Hello, Kenya
-
-# Repetition
-print("Ha" * 3)                       # HaHaHa
-
-# String methods
-text = "python"
-print(text.upper())                   # PYTHON
-print(text.capitalize())              # Python
-print(text.replace("p", "P"))         # Python
-~~~
-
-## Type Conversion
-~~~
-age_str = "25"
-age_int = int(age_str)      # converts to integer
-
-price = 99.99
-price_str = str(price)      # converts to string
-~~~
-
-## List (Collection of Values)
-~~~
-numbers = [1, 2, 3, 4, 5]
-fruits = ["apple", "banana", "orange"]
-mixed = [1, "hello", 3.14, True]
-
-# Access by index (starts at 0)
-print(fruits[0])            # apple
-print(fruits[-1])           # orange (last item)
-
-# List methods
-fruits.append("grape")      # add to end
-fruits.insert(1, "mango")   # add at position 1
-fruits.remove("apple")      # remove by value
-length = len(fruits)        # 4
-~~~
-
-## Dictionary (Key-Value Pairs)
-~~~
-student = {
-  "name": "Alice",
-  "age": 20,
-  "gpa": 3.8
-}
-
-# Access by key
-print(student["name"])      # Alice
-
-# Add or update
-student["major"] = "Computer Science"
-student["age"] = 21
-
-# Check if key exists
-if "name" in student:
-  print(student["name"])
-~~~`,
-      challenge: 'Create a person dictionary with name, age, city, and email. Print each field.',
+## Choosing a collection
+- A list when order matters and items can repeat (daily sales)
+- A tuple for fixed groups (a GPS point)
+- A set for unique items or fast membership tests ({{"Kisumu" in towns}})
+- A dict to look values up by a key (a phone book)`,
+      example: { python: `prices = {"sugar": 165, "tea": 295, "milk": 65}
+print("Items:", len(prices))
+print("Most expensive:", max(prices, key=prices.get))
+cities = ["Nairobi", "Mombasa", "Nairobi", "Kisumu"]
+print("Unique cities:", sorted(set(cities)))` },
+      challenge: 'Create a dict student with keys name, age and town; a list marks = [70, 85, 64, 91]; and a set of the subjects ["Maths", "ICT", "Maths", "English"]. Print "Name: <name>", "Average: 77.5", "Highest: 91" and "Subjects: 3".',
       checks: [
-        { label: 'Creates a dictionary with {}', in: 'js', re: /\{.*[":]/s },
-        { label: 'Has at least 4 key-value pairs', in: 'js', re: /(["']?\w+["']?\s*[:=]\s*["']?\w+["']?).*\n.*(["']?\w+["']?\s*[:=]\s*["']?\w+["']?)/ },
-        { label: 'Accesses dictionary values', in: 'js', re: /\[\s*["']\w+["']\s*\]|\.get\s*\(/ },
+        { label: 'Uses a dictionary', in: 'code', re: /\{\s*["']name["']\s*:/ },
+        { label: 'Uses a set', in: 'code', re: /set\s*\(|\{\s*["'][A-Z]\w*["']\s*,/ },
+        { label: 'Prints the name, average and highest', in: 'output', re: /Name:\s*\S+[\s\S]*Average:\s*77\.5[\s\S]*Highest:\s*91/ },
+        { label: 'Prints the number of unique subjects', in: 'output', re: /Subjects:\s*3\b/ },
       ],
-      hints: ['Use student["name"] or student.get("name") to access values.'],
+      hints: ['sum(marks) / len(marks) gives the average.', 'len(set(subjects)) counts unique subjects.'],
       quiz: [
-        { q: 'What data type is 3.14?', options: ['float', 'int', 'string', 'number'], why: 'Decimal numbers are floats.' },
-        { q: 'Which data structure uses key-value pairs?', options: ['Dictionary', 'List', 'Tuple', 'Set'], why: 'Dictionaries map keys to values.' },
-        { q: 'What is the first index in a list?', options: ['0', '1', '-1', 'undefined'], why: 'Python indexing starts at 0.' },
+        { q: 'Which collection cannot be changed after it is created?', options: ['tuple', 'list', 'dict', 'set'], why: 'Tuples are immutable.' },
+        { q: 'What does len({"a", "b", "a"}) return?', options: ['2', '3', '1', 'An error'], why: 'A set keeps only unique items.' },
+        { q: 'How do you read the value for key "age" in dict d?', options: ['d["age"]', 'd.age', 'd(age)', 'd[age()]'], why: 'Square brackets with the key look up the value.' },
       ],
-      oral: 'Explain the difference between a list and a dictionary with examples.',
+      oral: 'Give a real example where you would use a list, a tuple, a set and a dictionary.',
+      solution: { python: `student = {"name": "Kamau", "age": 19, "town": "Nyeri"}
+marks = [70, 85, 64, 91]
+subjects = set(["Maths", "ICT", "Maths", "English"])
+print("Name:", student["name"])
+print("Average:", sum(marks) / len(marks))
+print("Highest:", max(marks))
+print("Subjects:", len(subjects))` },
     },
     {
-      title: 'Control Structures', minutes: 90,
-      content: `Control structures (if, for, while) direct program flow.
-
-## if-elif-else
+      title: 'Control Structures in Python', minutes: 50,
+      content: `## Selection
 ~~~
-score = 75
-if score >= 80:
-    print("Distinction")
-elif score >= 60:
-    print("Credit")
-elif score >= 40:
-    print("Pass")
+amount = 2500
+if amount <= 100:
+    fee = 0
+elif amount <= 1500:
+    fee = 15
 else:
-    print("Fail")
+    fee = 30
+print("Fee:", fee)
 ~~~
+Logical operators are the words {{and}}, {{or}}, {{not}}.
 
-## Comparison and Logical Operators
-{{==}}, {{!=}}, {{>}}, {{<}}, {{>=}}, {{<=}}
-{{and}}, {{or}}, {{not}}
+## Looping
+~~~
+for day in ["Mon", "Tue", "Wed"]:      # loop over a list
+    print(day)
 
-~~~
-age = 20
-has_id = True
-if age >= 18 and has_id:
-    print("Can vote")
-~~~
+for n in range(1, 6):                  # 1, 2, 3, 4, 5
+    print(n * n)
 
-## for Loop
-Iterate over a sequence:
+balance = 1000
+years = 0
+while balance < 2000:                  # repeat while a condition holds
+    balance *= 1.1
+    years += 1
 ~~~
-numbers = [1, 2, 3, 4, 5]
-for num in numbers:
-    print(num * 2)      # 2, 4, 6, 8, 10
+- {{range(start, stop, step)}} stops just before {{stop}}
+- {{break}} leaves the loop; {{continue}} skips to the next round
+- {{enumerate(items)}} gives the position and the item together
 
-# range() generates numbers
-for i in range(1, 6):   # 1, 2, 3, 4, 5
-    print(i)
-
-# Access index
-fruits = ["apple", "banana", "orange"]
-for index, fruit in enumerate(fruits):
-    print(index, fruit)  # 0 apple, 1 banana, 2 orange
-~~~
-
-## while Loop
-Repeat while condition is true:
-~~~
-count = 0
-while count < 3:
-    print("Hello")
-    count += 1
-~~~
-
-## Loop Control
-~~~
-for i in range(10):
-    if i == 3:
-        continue    # skip to next iteration
-    if i == 7:
-        break       # exit loop
-    print(i)        # prints 0, 1, 2, 4, 5, 6
-~~~
-
-## Nested Loops
-~~~
-for i in range(3):
-    for j in range(2):
-        print(i, j)
-# Outputs: (0,0), (0,1), (1,0), (1,1), (2,0), (2,1)
-~~~
-
-## List Comprehension
-Concise way to create lists:
-~~~
-squares = [x**2 for x in range(5)]   # [0, 1, 4, 9, 16]
-even = [x for x in range(10) if x % 2 == 0]   # [0, 2, 4, 6, 8]
-~~~`,
-      challenge: 'Write a program that prints all numbers from 1 to 20 that are divisible by 3.',
+## A classic exercise
+"Harambee": for 1 to 15 print the number, but print {{Hara}} for multiples of 3, {{Mbee}} for multiples of 5 and {{Harambee}} for multiples of both. Check the "both" case first!`,
+      example: { python: `scores = [85, 62, 40]
+for s in scores:
+    if s >= 70:
+        print(s, "Pass")
+    elif s >= 50:
+        print(s, "Referral")
+    else:
+        print(s, "Fail")` },
+      challenge: 'Print the numbers 1 to 15, but print "Hara" for multiples of 3, "Mbee" for multiples of 5 and "Harambee" for multiples of both. Then use a while loop to print "Years: 8" - the years KES 1000 takes to reach 2000 at 10% a year.',
       checks: [
-        { label: 'Uses a loop', in: 'js', re: /for.*in\s+range|while/ },
-        { label: 'Checks divisibility with %', in: 'js', re: /%\s*3/ },
-        { label: 'Prints matching numbers', in: 'js', re: /print/ },
+        { label: 'Uses a for loop with range', in: 'code', re: /for\s+\w+\s+in\s+range\s*\(/ },
+        { label: 'Uses a while loop', in: 'code', re: /^\s*while\s+.+:/m },
+        { label: 'Prints the right words', in: 'output', re: /^1\n2\nHara\n4\nMbee\nHara\n7\n8\nHara\nMbee\n11\nHara\n13\n14\nHarambee$/m },
+        { label: 'Prints the number of years', in: 'output', re: /Years:\s*8\b/ },
       ],
-      hints: ['Use % (modulo) to check if a number is divisible by 3: n % 3 == 0.'],
+      hints: ['Check n % 15 == 0 before n % 3 and n % 5.', 'Multiply the balance by 1.1 each year.'],
       quiz: [
-        { q: 'What does range(1, 6) produce?', options: ['[1, 2, 3, 4, 5]', '[1, 2, 3, 4, 5, 6]', '[0, 1, 2, 3, 4, 5]', '[1, 6]'], why: 'range(1, 6) produces 1 to 5 (end is exclusive).' },
-        { q: 'What does "and" do in a condition?', options: ['Both conditions must be true', 'At least one must be true', 'The first must be true', 'Neither must be true'], why: 'and requires all conditions to be true.' },
-        { q: 'What does continue do?', options: ['Skips to the next iteration', 'Exits the loop', 'Pauses the loop', 'Restarts the loop'], why: 'continue jumps to the next iteration.' },
+        { q: 'What does range(1, 5) produce?', options: ['1, 2, 3, 4', '1, 2, 3, 4, 5', '0, 1, 2, 3, 4', '5 numbers starting at 0'], why: 'range stops just before the stop value.' },
+        { q: 'Which keyword is Python\'s "else if"?', options: ['elif', 'elseif', 'else if', 'ifelse'], why: 'Python uses elif.' },
+        { q: 'Which word combines two conditions so both must be true?', options: ['and', '&&', 'both', 'plus'], why: 'Python uses the words and, or, not.' },
       ],
-      oral: 'Explain how you would use a for loop to sum the numbers 1 through 100.',
+      oral: 'Explain why the order of the checks matters in the Harambee exercise.',
+      solution: { python: `for n in range(1, 16):
+    if n % 15 == 0:
+        print("Harambee")
+    elif n % 3 == 0:
+        print("Hara")
+    elif n % 5 == 0:
+        print("Mbee")
+    else:
+        print(n)
+balance = 1000
+years = 0
+while balance < 2000:
+    balance *= 1.1
+    years += 1
+print("Years:", years)` },
+    },
+    {
+      title: 'Functions: Built-in, User-defined and Lambda', minutes: 55,
+      content: `A {{function}} is a named, reusable block of code.
+
+## Built-in functions
+Python includes {{print len sum min max sorted round abs int float str type range enumerate zip map filter}} and more.
+
+## User-defined functions
+~~~
+def add_vat(amount, rate=0.16):        # rate has a default value
+    """Return the amount including VAT."""   # a docstring
+    return round(amount * (1 + rate), 2)
+
+print(add_vat(1000))          # 1160.0
+print(add_vat(1000, 0.08))    # 1080.0
+print(add_vat(rate=0.1, amount=500))   # keyword arguments
+~~~
+- {{def}} defines a function; {{return}} sends a value back
+- A function without return gives {{None}}
+- Variables created inside a function are {{local}} to it
+
+## Lambda functions
+A {{lambda}} is a small, unnamed, one-expression function - handy for sorting and filtering:
+~~~
+square = lambda x: x * x
+print(square(6))                                  # 36
+
+products = [("tea", 295), ("milk", 65), ("sugar", 165)]
+cheapest_first = sorted(products, key=lambda p: p[1])
+expensive = list(filter(lambda p: p[1] > 100, products))
+prices_with_vat = list(map(lambda p: p[1] * 1.16, products))
+~~~`,
+      example: { python: `def greet(name, greeting="Habari"):
+    return f"{greeting}, {name}!"
+
+print(greet("Otieno"))
+print(greet("Amina", "Karibu"))
+double = lambda x: x * 2
+print(list(map(double, [1, 2, 3])))` },
+      challenge: 'Write a function average(numbers) that returns the mean of a list, and a function grade(score) that returns "Pass" for 70+ and "Fail" otherwise. Use a lambda to sort [("Kamau", 64), ("Akinyi", 88), ("Omar", 75)] by score, highest first. Print "Average: 75.67" (rounded to 2), then each name and grade in order: "Akinyi Pass", "Omar Pass", "Kamau Fail".',
+      checks: [
+        { label: 'Defines average() and grade()', in: 'code', re: /def\s+average\s*\([\s\S]*def\s+grade\s*\(|def\s+grade\s*\([\s\S]*def\s+average\s*\(/ },
+        { label: 'Uses a lambda', in: 'code', re: /lambda\s+\w+\s*:/ },
+        { label: 'Prints the average', in: 'output', re: /Average:\s*75\.67/ },
+        { label: 'Prints the sorted names with grades', in: 'output', re: /Akinyi Pass\s*\nOmar Pass\s*\nKamau Fail/ },
+      ],
+      hints: ['round(sum(numbers) / len(numbers), 2)', 'sorted(people, key=lambda p: p[1], reverse=True)'],
+      quiz: [
+        { q: 'What does a Python function return if it has no return statement?', options: ['None', '0', 'An empty string', 'False'], why: 'Functions return None by default.' },
+        { q: 'What is a lambda?', options: ['A small unnamed function with one expression', 'A loop', 'A built-in module', 'A type of list'], why: 'lambda x: x * 2 is an anonymous function.' },
+        { q: 'In def pay(rate=0.16), what is 0.16?', options: ['A default value for the parameter', 'The return value', 'A global variable', 'A required argument'], why: 'It is used when no value is passed.' },
+      ],
+      oral: 'Explain when you would use a lambda instead of a normal def function.',
+      solution: { python: `def average(numbers):
+    return round(sum(numbers) / len(numbers), 2)
+
+def grade(score):
+    return "Pass" if score >= 70 else "Fail"
+
+people = [("Kamau", 64), ("Akinyi", 88), ("Omar", 75)]
+print("Average:", average([p[1] for p in people]))
+for name, score in sorted(people, key=lambda p: p[1], reverse=True):
+    print(name, grade(score))` },
     },
   ],
 };
 
 const M113 = {
-  id: 113, order: 13, icon: '📊', color: '#3776ab', difficulty: 'intermediate', hours: 32,
-  title: 'Functions and Data Analysis',
-  description: 'Defining functions, using NumPy and Pandas for data processing and analysis.',
+  id: 113, order: 13, icon: '📊', color: '#3776ab', difficulty: 'intermediate',
+  title: 'Object-Oriented and Scientific Python',
+  description: 'Classes in Python, then NumPy, pandas and Matplotlib for working with data.',
   lessons: [
     {
-      title: 'Functions in Python', minutes: 75,
-      content: `Functions are reusable blocks of code.
+      title: 'Object-Oriented Python', minutes: 55,
+      content: `Python supports object-oriented programming with {{classes}}.
 
-## Defining Functions
 ~~~
-def greet(name):
-    print("Hello, " + name)
+class Matatu:
+    fare_increase = 0          # class variable: shared by every matatu
+    count = 0
 
-greet("Alice")
-greet("Bob")
-~~~
+    def __init__(self, route, seats, fare):   # constructor
+        self.route = route                     # instance variables
+        self.seats = seats
+        self.fare = fare
+        Matatu.count += 1
 
-## Return Values
-~~~
-def add(a, b):
-    return a + b
+    def full_trip_income(self):                # instance method
+        return self.seats * (self.fare + Matatu.fare_increase)
 
-result = add(5, 3)
-print(result)    # 8
-~~~
+    @classmethod
+    def raise_fares(cls, amount):              # class method: works on the class
+        cls.fare_increase += amount
 
-## Default Parameters
+a = Matatu("Town - Rongai", 14, 100)
+b = Matatu("Thika - Juja", 33, 80)
+Matatu.raise_fares(20)
+print(a.full_trip_income())   # 14 * 120 = 1680
+print(Matatu.count)           # 2
 ~~~
-def introduce(name, age=18):
-    print(name + " is " + str(age) + " years old")
+- {{self}} is the current object (like {{this}} in Java)
+- {{__init__}} runs when you create an object
+- A {{class variable}} belongs to the class; an {{instance variable}} to one object
+- {{@classmethod}} receives the class ({{cls}}); {{@staticmethod}} receives neither
 
-introduce("Alice")          # age defaults to 18
-introduce("Bob", 25)        # age is 25
+## Inheritance
 ~~~
-
-## Multiple Return Values
-~~~
-def divide(a, b):
-    if b == 0:
-        return None
-    quotient = a // b
-    remainder = a % b
-    return quotient, remainder
-
-q, r = divide(17, 5)
-print(q, r)    # 3 1
-~~~
-
-## Docstrings (Documentation)
-~~~
-def calculate_grade(score):
-    """
-    Convert a score to a grade.
-    Args: score (int) - 0 to 100
-    Returns: grade (str) - "A", "B", "C", etc.
-    """
-    if score >= 80:
-        return "A"
-    elif score >= 60:
-        return "B"
-    else:
-        return "C"
-~~~
-
-## Scope
-Variables inside a function are local (not accessible outside):
-~~~
-def test():
-    local_var = 10
-    return local_var
-
-x = test()
-# print(local_var)  # Error: undefined
-~~~
-
-## *args and **kwargs
-Accept any number of arguments:
-~~~
-def sum_all(*numbers):
-    total = 0
-    for num in numbers:
-        total += num
-    return total
-
-print(sum_all(1, 2, 3))        # 6
-print(sum_all(10, 20, 30, 40)) # 100
+class ElectricMatatu(Matatu):
+    def full_trip_income(self):
+        return super().full_trip_income() + 200   # green bonus
 ~~~`,
-      challenge: 'Write a function that takes a list of numbers and returns the average.',
+      example: { python: `class Product:
+    vat = 0.16
+    def __init__(self, name, price):
+        self.name = name
+        self.price = price
+    def price_with_vat(self):
+        return round(self.price * (1 + Product.vat), 2)
+
+p = Product("Jiko", 950)
+print(p.name, p.price_with_vat())` },
+      challenge: 'Create a class Account with a class variable interest_rate = 0.05, an __init__(self, owner, balance), a method add_interest() that adds a year\'s interest, and a classmethod set_rate(cls, rate). Create an account for "Njeri" with 10000, set the rate to 0.1, add interest, and print "Njeri: 11000.0".',
       checks: [
-        { label: 'Defines a function with def', in: 'js', re: /def\s+\w+\s*\(/ },
-        { label: 'Takes a list parameter', in: 'js', re: /def.*\(.*\)/ },
-        { label: 'Uses sum() or loop to add', in: 'js', re: /sum\s*\(|for.*in.*:[\s\S]*\+=/ },
-        { label: 'Returns the average', in: 'js', re: /return.*\/|return.*len/ },
+        { label: 'Defines class Account with __init__', in: 'code', re: /class\s+Account\b[\s\S]*def\s+__init__\s*\(\s*self/ },
+        { label: 'Has a class variable interest_rate', in: 'code', re: /^\s{4}interest_rate\s*=/m },
+        { label: 'Has a @classmethod', in: 'code', re: /@classmethod\s*\n\s*def\s+\w+\s*\(\s*cls/ },
+        { label: 'Prints the new balance', in: 'output', re: /Njeri:\s*11000\.0\b/ },
       ],
-      hints: ['sum(list) adds all items. len(list) counts items. Average = sum / count.'],
+      hints: ['In set_rate: cls.interest_rate = rate', 'In add_interest: self.balance += self.balance * Account.interest_rate'],
       quiz: [
-        { q: 'What keyword defines a function?', options: ['def', 'function', 'func', 'define'], why: 'def starts a function definition.' },
-        { q: 'What must follow a function definition line?', options: ['Indented code', 'Curly braces', 'A semicolon', 'return'], why: 'Function bodies are indented.' },
-        { q: 'What scope does a local variable have?', options: ['Only inside the function', 'The whole program', 'The whole file', 'Global'], why: 'Local variables exist only in their function.' },
+        { q: 'What does self refer to in a method?', options: ['The object the method was called on', 'The class', 'The parent class', 'The module'], why: 'self is the current instance.' },
+        { q: 'Which method runs when an object is created?', options: ['__init__', '__main__', 'create', 'new'], why: '__init__ is the constructor.' },
+        { q: 'What does a @classmethod receive as its first argument?', options: ['The class (cls)', 'The object (self)', 'Nothing', 'The parent class'], why: 'Class methods work on the class itself.' },
       ],
-      oral: 'Explain how to call your average function with [80, 90, 85, 95].',
+      oral: 'Explain the difference between a class variable and an instance variable with an example.',
+      solution: { python: `class Account:
+    interest_rate = 0.05
+
+    def __init__(self, owner, balance):
+        self.owner = owner
+        self.balance = balance
+
+    def add_interest(self):
+        self.balance += self.balance * Account.interest_rate
+
+    @classmethod
+    def set_rate(cls, rate):
+        cls.interest_rate = rate
+
+acc = Account("Njeri", 10000)
+Account.set_rate(0.1)
+acc.add_interest()
+print(f"{acc.owner}: {acc.balance}")` },
     },
     {
-      title: 'NumPy and Data Processing', minutes: 90,
-      content: `NumPy is a library for numerical computing and working with arrays.
+      title: 'NumPy: Fast Numerical Arrays', minutes: 55,
+      content: `{{NumPy}} is the core scientific module in Python. Its {{ndarray}} holds numbers of one type and does maths on the whole array at once ({{vectorisation}}) - far faster than loops.
 
-## Installation
-{{pip install numpy}}
-
-## Creating Arrays
 ~~~
 import numpy as np
 
-# From a list
-arr = np.array([1, 2, 3, 4, 5])
-
-# Generate sequences
-zeros = np.zeros(5)              # [0. 0. 0. 0. 0.]
-ones = np.ones(3)               # [1. 1. 1.]
-arange = np.arange(0, 10, 2)    # [0, 2, 4, 6, 8]
-linspace = np.linspace(0, 1, 5) # [0. 0.25 0.5 0.75 1.]
+rainfall = np.array([12.5, 0.0, 33.2, 8.1, 0.0, 21.7, 5.4])   # mm per day
+print(rainfall.sum())        # total
+print(rainfall.mean())       # average
+print(rainfall.max(), rainfall.argmax())   # wettest day and its index
+print(rainfall[rainfall > 10])             # boolean filtering
+print(rainfall * 0.0394)                   # every value converted to inches
 ~~~
 
-## Array Operations
-~~~
-arr = np.array([1, 2, 3, 4, 5])
+## Creating arrays
+- {{np.array([1, 2, 3])}} from a list
+- {{np.zeros(5)}}, {{np.ones((2, 3))}}, {{np.arange(0, 10, 2)}}, {{np.linspace(0, 1, 5)}}
 
-# Element-wise operations (apply to each element)
-print(arr * 2)         # [2 4 6 8 10]
-print(arr + 10)        # [11 12 13 14 15]
-print(np.sqrt(arr))    # [1. 1.41... 1.73... 2. 2.23...]
-
-# Aggregations (combine elements)
-print(np.sum(arr))     # 15
-print(np.mean(arr))    # 3.0
-print(np.max(arr))     # 5
-print(np.min(arr))     # 1
-print(np.std(arr))     # standard deviation
+## Shape and statistics
 ~~~
-
-## 2D Arrays (Matrices)
+sales = np.array([[120, 90, 150],
+                  [80, 110, 95]])     # 2 shops x 3 days
+print(sales.shape)          # (2, 3)
+print(sales.sum(axis=1))    # total per shop: [360 285]
+print(sales.mean(axis=0))   # average per day
+print(np.std(sales))        # standard deviation
 ~~~
-matrix = np.array([
-  [1, 2, 3],
-  [4, 5, 6],
-  [7, 8, 9]
-])
-
-print(matrix[0, 1])    # 2 (row 0, col 1)
-print(matrix[1])       # [4 5 6] (row 1)
-print(matrix[:, 1])    # [2 5 8] (column 1)
-~~~
-
-## Indexing and Slicing
-~~~
-arr = np.arange(10)    # [0 1 2 3 4 5 6 7 8 9]
-print(arr[2:5])        # [2 3 4]
-print(arr[::2])        # [0 2 4 6 8] (every 2nd element)
-print(arr[::-1])       # [9 8 7 6 5 4 3 2 1 0] (reversed)
-~~~
-
-## Boolean Indexing (Filtering)
-~~~
-arr = np.array([1, 5, 3, 8, 2, 9, 4])
-mask = arr > 4
-print(mask)            # [False True False True False True False]
-print(arr[mask])       # [5 8 9]
-~~~
-
-## Random Numbers (useful for ML)
-~~~
-random_arr = np.random.rand(5)           # 5 random floats [0, 1)
-random_int = np.random.randint(1, 7, 10) # 10 random ints [1, 7)
-~~~`,
-      challenge: 'Create a NumPy array [10, 20, 30, 40, 50], calculate mean and standard deviation.',
+Use {{round(x, 2)}} or {{np.round(arr, 2)}} to tidy decimals.`,
+      example: { python: `import numpy as np
+temps = np.array([24, 26, 23, 28, 30, 27, 25])
+print("Week average:", round(temps.mean(), 1))
+print("Hot days:", temps[temps >= 27])
+print("In Fahrenheit:", temps * 9 / 5 + 32)` },
+      challenge: 'Using NumPy, create the array of daily sales [1200, 950, 1800, 1300, 2100]. Print "Total: 7350", "Mean: 1470.0", "Std: 419.05" (rounded to 2 places) and "Above mean: [1800 2100]" using boolean filtering.',
       checks: [
-        { label: 'Imports numpy', in: 'js', re: /import\s+numpy|from\s+numpy/ },
-        { label: 'Creates an array', in: 'js', re: /np\.array/ },
-        { label: 'Uses np.mean()', in: 'js', re: /np\.mean|\.mean\(\)/ },
-        { label: 'Uses np.std()', in: 'js', re: /np\.std|\.std\(\)/ },
+        { label: 'Imports NumPy', in: 'code', re: /import\s+numpy\s+as\s+np|from\s+numpy\s+import/ },
+        { label: 'Creates an array with np.array', in: 'code', re: /np\.array\s*\(/ },
+        { label: 'Prints the total, mean and standard deviation', in: 'output', re: /Total:\s*7350[\s\S]*Mean:\s*1470\.0[\s\S]*Std:\s*419\.05/ },
+        { label: 'Prints the days above the mean', in: 'output', re: /Above mean:\s*\[1800\s+2100\]/ },
       ],
-      hints: ['Import with {{import numpy as np}}. Then use {{np.mean()}} and {{np.std()}}.'],
+      hints: ['sales[sales > sales.mean()] filters with a condition.', 'round(float(sales.std()), 2)'],
       quiz: [
-        { q: 'What is NumPy used for?', options: ['Numerical computing with arrays', 'Web development', 'Database design', 'Graphics'], why: 'NumPy specialises in numerical array operations.' },
-        { q: 'Which function computes the average of an array?', options: ['np.mean()', 'np.average()', 'np.sum()', 'All of the above'], why: 'np.mean() calculates the average.' },
-        { q: 'How do you create an array of 5 zeros?', options: ['np.zeros(5)', 'np.array(0, 5)', 'np.zero(5)', 'np.empty(5)'], why: 'np.zeros(5) creates [0 0 0 0 0].' },
+        { q: 'Why is NumPy faster than a Python loop for maths on many numbers?', options: ['It works on the whole array at once in compiled code', 'It uses fewer variables', 'It skips some numbers', 'It runs on the GPU only'], why: 'Vectorised operations run in optimised C code.' },
+        { q: 'What does arr.shape return for a 2 x 3 array?', options: ['(2, 3)', '6', '[2, 3]', '(3, 2)'], why: 'shape is a tuple of (rows, columns).' },
+        { q: 'What does arr[arr > 10] do?', options: ['Keeps only the values greater than 10', 'Sets values above 10 to True', 'Counts values above 10', 'Removes the first 10 values'], why: 'A boolean mask filters the array.' },
       ],
-      oral: 'Explain what standard deviation tells you about a dataset.',
+      oral: 'Explain vectorisation and why it matters for data analysis and AI.',
+      solution: { python: `import numpy as np
+sales = np.array([1200, 950, 1800, 1300, 2100])
+print("Total:", sales.sum())
+print("Mean:", sales.mean())
+print("Std:", round(float(sales.std()), 2))
+print("Above mean:", sales[sales > sales.mean()])` },
     },
     {
-      title: 'Pandas for Data Analysis', minutes: 90,
-      content: `Pandas is a library for data manipulation and analysis. It works with structured data (like spreadsheets).
+      title: 'pandas: Data Analysis with DataFrames', minutes: 60,
+      content: `{{pandas}} organises data in tables called {{DataFrames}} - like a spreadsheet you control with code.
 
-## Installation
-{{pip install pandas}}
-
-## Series (1D Data)
 ~~~
 import pandas as pd
 
-# From a list
-sales = pd.Series([100, 150, 200, 175, 225])
-print(sales)
-# 0    100
-# 1    150
-# ...
-
-# With custom index (labels)
-sales = pd.Series(
-  [100, 150, 200],
-  index=['Jan', 'Feb', 'Mar']
-)
-print(sales['Feb'])   # 150
-~~~
-
-## DataFrame (2D Table)
-~~~
 data = {
-  'name': ['Alice', 'Bob', 'Charlie'],
-  'age': [25, 30, 35],
-  'salary': [50000, 60000, 70000]
+    "student": ["Akinyi", "Kamau", "Wanjiru", "Omar", "Chebet"],
+    "county":  ["Kisumu", "Nyeri", "Nairobi", "Mombasa", "Kericho"],
+    "score":   [88, 64, 75, 91, 58],
 }
 df = pd.DataFrame(data)
+print(df.head())                    # first rows
+print(df["score"].mean())           # one column
+print(df[df["score"] >= 70])        # filter rows
+print(df.sort_values("score", ascending=False))
+df["passed"] = df["score"] >= 70    # new column
+print(df.describe())                # count, mean, std, min, max ...
+~~~
 
+## Grouping
+~~~
+sales = pd.DataFrame({
+    "region": ["Coast", "Rift", "Coast", "Nairobi", "Rift"],
+    "amount": [1200, 800, 950, 2000, 1100],
+})
+print(sales.groupby("region")["amount"].sum())
+~~~
+
+## Useful methods
+- {{df.shape}}, {{df.columns}}, {{df.info()}}
+- {{df.loc[row, column]}} by label, {{df.iloc[0]}} by position
+- {{pd.read_csv("file.csv")}} loads real data files
+- {{df.isna().sum()}} finds missing values; {{df.fillna(0)}} replaces them`,
+      example: { python: `import pandas as pd
+df = pd.DataFrame({"item": ["tea", "sugar", "milk"], "price": [295, 165, 65]})
+df["with_vat"] = (df["price"] * 1.16).round(2)
 print(df)
-# Column access
-print(df['name'])
-# print(df.name)  # alternative
-
-# Row access
-print(df.loc[0])    # first row
-print(df.iloc[0])   # by position
-
-# Shape
-print(df.shape)     # (3, 3) = 3 rows, 3 columns
-~~~
-
-## Basic Statistics
-~~~
-df = pd.DataFrame({
-  'product': ['A', 'B', 'C'],
-  'sales': [1000, 1500, 2000]
-})
-
-print(df['sales'].sum())      # total
-print(df['sales'].mean())     # average
-print(df['sales'].max())      # maximum
-print(df['sales'].describe()) # summary stats
-~~~
-
-## Filtering Data
-~~~
-df = pd.DataFrame({
-  'name': ['Alice', 'Bob', 'Charlie'],
-  'age': [25, 30, 35]
-})
-
-# Filter rows where age > 25
-over_25 = df[df['age'] > 25]
-print(over_25)
-# Shows Bob and Charlie
-~~~
-
-## Reading and Writing Files
-~~~
-# Read CSV
-df = pd.read_csv('data.csv')
-
-# Write to CSV
-df.to_csv('output.csv', index=False)
-
-# Read Excel
-df = pd.read_excel('data.xlsx')
-~~~`,
-      challenge: 'Create a DataFrame with student names and scores. Calculate the average score.',
+print("Cheapest:", df.loc[df["price"].idxmin(), "item"])` },
+      challenge: 'Create a DataFrame of five students with names and scores 88, 64, 75, 91 and 58. Print "Average: 75.2", "Top: <name of the 91 student>" and "Passed: 3" (scores of 70 or more). Then group the sales of regions Coast 1200, Rift 800, Coast 950 and print the total for Coast as "Coast: 2150".',
       checks: [
-        { label: 'Imports pandas', in: 'js', re: /import\s+pandas|from\s+pandas/ },
-        { label: 'Creates a DataFrame', in: 'js', re: /pd\.DataFrame|DataFrame\s*\(/ },
-        { label: 'Accesses a column', in: 'js', re: /\[\s*['"][^'"]+["']\s*\]|\.loc|\.iloc/ },
-        { label: 'Calculates mean', in: 'js', re: /\.mean\s*\(\)|np\.mean|\.average/ },
+        { label: 'Imports pandas', in: 'code', re: /import\s+pandas\s+as\s+pd|from\s+pandas\s+import/ },
+        { label: 'Creates a DataFrame', in: 'code', re: /DataFrame\s*\(/ },
+        { label: 'Uses groupby', in: 'code', re: /\.groupby\s*\(/ },
+        { label: 'Prints the average, top student and pass count', in: 'output', re: /Average:\s*75\.2[\s\S]*Top:\s*\w+[\s\S]*Passed:\s*3\b/ },
+        { label: 'Prints the Coast total', in: 'output', re: /Coast:\s*2150\b/ },
       ],
-      hints: ['df = pd.DataFrame({...}) to create. df["column"].mean() to average.'],
+      hints: ['df.loc[df["score"].idxmax(), "name"] gives the top name.', 'totals = sales.groupby("region")["amount"].sum(); totals["Coast"]'],
       quiz: [
-        { q: 'What is a DataFrame?', options: ['A 2D table (like spreadsheet)', 'A single column', 'A list', 'A dictionary'], why: 'DataFrames are 2D structures with rows and columns.' },
-        { q: 'How do you read a CSV file in Pandas?', options: ['pd.read_csv()', 'pd.open_csv()', 'pd.import_csv()', 'pd.load_csv()'], why: 'pd.read_csv() loads CSV data.' },
-        { q: 'What does df.shape tell you?', options: ['Number of rows and columns', 'File size', 'Data types', 'Column names'], why: 'shape returns (rows, columns).' },
+        { q: 'What is a pandas DataFrame?', options: ['A table of rows and columns', 'A single list of numbers', 'A chart', 'A database server'], why: 'A DataFrame is a two-dimensional labelled table.' },
+        { q: 'What does df[df["score"] >= 70] return?', options: ['Only the rows with a score of 70 or more', 'True or False', 'The score column', 'The number of passes'], why: 'A condition inside [] filters rows.' },
+        { q: 'Which method summarises count, mean, std, min and max?', options: ['describe()', 'summary()', 'info()', 'stats()'], why: 'describe() gives descriptive statistics.' },
       ],
-      oral: 'Explain how to filter a dataset to show only students with scores above 70.',
+      oral: 'Describe how a county government could use pandas to analyse data from its health centres.',
+      solution: { python: `import pandas as pd
+df = pd.DataFrame({
+    "name": ["Akinyi", "Kamau", "Wanjiru", "Omar", "Chebet"],
+    "score": [88, 64, 75, 91, 58],
+})
+print("Average:", df["score"].mean())
+print("Top:", df.loc[df["score"].idxmax(), "name"])
+print("Passed:", int((df["score"] >= 70).sum()))
+sales = pd.DataFrame({"region": ["Coast", "Rift", "Coast"], "amount": [1200, 800, 950]})
+totals = sales.groupby("region")["amount"].sum()
+print("Coast:", totals["Coast"])` },
+    },
+    {
+      title: 'Matplotlib: Visualising Data', minutes: 45,
+      content: `{{Matplotlib}} draws charts from data. A chart often shows a pattern faster than a table.
+
+~~~
+import matplotlib.pyplot as plt
+
+months = ["Jan", "Feb", "Mar", "Apr"]
+rain = [65, 48, 120, 210]
+
+fig, ax = plt.subplots()             # a figure with one set of axes
+ax.plot(months, rain, marker="o")    # line chart
+ax.set_title("Nairobi rainfall (mm)")
+ax.set_xlabel("Month")
+ax.set_ylabel("Rainfall")
+fig.savefig("rainfall.png")          # save the picture
+~~~
+
+## Chart types
+- {{ax.plot}}: line chart - trends over time
+- {{ax.bar}}: bar chart - compare categories
+- {{ax.scatter}}: scatter plot - relationship between two numbers (used a lot in machine learning)
+- {{ax.hist}}: histogram - how values are spread
+- {{ax.pie}}: pie chart - parts of a whole
+
+## Good charts
+- Always give a title and axis labels with units
+- Start bar charts at zero
+- Do not use more colours than you need
+
+In KidsCode your program runs on a server without a screen, so save charts with {{fig.savefig()}} and check them with code, for example {{ax.get_title()}} or {{len(ax.patches)}} (the number of bars).`,
+      example: { python: `import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+ax.scatter([1, 2, 3, 4], [10, 19, 31, 38])
+ax.set_title("Advertising vs sales")
+fig.savefig("scatter.png")
+print("Points plotted:", len(ax.collections[0].get_offsets()))` },
+      challenge: 'Draw a bar chart of sales for Coast 2150, Rift 1900 and Nairobi 2000 with the title "Sales by region" and a y-axis label "KES". Save it as sales.png and print "Title: Sales by region" and "Bars: 3" using ax.get_title() and len(ax.patches).',
+      checks: [
+        { label: 'Imports matplotlib.pyplot', in: 'code', re: /import\s+matplotlib\.pyplot\s+as\s+plt/ },
+        { label: 'Draws a bar chart with a y label', in: 'code', re: /\.bar\s*\([\s\S]*set_ylabel\s*\(|set_ylabel\s*\([\s\S]*\.bar\s*\(/ },
+        { label: 'Saves the figure', in: 'code', re: /savefig\s*\(/ },
+        { label: 'Prints the title and number of bars', in: 'output', re: /Title:\s*Sales by region[\s\S]*Bars:\s*3\b/ },
+      ],
+      hints: ['fig, ax = plt.subplots(); ax.bar(regions, amounts)', 'print("Bars:", len(ax.patches))'],
+      quiz: [
+        { q: 'Which chart best shows a trend over time?', options: ['Line chart', 'Pie chart', 'Histogram', 'Scatter plot'], why: 'Line charts connect values in order.' },
+        { q: 'Which chart shows the relationship between two numeric variables?', options: ['Scatter plot', 'Pie chart', 'Bar chart', 'Table'], why: 'Each point is one pair of values.' },
+        { q: 'How do you save a Matplotlib figure to a file?', options: ['fig.savefig("chart.png")', 'plt.write("chart.png")', 'fig.export()', 'ax.save()'], why: 'savefig writes the figure as an image.' },
+      ],
+      oral: 'Explain which chart you would use to show monthly M-Pesa transactions, and why.',
+      solution: { python: `import matplotlib.pyplot as plt
+regions = ["Coast", "Rift", "Nairobi"]
+amounts = [2150, 1900, 2000]
+fig, ax = plt.subplots()
+ax.bar(regions, amounts)
+ax.set_title("Sales by region")
+ax.set_ylabel("KES")
+fig.savefig("sales.png")
+print("Title:", ax.get_title())
+print("Bars:", len(ax.patches))` },
     },
   ],
 };
 
 const M114 = {
-  id: 114, order: 14, icon: '🤖', color: '#3776ab', difficulty: 'advanced', hours: 36,
-  title: 'Machine Learning with Python',
-  description: 'Introduction to machine learning, algorithms (K-Nearest Neighbours, Naïve Bayes), and building predictive models.',
+  id: 114, order: 14, icon: '🤖', color: '#3776ab', difficulty: 'advanced',
+  title: 'Artificial Intelligence with Python',
+  description: 'What AI is, logic and inference, machine learning, K-Nearest Neighbours and Naive Bayes.',
   lessons: [
     {
-      title: 'Machine Learning Fundamentals', minutes: 90,
-      content: `Machine Learning teaches computers to learn from data and make predictions.
+      title: 'Foundations and Applications of AI', minutes: 50,
+      content: `{{Artificial Intelligence (AI)}} is the study of building machines that perform tasks that normally need human intelligence: reasoning, learning, understanding language and recognising images.
 
-## Three Types of Machine Learning
-1. {{Supervised Learning}}: learn from labeled examples (input + correct output)
-   - Example: predicting house price from features (size, bedrooms, etc.)
-   - Used for: classification (category prediction), regression (number prediction)
+## A short history
+- 1950: Alan Turing proposes the "imitation game" (Turing test)
+- 1956: the term AI is coined at the Dartmouth workshop
+- 1970s-80s: {{expert systems}} that encode experts' rules
+- 2010s: {{deep learning}} with large data and fast GPUs
+- Today: large language models, chat assistants, self-driving research
 
-2. {{Unsupervised Learning}}: find patterns in data without labels
-   - Example: grouping customers by buying behaviour
-   - Used for: clustering, dimensionality reduction
+## Foundations - AI borrows from
+{{Mathematics}} (logic, probability), {{economics}} and {{decision theory}} (choosing the best action), {{neurology}} (how neurons work), {{psychology}} (how people think), {{engineering}} (building the machines) and {{computer networking}} (sharing data and computing power).
 
-3. {{Reinforcement Learning}}: learn by trial and error (reward/penalty)
-   - Example: teaching a robot to walk
-   - Used for: game AI, robotics
+## Applications
+- {{Expert systems}}: rules from experts (crop disease advice)
+- {{Machine learning}}: learning patterns from data (M-Pesa fraud detection, credit scoring)
+- {{Natural language processing}}: understanding text and speech (Swahili chatbots, translation)
+- {{Computer vision}}: understanding images (counting livestock from drone photos)
+- {{Gaming}} and {{robotics}}
+- {{Artificial neural networks}}: layers of simple "neurons" that learn
+- {{Intelligent agents}}: perceive their environment and act to reach a goal
 
-## Key Concepts
-- {{Training data}}: data used to teach the model
-- {{Test data}}: data used to evaluate the model (not seen during training)
-- {{Features}}: input variables (age, income, education level)
-- {{Target}}: output variable (approved for loan? yes/no)
-- {{Accuracy}}: % of correct predictions
-- {{Overfitting}}: model memorizes training data instead of learning patterns
-
-## Workflow
-1. Collect data (clean, remove errors)
-2. Prepare data (split into training/test)
-3. Choose algorithm
-4. Train model (learn from training data)
-5. Test model (check accuracy on test data)
-6. Use model to predict new data
-
-## Example: Predicting Loan Approval
-Features: age, income, credit_score
-Target: approved (1) or denied (0)
-
-Train on 100 past applications → model learns patterns → predict for new applicants`,
-      challenge: 'List three real-world problems where machine learning could help (one for each type).',
+## A tiny expert system
+An expert system stores {{if-then rules}} and an {{inference engine}} applies them to facts:
+~~~
+facts = {"yellow_leaves": True, "dry_soil": True}
+if facts["yellow_leaves"] and facts["dry_soil"]:
+    print("Advice: water the crop")
+~~~`,
+      example: { python: `rules = [
+    ({"fever", "chills"}, "Possible malaria - visit a clinic for a test"),
+    ({"cough", "fever"}, "Possible flu - rest and drink fluids"),
+]
+symptoms = {"fever", "chills"}
+for conditions, advice in rules:
+    if conditions <= symptoms:
+        print(advice)` },
+      challenge: 'Build a small crop expert system. Store at least three rules as (set of symptoms, advice) pairs, including ({"yellow_leaves", "dry_soil"}, "Water the crop") and ({"holes_in_leaves"}, "Check for fall armyworm"). For the facts {"yellow_leaves", "dry_soil", "holes_in_leaves"} print every matching advice, then "Rules fired: 2".',
       checks: [
-        { label: 'Mentions supervised learning', in: 'js', re: /supervised|labeled|classification|regression/i },
-        { label: 'Mentions unsupervised learning', in: 'js', re: /unsupervised|unlabeled|clustering|pattern/i },
-        { label: 'Mentions reinforcement learning', in: 'js', re: /reinforcement|trial|error|reward|robot/i },
+        { label: 'Stores rules in a list', in: 'code', re: /\[\s*\(\s*\{/ },
+        { label: 'Checks each rule against the facts', in: 'code', re: /for\s+.+\s+in\s+\w+\s*:[\s\S]*if\s+/ },
+        { label: 'Prints both matching pieces of advice', in: 'output', re: /Water the crop[\s\S]*fall armyworm|fall armyworm[\s\S]*Water the crop/ },
+        { label: 'Prints the number of rules fired', in: 'output', re: /Rules fired:\s*2\b/ },
       ],
-      hints: ['Think of prediction (supervised), grouping (unsupervised), and learning by reward (reinforcement).'],
+      hints: ['conditions <= facts is True when every condition is in the facts (subset).', 'Count how many rules matched in a variable.'],
       quiz: [
-        { q: 'What is supervised learning?', options: ['Learning from labeled data', 'Learning without labels', 'Learning by reward', 'Learning from images only'], why: 'Supervised learning uses labeled examples.' },
-        { q: 'Which type groups similar data points?', options: ['Unsupervised (clustering)', 'Supervised', 'Reinforcement', 'Regression'], why: 'Clustering is an unsupervised technique.' },
-        { q: 'Why split data into training and test sets?', options: ['To check if model generalizes to new data', 'To make training faster', 'To use more data', 'Standard practice'], why: 'Test data measures real-world performance.' },
+        { q: 'What does an expert system use to make decisions?', options: ['If-then rules from human experts', 'Random guesses', 'Only images', 'Spreadsheets'], why: 'Expert systems encode expert knowledge as rules.' },
+        { q: 'Who proposed a test for machine intelligence in 1950?', options: ['Alan Turing', 'Bill Gates', 'Ada Lovelace', 'Tim Berners-Lee'], why: 'The Turing test.' },
+        { q: 'Which AI field deals with understanding human language?', options: ['Natural language processing', 'Computer vision', 'Robotics', 'Expert systems'], why: 'NLP covers text and speech.' },
       ],
-      oral: 'Explain supervised and unsupervised learning with two different examples.',
+      oral: 'Describe three ways AI is already used in Kenya and which AI field each belongs to.',
+      solution: { python: `rules = [
+    ({"yellow_leaves", "dry_soil"}, "Water the crop"),
+    ({"holes_in_leaves"}, "Check for fall armyworm"),
+    ({"wilting", "wet_soil"}, "Improve drainage"),
+]
+facts = {"yellow_leaves", "dry_soil", "holes_in_leaves"}
+fired = 0
+for conditions, advice in rules:
+    if conditions <= facts:
+        print(advice)
+        fired += 1
+print("Rules fired:", fired)` },
     },
     {
-      title: 'K-Nearest Neighbours (KNN)', minutes: 90,
-      content: `K-Nearest Neighbours is a simple, effective supervised learning algorithm.
+      title: 'Logic, Inference and Reasoning', minutes: 55,
+      content: `AI systems reason with {{logic}}.
 
-## How KNN Works
-Predict the class of a new point by looking at the {{K}} closest training examples:
-1. Calculate distance from new point to all training points
-2. Find the K nearest points
-3. Take a vote: the most common class among K neighbours wins
+## Logical operators
+- {{AND}}: true only if both are true
+- {{OR}}: true if at least one is true
+- {{NOT}}: flips true and false
 
-{{Example: K=3}}
-New point (income=5000, credit_score=600)
-- Nearest 3 neighbours: 2 approve, 1 reject
-- Prediction: Approve
+## Propositional logic
+A {{proposition}} is a statement that is true or false: P = "it is raining", Q = "the road is muddy". We combine them: {{P AND Q}}, {{P → Q}} ("if P then Q", false only when P is true and Q is false).
 
-## Distance Metric
-Most common: {{Euclidean distance}}
+A {{truth table}} lists every combination:
 ~~~
-distance = √((x₂-x₁)² + (y₂-y₁)²)
-~~~
-
-## Scikit-Learn
-~~~
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
-
-# Create toy data
-X = [[1, 2], [3, 4], [5, 6], [7, 8]]
-y = [0, 0, 1, 1]  # labels
-
-# Split data
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-
-# Create and train model
-model = KNeighborsClassifier(n_neighbors=3)
-model.fit(X_train, y_train)
-
-# Make predictions
-predictions = model.predict(X_test)
-
-# Evaluate
-accuracy = accuracy_score(y_test, predictions)
-print("Accuracy:", accuracy)
+from itertools import product
+for p, q in product([True, False], repeat=2):
+    implies = (not p) or q
+    print(p, q, implies)
 ~~~
 
-## Choosing K
-- {{K=1}}: very flexible, may overfit (memorize training data)
-- {{K=3, 5}}: balanced (often used)
-- {{K=large}}: smoother, may underfit (miss patterns)
+## Predicate logic
+Adds objects and quantifiers: "for all x, if x is a farmer then x owns land" - {{∀x Farmer(x) → OwnsLand(x)}}; "there exists" is {{∃}}.
 
-## Advantages and Disadvantages
-Advantages:
-- Simple to understand and implement
-- No training needed (lazy learner)
-- Works with any type of data
+## Types of inferencing
+- {{Single inferencing}}: one rule gives a conclusion (if fever and chills then test for malaria)
+- {{Multiple (chained) inferencing}}: conclusions feed further rules. {{Forward chaining}} starts from facts; {{backward chaining}} starts from a goal and looks for supporting facts
+- {{Case-based reasoning}}: solve a new problem by finding the most similar past case (a help desk reusing old tickets)
 
-Disadvantages:
-- Slow with large datasets (checks all points)
-- Sensitive to irrelevant features
-- Sensitive to the scale of features (normalize first)`,
-      challenge: 'Write pseudocode or explanation for KNN algorithm with K=3 for predicting iris flower type.',
+## Machine learning
+Instead of writing rules, the computer {{learns}} them from data.
+- {{Supervised learning}}: data has labels (past loans marked "repaid" or "defaulted") - classification and regression
+- {{Unsupervised learning}}: no labels; find groups (clustering customers by spending)`,
+      example: { python: `from itertools import product
+print("P     Q     P OR Q")
+for p, q in product([True, False], repeat=2):
+    print(p, q, p or q)` },
+      challenge: 'Print the truth table of (A and B) or not C for all 8 combinations, one row per line as "A B C -> result" (for example "True True True -> True"). Then print "True rows: 5".',
       checks: [
-        { label: 'Mentions calculating distance', in: 'js', re: /distance|euclidean|calculate/i },
-        { label: 'Mentions finding K nearest', in: 'js', re: /K|nearest|3|neighbours/i },
-        { label: 'Mentions voting/majority', in: 'js', re: /vote|major|common|most|frequent/i },
+        { label: 'Generates all combinations', in: 'code', re: /product\s*\(|for\s+\w+\s+in\s+\[\s*True\s*,\s*False\s*\][\s\S]*for\s+\w+\s+in/ },
+        { label: 'Uses and, or, not', in: 'code', re: /\band\b[\s\S]*\bor\b[\s\S]*\bnot\b|\bnot\b[\s\S]*\band\b[\s\S]*\bor\b/ },
+        { label: 'Prints the first and last rows correctly', in: 'output', re: /True True True -> True[\s\S]*False False False -> True/ },
+        { label: 'Prints the number of true rows', in: 'output', re: /True rows:\s*5\b/ },
       ],
-      hints: ['KNN: 1) find distance, 2) pick K closest, 3) vote on class.'],
+      hints: ['for a, b, c in product([True, False], repeat=3):', 'result = (a and b) or not c'],
       quiz: [
-        { q: 'What does KNN stand for?', options: ['K-Nearest Neighbours', 'Kernel Neural Network', 'Key Next Node', 'Known Network Knowledge'], why: 'KNN finds the K nearest training points.' },
-        { q: 'If K=1, what happens?', options: ['The prediction is the class of the single nearest point', 'Takes average of all points', 'No learning occurs', 'Very robust'], why: 'K=1 is the most flexible but prone to overfitting.' },
-        { q: 'Which library provides KNN?', options: ['scikit-learn', 'numpy', 'pandas', 'tensorflow'], why: 'sklearn.neighbors has KNeighborsClassifier.' },
+        { q: 'When is P → Q (P implies Q) false?', options: ['When P is true and Q is false', 'When both are false', 'When P is false', 'Never'], why: 'An implication fails only if the condition holds but the conclusion does not.' },
+        { q: 'Which reasoning reuses the most similar past problem?', options: ['Case-based reasoning', 'Forward chaining', 'Predicate logic', 'Unsupervised learning'], why: 'Case-based reasoning adapts past cases.' },
+        { q: 'Grouping customers without labels is an example of...', options: ['Unsupervised learning', 'Supervised learning', 'An expert system', 'Single inferencing'], why: 'Clustering finds groups in unlabelled data.' },
       ],
-      oral: 'Explain how K-Nearest Neighbours would predict if a new customer will approve a loan.',
+      oral: 'Explain forward chaining and backward chaining with a medical diagnosis example.',
+      solution: { python: `from itertools import product
+true_rows = 0
+for a, b, c in product([True, False], repeat=3):
+    result = (a and b) or not c
+    if result:
+        true_rows += 1
+    print(a, b, c, "->", result)
+print("True rows:", true_rows)` },
     },
     {
-      title: 'Naïve Bayes Algorithm', minutes: 90,
-      content: `Naïve Bayes is a probabilistic classifier based on Bayes' theorem.
+      title: 'Machine Learning with K-Nearest Neighbours', minutes: 60,
+      content: `{{K-Nearest Neighbours (KNN)}} is a simple supervised learning algorithm: to classify a new item, find the {{k}} most similar labelled items and take a {{majority vote}}.
 
-## Bayes' Theorem
-{{P(A|B) = P(B|A) × P(A) / P(B)}}
+## The mathematics
+Similarity is measured by {{Euclidean distance}}. For two points (x1, y1) and (x2, y2):
+distance = √((x1 - x2)² + (y1 - y2)²)
 
-Applied to classification:
-{{P(Class|Features) = P(Features|Class) × P(Class) / P(Features)}}
+## Steps
+1. Compute the distance from the new point to every training point
+2. Sort by distance and keep the k nearest
+3. Count the labels among them and return the most common
 
-Simple version: pick the class with highest probability
-
-## "Naïve" Assumption
-Assumes all features are independent (naive assumption - often not true in reality):
-- Text classification: words are independent (not quite true)
-- Iris: petal length and width are not independent
-- Despite this, Naïve Bayes works well in practice
-
-## Example: Email Spam Detection
-Training data:
-- Spam: "BUY NOW", "CLICK HERE", "FREE"
-- Ham (normal): "meeting tomorrow", "coffee", "hello"
-
-For a new email "BUY NOW":
-- P(Spam | "BUY NOW") = High
-- P(Ham | "BUY NOW") = Low
-- Predict: Spam
-
-## Scikit-Learn Implementation
 ~~~
-from sklearn.naive_bayes import GaussianNB
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+import math
+from collections import Counter
 
-# Create data
-X = [[5.1, 3.5], [7.0, 3.2], [6.3, 2.9]]
-y = [0, 1, 1]
+# (income in thousands, existing debt in thousands) -> loan decision
+training = [((60, 5), "approve"), ((25, 20), "decline"), ((80, 10), "approve"),
+            ((30, 25), "decline"), ((55, 8), "approve"), ((20, 15), "decline")]
 
-# Split
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
+def knn(point, data, k=3):
+    nearest = sorted(data, key=lambda item: math.dist(point, item[0]))[:k]
+    votes = Counter(label for _, label in nearest)
+    return votes.most_common(1)[0][0]
 
-# Train
-model = GaussianNB()
-model.fit(X_train, y_train)
-
-# Predict
-y_pred = model.predict(X_test)
-
-# Evaluate
-accuracy = accuracy_score(y_test, y_pred)
-print("Accuracy:", accuracy)
+print(knn((50, 12), training))   # approve
 ~~~
 
-## Variants
-- {{GaussianNB}}: for continuous features (like heights, weights)
-- {{MultinomialNB}}: for counts (word frequencies in text)
-- {{BernoulliNB}}: for binary features (presence/absence)
+## Making good predictions
+- Choose an odd {{k}} for two classes so votes cannot tie
+- {{Scale}} features to similar ranges, or the biggest numbers dominate the distance
+- Test on data the model has not seen and measure {{accuracy}}
 
-## Advantages
-- Fast training and prediction
-- Works well with small datasets
-- Handles high-dimensional data well (many features)
-- Good for text classification
-
-## Disadvantages
-- "Naïve" independence assumption often wrong
-- Less accurate than complex models if features are dependent
-- May assign zero probability (use smoothing)`,
-      challenge: 'Write pseudocode for Naïve Bayes applied to predicting customer churn (stay or leave).',
+Libraries such as {{scikit-learn}} provide {{KNeighborsClassifier}}, but building it yourself shows exactly how it decides.`,
+      example: { python: `import math
+a = (2, 3)
+b = (5, 7)
+print("Distance:", math.dist(a, b))   # 5.0
+print("By hand:", math.sqrt((2 - 5) ** 2 + (3 - 7) ** 2))` },
+      challenge: 'Classify fruit by (weight in grams, sweetness 1-10). Training data: ((150, 8), "mango"), ((170, 9), "mango"), ((140, 7), "mango"), ((120, 3), "lemon"), ((100, 2), "lemon"), ((110, 4), "lemon"). Write a knn(point, data, k) function using math.dist and print "(160, 8) -> mango", "(105, 3) -> lemon" and "Accuracy: 100%" by testing it on the training points themselves with k=3.',
       checks: [
-        { label: 'Mentions probability or Bayes', in: 'js', re: /probabilit|bayes|p\(|probability/i },
-        { label: 'Mentions independence assumption', in: 'js', re: /independent|naive|assume/i },
-        { label: 'Mentions training and predicting', in: 'js', re: /train|predict|learn/i },
+        { label: 'Defines a knn function', in: 'code', re: /def\s+knn\s*\(/ },
+        { label: 'Uses Euclidean distance', in: 'code', re: /math\.dist\s*\(|\*\*\s*2[\s\S]*sqrt|sqrt[\s\S]*\*\*\s*2/ },
+        { label: 'Classifies both new fruits', in: 'output', re: /\(160, 8\) -> mango[\s\S]*\(105, 3\) -> lemon/ },
+        { label: 'Prints the accuracy', in: 'output', re: /Accuracy:\s*100(\.0)?%/ },
       ],
-      hints: ['Naïve Bayes calculates probability of class given features, assuming independence.'],
+      hints: ['sorted(data, key=lambda item: math.dist(point, item[0]))[:k]', 'Counter(labels).most_common(1)[0][0] gives the winning label.'],
       quiz: [
-        { q: 'What theorem does Naïve Bayes use?', options: ["Bayes' theorem", "Pythagorean theorem", "Central limit theorem", "Law of large numbers"], why: "Naïve Bayes applies Bayes' theorem." },
-        { q: 'Which Naïve Bayes variant handles text?', options: ['MultinomialNB', 'GaussianNB', 'BernoulliNB', 'All of them'], why: 'MultinomialNB is designed for word counts.' },
-        { q: 'Why is Naïve Bayes "naive"?', options: ['Assumes features are independent', 'Simple implementation', 'Works only on small data', 'No training needed'], why: 'The assumption that features are independent is often naive.' },
+        { q: 'How does KNN classify a new point?', options: ['By a majority vote of its k nearest labelled points', 'By drawing a straight line', 'By random choice', 'By the average of all labels'], why: 'KNN looks at the nearest neighbours.' },
+        { q: 'Why choose an odd k for two classes?', options: ['To avoid tied votes', 'Odd numbers are faster', 'Even k is not allowed', 'To make the distance smaller'], why: 'With an odd k, two classes cannot tie.' },
+        { q: 'Why should features be scaled before KNN?', options: ['Large-valued features would dominate the distance', 'KNN only works on decimals', 'To remove labels', 'It makes k smaller'], why: 'Distances are sensitive to the size of each feature.' },
       ],
-      oral: 'Explain how Naïve Bayes would classify an email as spam or ham.',
+      oral: 'Explain step by step how KNN would decide whether an M-Pesa transaction is fraudulent.',
+      solution: { python: `import math
+from collections import Counter
+
+training = [((150, 8), "mango"), ((170, 9), "mango"), ((140, 7), "mango"),
+            ((120, 3), "lemon"), ((100, 2), "lemon"), ((110, 4), "lemon")]
+
+def knn(point, data, k=3):
+    nearest = sorted(data, key=lambda item: math.dist(point, item[0]))[:k]
+    return Counter(label for _, label in nearest).most_common(1)[0][0]
+
+for p in [(160, 8), (105, 3)]:
+    print(p, "->", knn(p, training))
+correct = sum(1 for features, label in training if knn(features, training) == label)
+print(f"Accuracy: {correct / len(training) * 100:.0f}%")` },
+    },
+    {
+      title: 'Machine Learning with Naive Bayes', minutes: 60,
+      content: `{{Naive Bayes}} classifies using probabilities. It is fast and works well for text (spam filters) and categorical data.
+
+## Bayes' theorem
+P(class | evidence) = P(evidence | class) × P(class) / P(evidence)
+- {{P(class)}}: the {{prior}} - how common the class is
+- {{P(evidence | class)}}: the {{likelihood}} - how often this evidence appears in the class
+- {{P(class | evidence)}}: the {{posterior}} - what we want
+
+## Why "naive"?
+It assumes the features are {{independent}} given the class, so the likelihood of several features is just the product of each one:
+P(f1, f2 | class) = P(f1 | class) × P(f2 | class)
+
+Because P(evidence) is the same for every class, we only compare {{prior × likelihoods}} and pick the largest.
+
+## Example: will a customer leave (churn)?
+~~~
+data = [("prepaid", "yes", "leave"), ("prepaid", "no", "stay"),
+        ("postpaid", "no", "stay"), ("prepaid", "yes", "leave"),
+        ("postpaid", "yes", "stay"), ("prepaid", "no", "stay")]
+# features: plan, complained   label: leave / stay
+
+def score(label, plan, complained):
+    rows = [r for r in data if r[2] == label]
+    prior = len(rows) / len(data)
+    p_plan = sum(r[0] == plan for r in rows) / len(rows)
+    p_comp = sum(r[1] == complained for r in rows) / len(rows)
+    return prior * p_plan * p_comp
+~~~
+For ("prepaid", "yes"): leave = 2/6 × 1 × 1 = 0.33, stay = 4/6 × 2/4 × 1/4 = 0.08 - predict {{leave}}.
+
+## Smoothing
+If a feature never appears with a class, its probability is 0 and wipes out everything. {{Laplace smoothing}} adds 1 to every count to avoid this.`,
+      example: { python: `# P(rain) = 0.3, P(clouds | rain) = 0.9, P(clouds) = 0.45
+p_rain = 0.3
+p_clouds_given_rain = 0.9
+p_clouds = 0.45
+print("P(rain | clouds) =", round(p_clouds_given_rain * p_rain / p_clouds, 2))` },
+      challenge: 'Using the six churn rows from the lesson, write a predict(plan, complained) function that computes prior × likelihoods for "leave" and "stay" and returns the larger. Print "leave score: 0.33", "stay score: 0.08" (2 decimals) for ("prepaid", "yes"), then "prediction: leave", and "postpaid/no -> stay".',
+      checks: [
+        { label: 'Defines a predict function', in: 'code', re: /def\s+predict\s*\(/ },
+        { label: 'Computes a prior from the data', in: 'code', re: /len\s*\(\s*\w+\s*\)\s*\/\s*len\s*\(/ },
+        { label: 'Prints both scores', in: 'output', re: /leave score:\s*0\.33[\s\S]*stay score:\s*0\.08/ },
+        { label: 'Prints both predictions', in: 'output', re: /prediction:\s*leave[\s\S]*postpaid\/no -> stay/ },
+      ],
+      hints: ['prior = len(rows) / len(data) for the rows with that label.', 'Use round(value, 2) or f"{value:.2f}" when printing.'],
+      quiz: [
+        { q: 'In Bayes\' theorem, what is the prior?', options: ['How common the class is before seeing the evidence', 'The final answer', 'The evidence itself', 'The number of features'], why: 'P(class) is the prior.' },
+        { q: 'Why is Naive Bayes called "naive"?', options: ['It assumes the features are independent given the class', 'It is only for beginners', 'It ignores the labels', 'It uses no mathematics'], why: 'The independence assumption keeps it simple.' },
+        { q: 'What does Laplace smoothing prevent?', options: ['A zero probability wiping out the whole product', 'Overfitting in KNN', 'Negative probabilities', 'Too many classes'], why: 'Adding 1 to counts avoids zeros.' },
+      ],
+      oral: 'Explain how a Naive Bayes spam filter would decide whether an SMS is spam.',
+      solution: { python: `data = [("prepaid", "yes", "leave"), ("prepaid", "no", "stay"),
+        ("postpaid", "no", "stay"), ("prepaid", "yes", "leave"),
+        ("postpaid", "yes", "stay"), ("prepaid", "no", "stay")]
+
+def score(label, plan, complained):
+    rows = [r for r in data if r[2] == label]
+    prior = len(rows) / len(data)
+    p_plan = sum(r[0] == plan for r in rows) / len(rows)
+    p_comp = sum(r[1] == complained for r in rows) / len(rows)
+    return prior * p_plan * p_comp
+
+def predict(plan, complained):
+    scores = {label: score(label, plan, complained) for label in ("leave", "stay")}
+    return max(scores, key=scores.get), scores
+
+label, scores = predict("prepaid", "yes")
+print(f"leave score: {scores['leave']:.2f}")
+print(f"stay score: {scores['stay']:.2f}")
+print("prediction:", label)
+print("postpaid/no ->", predict("postpaid", "no")[0])` },
     },
   ],
 };

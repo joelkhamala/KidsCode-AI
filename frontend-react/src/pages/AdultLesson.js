@@ -23,10 +23,11 @@ const Badge = ({ ok, children }) => (
   </span>
 );
 
-const PANE_NAME = { html: 'HTML', css: 'CSS', js: 'JavaScript', java: 'Java', python: 'Python', sql: 'SQL' };
+const PANE_NAME = { html: 'HTML', css: 'CSS', js: 'JavaScript', java: 'Java', python: 'Python', sql: 'SQL', output: 'Output' };
 const PANE_STYLE = {
   html: 'bg-orange-100 text-orange-800', css: 'bg-sky-100 text-sky-800', js: 'bg-yellow-100 text-yellow-800',
   java: SERVER_LANGUAGES.java.chip, python: SERVER_LANGUAGES.python.chip, sql: SERVER_LANGUAGES.sql.chip,
+  output: 'bg-emerald-100 text-emerald-800',
 };
 const EMPTY_CODE = { html: '', css: '', js: '', java: '', python: '', sql: '' };
 /** Every language box from saved or example code (missing ones become empty). */
@@ -314,7 +315,7 @@ const AdultLesson = () => {
                         {state === 'ok' ? '✓' : state === 'bad' ? '✕' : ''}
                       </span>
                       <span className={`flex-1 leading-snug ${state === 'bad' ? 'text-red-800' : 'text-slate-700'}`}>{c.label}</span>
-                      <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-bold ${PANE_STYLE[c.in] || 'bg-slate-100 text-slate-600'}`}>{PANE_NAME[c.in] || c.in}</span>
+                      <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-bold ${PANE_STYLE[c.in] || 'bg-slate-100 text-slate-600'}`}>{c.in === 'output' ? t('ad.programOutput') : PANE_NAME[c.in] || c.in}</span>
                     </li>
                   );
                 })}
@@ -331,6 +332,9 @@ const AdultLesson = () => {
                     <div className="h-1.5 rounded-full bg-white overflow-hidden">
                       <div className={`h-full rounded-full transition-all duration-700 ${practical.passed ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${practical.score}%` }} />
                     </div>
+                    {practical.runError && (
+                      <p className="mt-2 text-xs text-red-700 break-words"><span className="font-semibold">{t('ad.runErrorWhenChecking')}</span> {practical.runError}</p>
+                    )}
                   </div>
                 )}
                 <button type="button" disabled={busy === 'check'} onClick={checkWork}

@@ -46,7 +46,8 @@ def install_guard(work):
 
     work = real(work)
     readable = {work}
-    for p in [sys.prefix, sys.base_prefix, sys.exec_prefix, sys.base_exec_prefix, *sys.path]:
+    # MPLCONFIGDIR holds matplotlib's font cache (read-only once the guard is on).
+    for p in [sys.prefix, sys.base_prefix, sys.exec_prefix, sys.base_exec_prefix, os.environ.get("MPLCONFIGDIR"), *sys.path]:
         if p and os.path.isdir(p):
             readable.add(real(p))
     try:
@@ -137,10 +138,10 @@ def main():
 
     # Data libraries load system DLLs through ctypes while importing (blocked for learner
     # code), so import the ones the program mentions before the guard is switched on.
-    for lib in ("numpy", "pandas"):
+    for lib, module in (("numpy", "numpy"), ("pandas", "pandas"), ("matplotlib", "matplotlib.pyplot")):
         if re.search(r"\b" + lib + r"\b", source):
             try:
-                __import__(lib)
+                __import__(module)
             except Exception:
                 pass  # the learner's own import will report the problem
 

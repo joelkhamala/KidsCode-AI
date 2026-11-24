@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
+import AdultPortalCard from '../components/AdultPortalCard';
 
 const Auth = () => {
   const { t } = useTranslation();
@@ -428,59 +429,7 @@ const Auth = () => {
             </div>
           )}
 
-          {/* Adult Learner Portal Link */}
-          <div className="mt-8 w-full max-w-md">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-300"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-sky-50/50 text-slate-500 font-medium">
-                  Professional Development
-                </span>
-              </div>
-            </div>
-
-            <div 
-              onClick={() => navigate('/adult/auth')}
-              className="mt-6 cursor-pointer group"
-            >
-              <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border-2 border-slate-700 hover:border-indigo-500 transition-all duration-300 shadow-lg hover:shadow-xl">
-                <div className="flex items-start gap-4">
-                  <div className="text-4xl group-hover:scale-110 transition-transform">
-                    💼
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-bold text-white text-lg mb-1 group-hover:text-indigo-300 transition-colors">
-                      Adult Learner Portal
-                    </h3>
-                    <p className="text-slate-300 text-sm mb-3">
-                      Professional web development training for adults. Learn client-side development with HTML, CSS, and JavaScript.
-                    </p>
-                    <div className="flex items-center gap-2 text-indigo-400 text-sm font-medium group-hover:gap-3 transition-all">
-                      <span>Access Professional Portal</span>
-                      <span className="group-hover:translate-x-1 transition-transform">→</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="mt-4 pt-4 border-t border-slate-700 grid grid-cols-3 gap-3 text-center">
-                  <div>
-                    <div className="text-indigo-400 font-bold text-lg">170</div>
-                    <div className="text-slate-400 text-xs">Hours</div>
-                  </div>
-                  <div>
-                    <div className="text-indigo-400 font-bold text-lg">8</div>
-                    <div className="text-slate-400 text-xs">Modules</div>
-                  </div>
-                  <div>
-                    <div className="text-indigo-400 font-bold text-lg">📜</div>
-                    <div className="text-slate-400 text-xs">Certificate</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <AdultPortalCard />
         </div>
       </div>
     </div>

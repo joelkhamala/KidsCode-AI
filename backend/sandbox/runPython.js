@@ -13,6 +13,7 @@ const { result, checkCode, toLines, withSlot, runProcess, cleanEnv, tempDir, fin
 const TIMEOUT_MS = Number(process.env.KIDSCODE_RUN_TIMEOUT_MS) || 5000;
 const RUNNER = path.join(__dirname, 'pyRunner.py');
 const MARKER = '__KC_ERROR__';
+const MPL_CACHE = path.join(require('os').tmpdir(), 'kidscode-matplotlib-cache');
 
 /** Friendly extra help for the errors beginners meet most. */
 const HINTS = {
@@ -75,13 +76,16 @@ async function runPython(code, { input = '' } = {}) {
       const env = cleanEnv({
         PYTHONIOENCODING: 'utf-8', PYTHONDONTWRITEBYTECODE: '1',
         OPENBLAS_NUM_THREADS: '1', OMP_NUM_THREADS: '1', MKL_NUM_THREADS: '1', MPLBACKEND: 'Agg',
+        // matplotlib's font cache: built once (while the runner pre-imports matplotlib, before the
+        // guard is on) and then only read, so later runs start quickly.
+        MPLCONFIGDIR: MPL_CACHE,
         // Needed to find libraries installed for the server's user (pip install --user).
         ...(process.env.APPDATA ? { APPDATA: process.env.APPDATA } : {}),
         ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
         ...(process.env.USERPROFILE ? { USERPROFILE: process.env.USERPROFILE } : {}),
       });
       // Importing numpy / pandas alone can take 2-4 seconds, so those programs get extra time for it.
-      const importAllowance = /\b(numpy|pandas)\b/.test(code) ? 8000 : 0;
+      const importAllowance = /\b(numpy|pandas|matplotlib)\b/.test(code) ? 8000 : 0;
       const r = await runProcess(py.command, args, { cwd: dir, timeoutMs: TIMEOUT_MS + importAllowance, input, env });
       const timeMs = Date.now() - started;
       const output = toLines(r.stdout);
