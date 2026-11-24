@@ -10,7 +10,7 @@ import QRCode from 'qrcode';
  * 96 dpi), scaled to fit its container on screen and printed at true size.
  *
  * Props: name, courseName, curriculumCode, certificateNumber, verificationCode, verifyUrl,
- *        issueDate (display string), hours, score, modules, lessons, sample (preview),
+ *        issueDate (display string), hours, score, modules, lessons, sample (preview), badges,
  *        labels (translated strings, see DEFAULT_LABELS)
  */
 const W = 1123;
@@ -100,13 +100,24 @@ const TechBadge = ({ x, label, colour }) => (
   <g transform={`translate(${x} 0)`}>
     <path d="M0 0 h62 l-6 58 l-25 8 l-25 -8 z" fill={colour} />
     <path d="M31 4 v58 l20 -6 l5 -52 z" fill="#ffffff" opacity="0.18" />
-    <text x="31" y="38" textAnchor="middle" fontFamily="Montserrat, sans-serif" fontWeight="800" fontSize={label.length > 3 ? 13 : 17} fill="#ffffff">{label}</text>
+    <text x="31" y="38" textAnchor="middle" fontFamily="Montserrat, sans-serif" fontWeight="800" fontSize={label.length > 3 ? 13 : label.length === 1 ? 24 : 17} fill="#ffffff">{label}</text>
   </g>
 );
 
+/** The technology badges printed on each course's certificate (course ids as in AdultUi COURSES). */
+export const COURSE_BADGES = {
+  1: [{ label: 'HTML', colour: '#e34f26' }, { label: 'CSS', colour: '#1572b6' }, { label: 'JS', colour: '#d4a017' }],
+  2: [{ label: 'JAVA', colour: '#e76f00' }, { label: 'OOP', colour: '#5382a1' }],
+  3: [{ label: 'PY', colour: '#3776ab' }, { label: 'AI', colour: '#7c3aed' }, { label: 'ML', colour: '#0f766e' }],
+  4: [{ label: 'SQL', colour: '#336791' }, { label: 'ERD', colour: '#0e7490' }, { label: 'DW', colour: '#64748b' }],
+  5: [{ label: 'DSA', colour: '#0f766e' }, { label: 'JAVA', colour: '#e76f00' }, { label: 'O(n)', colour: '#334155' }],
+  6: [{ label: 'Σ', colour: '#7c3aed' }, { label: '01', colour: '#0f172a' }, { label: 'PY', colour: '#3776ab' }],
+};
+
 const KenyanCertificate = ({
-  name, courseName = 'Professional Web Development', curriculumCode = 'ICT/CU/CP/CR/08/6/A', certificateNumber, verificationCode,
+  name, courseName = 'Web Development', curriculumCode = 'IT/CU/ICTA/CR/01/6/MA', certificateNumber, verificationCode,
   verifyUrl, issueDate, hours, score, modules = 8, lessons = 44, sample = false, labels: labelsIn = {},
+  badges = COURSE_BADGES[1],
 }) => {
   const L = { ...DEFAULT_LABELS, ...labelsIn };
   const wrapRef = useRef(null);
@@ -131,6 +142,10 @@ const KenyanCertificate = ({
   }, [verifyUrl]);
 
   const nameSize = !name ? 54 : name.length > 28 ? 42 : name.length > 20 ? 48 : 56;
+  // Long course names ("Python & Artificial Intelligence") get a smaller size so they stay on one line inside the margins.
+  const course = String(courseName).toUpperCase();
+  const courseSize = course.length > 30 ? 21 : course.length > 24 ? 23 : 27;
+  const badgeWidth = badges.length * 97 - 35;
 
   return (
     <div ref={wrapRef} className="kc-cert-wrap w-full" style={{ height: H * scale }}>
@@ -182,14 +197,12 @@ const KenyanCertificate = ({
           <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontSize: nameSize, marginTop: 2, lineHeight: 1.15, minHeight: 64 }}>{name}</div>
           <div style={{ width: 560, height: 2, margin: '6px auto 0', background: `linear-gradient(90deg, transparent, ${NAVY} 15%, ${NAVY} 85%, transparent)` }} />
           <div style={{ fontSize: 17, marginTop: 8, opacity: 0.85 }}>{L.forCompleting}</div>
-          <div style={{ fontSize: 27, marginTop: 2, fontWeight: 700, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{String(courseName).toUpperCase()}</div>
+          <div style={{ fontSize: courseSize, marginTop: 2, fontWeight: 700, letterSpacing: '0.06em', whiteSpace: 'nowrap', lineHeight: '34px' }}>{course}</div>
         </div>
 
         {/* Technology badges */}
-        <svg className="absolute" style={{ left: W / 2 - 128, top: 478 }} width="256" height="70" aria-hidden="true">
-          <TechBadge x={0} label="HTML" colour="#e34f26" />
-          <TechBadge x={97} label="CSS" colour="#1572b6" />
-          <TechBadge x={194} label="JS" colour="#d4a017" />
+        <svg className="absolute" style={{ left: W / 2 - badgeWidth / 2, top: 478 }} width={badgeWidth} height="70" aria-hidden="true">
+          {badges.map((b, i) => <TechBadge key={b.label} x={i * 97} label={b.label} colour={b.colour} />)}
         </svg>
 
         {/* Bottom left: QR + issue date */}

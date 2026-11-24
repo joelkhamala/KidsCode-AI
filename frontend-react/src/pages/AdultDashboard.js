@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { adultAPI } from '../services/api';
 import { getAdultUser } from '../utils/authStorage';
-import { Page, Card, Bar, Loading, ErrorBox, studyTime, Ring, COURSES, courseOf, PASS_MARK as PASS } from '../components/AdultUi';
+import { Page, Card, Loading, ErrorBox, studyTime, Ring, COURSES, courseOf, PASS_MARK as PASS } from '../components/AdultUi';
 import { SERVER_LANGUAGES } from '../components/codeLanguages';
 
 /**
@@ -78,21 +78,18 @@ const AdultDashboard = () => {
   });
 
   const scoreOk = started && stats.averageScore >= PASS;
-  const requirements = [
-    { key: 'lessons', icon: '📚', label: t('ad.reqAllLessons'), value: `${stats.completedLessons}/${stats.totalLessons}`, pct: (100 * stats.completedLessons) / (stats.totalLessons || 1), met: stats.completedLessons >= stats.totalLessons && stats.totalLessons > 0 },
-    { key: 'score', icon: '📝', label: t('ad.reqAverage', { n: PASS }), value: started ? `${stats.averageScore}%` : '—', pct: started ? Math.min(100, (100 * stats.averageScore) / PASS) : 0, met: scoreOk },
-    { key: 'hours', icon: '⏱️', label: t('ad.reqHours', { n: stats.requiredHours }), value: studyTime(stats.minutesLogged, stats.hoursLogged), pct: Math.min(100, (100 * stats.hoursLogged) / (stats.requiredHours || 1)), met: stats.hoursLogged >= stats.requiredHours },
-  ];
-  const metCount = requirements.filter((r) => r.met).length;
+  // One certificate per course (from the curriculum response).
+  const certs = data.courses || [];
+  const earnedCount = certs.filter((c) => c.certificate).length;
+  const readyCourse = certs.find((c) => c.eligible && !c.certificate);
 
   const heroAction = resume
     ? { to: `/adult/lesson/${resume.id}`, label: `${returning ? t('ad.continue') : t('ad.startCourse')} →` }
-    : stats.certificateIssued || stats.eligible
-      ? { to: '/adult/certificate', label: `🎓 ${stats.certificateIssued ? t('ad.viewCertificate') : t('ad.certificate')}` }
-      : { to: '/adult/playground', label: `💻 ${t('ad.playground')}` };
+    : readyCourse
+      ? { to: `/adult/certificate?course=${readyCourse.id}`, label: `🎓 ${t('ad.claimCertificate')}` }
+      : { to: '/adult/certificate', label: `🎓 ${t('ad.certsTitle')}` };
   const heroTitle = resume ? resume.title
-    : stats.certificateIssued ? t('ad.certificateIssuedTitle')
-      : stats.eligible ? t('ad.getCertificateNow') : t('ad.moreHoursNeeded', { n: stats.requiredHours });
+    : readyCourse ? t('ad.certReadyFor', { course: t(`ad.stage.${readyCourse.id}`) }) : t('ad.certsTitle');
 
   const STATUS = {
     new: { text: t('ad.notStarted'), chip: 'bg-slate-100 text-slate-600', cta: t('ad.start') },
@@ -147,9 +144,9 @@ const AdultDashboard = () => {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
         {[
           { icon: '📚', tint: 'bg-indigo-100 text-indigo-700', label: t('ad.lessons'), value: `${stats.completedLessons}/${stats.totalLessons}`, sub: t('ad.completed') },
-          { icon: '⏱️', tint: 'bg-emerald-100 text-emerald-700', label: t('ad.studyTime'), value: studyTime(stats.minutesLogged, stats.hoursLogged), sub: t('ad.ofHours', { n: stats.requiredHours }) },
+          { icon: '⏱️', tint: 'bg-emerald-100 text-emerald-700', label: t('ad.studyTime'), value: studyTime(stats.minutesLogged, stats.hoursLogged), sub: t('ad.logged') },
           { icon: '🎯', tint: 'bg-violet-100 text-violet-700', label: t('ad.averageScore'), value: started ? `${stats.averageScore}%` : '—', sub: started ? (scoreOk ? t('ad.passing') : t('ad.keepImproving')) : t('ad.noScoresYet') },
-          { icon: '🎓', tint: stats.certificateIssued || stats.eligible ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700', label: t('ad.certificate'), value: stats.certificateIssued || stats.eligible ? '✓' : `${metCount}/3`, sub: stats.certificateIssued ? t('ad.issuedShort') : stats.eligible ? t('ad.readyToIssue') : t('ad.requirementsMet') },
+          { icon: '🎓', tint: earnedCount ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700', label: t('ad.certsShort'), value: `${earnedCount}/${certs.length || COURSES.length}`, sub: readyCourse ? t('ad.readyToIssue') : t('ad.certsEarnedLabel') },
         ].map((s) => (
           <Card key={s.label} className="p-4 md:p-5 flex items-center gap-3 md:gap-4">
             <span className={`w-11 h-11 md:w-12 md:h-12 shrink-0 rounded-xl flex items-center justify-center text-xl ${s.tint}`} aria-hidden="true">{s.icon}</span>
@@ -223,24 +220,37 @@ const AdultDashboard = () => {
 
         {/* ===== Side column ===== */}
         <aside className="space-y-4 lg:sticky lg:top-4">
+          {/* One certificate per course */}
           <Card className="p-5">
-            <div className="flex items-center justify-between gap-2 mb-4">
-              <h2 className="font-bold text-slate-900">🎓 {t('ad.roadToCertificate')}</h2>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${metCount === 3 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>{metCount}/3</span>
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <h2 className="font-bold text-slate-900">🎓 {t('ad.certsTitle')}</h2>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${earnedCount ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>{earnedCount}/{certs.length}</span>
             </div>
-            <ul className="space-y-4">
-              {requirements.map((r) => (
-                <li key={r.key}>
-                  <div className="flex items-start justify-between gap-2 text-sm mb-1.5">
-                    <span className={`font-medium ${r.met ? 'text-emerald-700' : 'text-slate-700'}`}>{r.met ? '✅' : r.icon} {r.label}</span>
-                    <span className="text-slate-500 whitespace-nowrap">{r.value}</span>
-                  </div>
-                  <Bar value={r.pct} color={r.met ? 'bg-emerald-500' : 'bg-indigo-600'} label={r.label} />
-                </li>
-              ))}
+            <ul className="space-y-2.5">
+              {certs.map((c) => {
+                const met = Object.values(c.requirements).filter((r) => r.met).length;
+                return (
+                  <li key={c.id}>
+                    <Link to={`/adult/certificate?course=${c.id}`} className="flex items-center gap-3 rounded-xl px-2 py-1.5 -mx-2 hover:bg-slate-50 transition">
+                      <span className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-base" style={{ background: `${(COURSES.find((x) => x.id === c.id) || {}).color || '#6366f1'}1f` }} aria-hidden="true">
+                        {c.certificate ? '🏅' : (COURSES.find((x) => x.id === c.id) || {}).icon}
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-semibold text-slate-800 truncate">{t(`ad.stage.${c.id}`)}</span>
+                        <span className="flex gap-1 mt-1" aria-label={t('ad.requirementsMetOf', { n: met, total: 3 })}>
+                          {Object.entries(c.requirements).map(([k, r]) => <span key={k} className={`h-1 flex-1 rounded-full ${r.met ? 'bg-emerald-500' : 'bg-slate-200'}`} />)}
+                        </span>
+                      </span>
+                      <span className={`shrink-0 text-[11px] font-bold ${c.certificate ? 'text-emerald-700' : c.eligible ? 'text-amber-700' : 'text-slate-400'}`}>
+                        {c.certificate ? `✓ ${t('ad.certStatus.earned')}` : c.eligible ? t('ad.certStatus.ready') : `${c.progressPercentage}%`}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
-            <Link to="/adult/certificate" className="mt-5 block text-center px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-              {stats.certificateIssued ? t('ad.viewCertificate') : t('ad.aboutCertificate')} →
+            <Link to="/adult/certificate" className="mt-4 block text-center px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              {t('ad.aboutCertificate')} →
             </Link>
           </Card>
 

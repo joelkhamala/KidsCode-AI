@@ -1,11 +1,22 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { adultAPI } from '../services/api';
 import { setAdultAuth, getAdultToken, getAdultUser, isAdultUser } from '../utils/authStorage';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 
-/** Sign in / create an account for the adult course. */
+/** The six courses (ids match the backend's COURSES); numbers come from GET /api/adult/overview. */
+const COURSES = [
+  { id: 1, icon: '🌐', colour: '#f97316' },
+  { id: 2, icon: '☕', colour: '#e76f00' },
+  { id: 3, icon: '🐍', colour: '#3776ab' },
+  { id: 4, icon: '🗄️', colour: '#6366f1' },
+  { id: 5, icon: '🧮', colour: '#0f766e' },
+  { id: 6, icon: '🔢', colour: '#7c3aed' },
+];
+const FALLBACK = { modules: 23, lessons: 101, totalHours: 163, certificates: 6, courses: [] };
+
+/** Sign in / create an account for the adult courses. */
 const Field = ({ id, label, children, hint }) => (
   <div>
     <label htmlFor={id} className="block text-sm font-semibold text-slate-700 mb-1">{label}</label>
@@ -23,6 +34,14 @@ const AdultAuth = () => {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [login, setLogin] = useState({ email: '', password: '' });
+  const [info, setInfo] = useState(FALLBACK);
+  useEffect(() => {
+    let alive = true;
+    adultAPI.overview().then((r) => { if (alive && r.data && r.data.modules) setInfo(r.data); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const lessonsIn = (id) => (info.courses.find((c) => c.id === id) || {}).lessons;
+  const numbers = { courses: COURSES.length, lessons: info.lessons, hours: info.totalHours || 163 };
   const [reg, setReg] = useState({ firstName: '', lastName: '', email: '', phoneNumber: '', password: '', confirmPassword: '', occupation: '', educationLevel: '', learningGoals: '' });
 
   const finish = (data) => {
@@ -67,16 +86,40 @@ const AdultAuth = () => {
       <div className="flex-1 grid lg:grid-cols-2 gap-10 items-center max-w-5xl w-full mx-auto">
         <div className="text-white hidden lg:block">
           <p className="text-indigo-300 font-semibold tracking-wide uppercase text-sm">KidsCode · {t('ad.professionalDevelopment')}</p>
-          <h1 className="text-4xl font-bold mt-2 leading-tight">{t('ad.courseName')}</h1>
+          <h1 className="text-4xl font-bold mt-2 leading-tight">{t('ad.authTitle')}</h1>
           <p className="text-indigo-100 mt-4 text-lg">{t('ad.authPitch')}</p>
-          <ul className="mt-6 space-y-3 text-indigo-100">
-            {['ad.authPoint1', 'ad.authPoint2', 'ad.authPoint3', 'ad.authPoint4'].map((k) => <li key={k} className="flex gap-3"><span aria-hidden="true">✓</span>{t(k)}</li>)}
+
+          {/* The courses on offer */}
+          <ul className="mt-6 grid grid-cols-2 gap-2.5">
+            {COURSES.map((c) => (
+              <li key={c.id} className="flex items-center gap-3 rounded-2xl bg-white/10 border border-white/15 px-3 py-2.5 min-w-0">
+                <span className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center text-lg" style={{ background: `${c.colour}40` }} aria-hidden="true">{c.icon}</span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold leading-tight">{t(`ad.stage.${c.id}`)}</span>
+                  {lessonsIn(c.id) ? <span className="block text-xs text-indigo-200">{t('adp.lessons', { count: lessonsIn(c.id) })}</span> : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <ul className="mt-6 space-y-2.5 text-indigo-100">
+            {['ad.authPoint1', 'ad.authPoint2', 'ad.authPoint3', 'ad.authPoint4'].map((k) => (
+              <li key={k} className="flex gap-3"><span className="text-emerald-300" aria-hidden="true">✓</span>{t(k, numbers)}</li>
+            ))}
           </ul>
         </div>
 
         <div className="bg-white rounded-3xl shadow-2xl p-6 md:p-8 w-full max-w-md mx-auto">
-          <h1 className="text-2xl font-bold text-slate-900 lg:hidden mb-1">{t('ad.courseName')}</h1>
-          <p className="text-slate-500 text-sm mb-5 lg:hidden">{t('ad.authPitch')}</p>
+          <h1 className="text-2xl font-bold text-slate-900 lg:hidden mb-1">{t('ad.authTitle')}</h1>
+          <p className="text-slate-500 text-sm mb-3 lg:hidden">{t('ad.authPitch')}</p>
+          {/* On phones: the courses as small chips above the form. */}
+          <ul className="flex flex-wrap gap-1.5 mb-5 lg:hidden" aria-label={t('ad.yourCourses')}>
+            {COURSES.map((c) => (
+              <li key={c.id} className="px-2 py-1 rounded-lg text-[11px] font-semibold text-slate-700 bg-slate-100">
+                <span aria-hidden="true">{c.icon}</span> {t(`ad.stage.${c.id}`)}
+              </li>
+            ))}
+          </ul>
           <div className="flex mb-6 bg-slate-100 rounded-xl p-1" role="tablist">
             {[[true, t('ad.signIn')], [false, t('ad.createAccount')]].map(([val, label]) => (
               <button key={label} type="button" role="tab" aria-selected={isLogin === val} onClick={() => { setIsLogin(val); setError(''); }}

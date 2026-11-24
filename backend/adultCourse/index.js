@@ -61,8 +61,22 @@ const PRACTICE_FACTOR = 1.5;
 const lessonMinutes = (m) => m.lessons.reduce((n, l) => n + (l.minutes || 0), 0);
 for (const m of MODULES) m.hours = Math.max(1, Math.ceil((lessonMinutes(m) * PRACTICE_FACTOR) / 60));
 const TOTAL_HOURS = MODULES.reduce((n, m) => n + m.hours, 0);
-/** Study time needed for the certificate: three quarters of the estimate, so quick learners are not held back. */
-const REQUIRED_HOURS = Math.ceil(TOTAL_HOURS * 0.75);
+
+/**
+ * Each course has its own certificate. To earn it a learner completes every lesson of the
+ * course with an average of PASS_MARK or more, and spends three quarters of the course's
+ * estimated study time in its lessons (so quick learners are not held back).
+ */
+const CERT_PREFIX = { web: 'WEB', java: 'JAVA', python: 'PYAI', sql: 'DBM', algorithms: 'DSA', maths: 'MATH' };
+for (const c of COURSES) {
+  const mods = MODULES.filter((m) => c.modules.includes(m.id));
+  c.hours = mods.reduce((n, m) => n + m.hours, 0);
+  c.requiredHours = Math.ceil(c.hours * 0.75);
+  c.lessonCount = mods.reduce((n, m) => n + m.lessons.length, 0);
+  c.certificatePrefix = `KC${CERT_PREFIX[c.key]}`;
+}
+/** Study time needed for all six certificates together. */
+const REQUIRED_HOURS = COURSES.reduce((n, c) => n + c.requiredHours, 0);
 
 const BY_MODULE = Object.fromEntries(MODULES.map((m) => [m.id, m]));
 const CURRICULUM_CODE = 'ICT/CU/CP/CR/08/6/A';

@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { adultAPI } from '../services/api';
 import { getAdultUser } from '../utils/authStorage';
-import { Page, Card, Bar, Loading, ErrorBox, studyTime, Ring, COURSES, PASS_MARK as PASS } from '../components/AdultUi';
+import { Page, Card, Loading, ErrorBox, studyTime, Ring, COURSES, PASS_MARK as PASS } from '../components/AdultUi';
 
 /**
  * Adult course view: detailed view of a single course (by course ID: 1-4).
@@ -44,22 +44,24 @@ const AdultCourseView = () => {
   const totalInCourse = courseLessons.length;
   const courseProgressPct = totalInCourse ? Math.round((100 * completedInCourse) / totalInCourse) : 0;
 
-  const scoreOk = started && stats.averageScore >= PASS;
-  const requirements = [
-    { key: 'lessons', icon: '📚', label: t('ad.reqAllLessons'), value: `${stats.completedLessons}/${stats.totalLessons}`, pct: (100 * stats.completedLessons) / (stats.totalLessons || 1), met: stats.completedLessons >= stats.totalLessons && stats.totalLessons > 0 },
-    { key: 'score', icon: '📝', label: t('ad.reqAverage', { n: PASS }), value: started ? `${stats.averageScore}%` : '—', pct: started ? Math.min(100, (100 * stats.averageScore) / PASS) : 0, met: scoreOk },
-    { key: 'hours', icon: '⏱️', label: t('ad.reqHours', { n: stats.requiredHours }), value: studyTime(stats.minutesLogged, stats.hoursLogged), pct: Math.min(100, (100 * stats.hoursLogged) / stats.requiredHours), met: stats.hoursLogged >= stats.requiredHours },
-  ];
+  // This course's own certificate: its lessons, its average score and the time spent in its lessons.
+  const status = (data.courses || []).find((c) => c.id === courseId);
+  const cr = status ? status.requirements : null;
+  const requirements = cr ? [
+    { key: 'lessons', icon: '📚', label: t('ad.reqCourseLessons', { n: cr.allLessonsCompleted.required }), value: `${cr.allLessonsCompleted.current}/${cr.allLessonsCompleted.required}`, pct: (100 * cr.allLessonsCompleted.current) / (cr.allLessonsCompleted.required || 1), met: cr.allLessonsCompleted.met },
+    { key: 'score', icon: '📝', label: t('ad.reqAverage', { n: PASS }), value: cr.allLessonsCompleted.current ? `${cr.passedAssessments.current}%` : '—', pct: cr.allLessonsCompleted.current ? Math.min(100, (100 * cr.passedAssessments.current) / PASS) : 0, met: cr.passedAssessments.met },
+    { key: 'hours', icon: '⏱️', label: t('ad.reqCourseHours', { n: cr.sufficientHours.required }), value: studyTime(null, cr.sufficientHours.current), pct: Math.min(100, (100 * cr.sufficientHours.current) / (cr.sufficientHours.required || 1)), met: cr.sufficientHours.met },
+  ] : [];
   const metCount = requirements.filter((r) => r.met).length;
+  const certified = Boolean(status && status.certificate);
+  const certReady = Boolean(status && status.eligible);
 
   const heroTitle = nextLessonInCourse ? nextLessonInCourse.title
-    : stats.certificateIssued ? t('ad.certificateIssuedTitle')
-      : stats.eligible ? t('ad.getCertificateNow') : t('ad.moreHoursNeeded', { n: stats.requiredHours });
+    : certified ? t('ad.certificateIssuedTitle')
+      : certReady ? t('ad.getCertificateNow') : t('ad.courseMoreHoursNeeded', { n: status ? status.requiredHours : 0 });
   const heroAction = nextLessonInCourse
     ? { to: `/adult/lesson/${nextLessonInCourse.id}`, label: `${started ? t('ad.continue') : t('ad.startCourse')} →` }
-    : stats.certificateIssued || stats.eligible
-      ? { to: '/adult/certificate', label: `🎓 ${stats.certificateIssued ? t('ad.viewCertificate') : t('ad.certificate')}` }
-      : { to: '/adult/playground', label: `💻 ${t('ad.playground')}` };
+    : { to: `/adult/certificate?course=${courseId}`, label: `🎓 ${certified ? t('ad.viewCertificate') : t('ad.certificate')}` };
 
   const prevCourse = courseId > 1 ? COURSES[courseId - 2] : null;
   const nextCourse = courseId < COURSES.length ? COURSES[courseId] : null;
@@ -118,9 +120,9 @@ const AdultCourseView = () => {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
         {[
           { icon: '📚', tint: 'bg-indigo-100 text-indigo-700', label: t('ad.lessons'), value: `${completedInCourse}/${totalInCourse}`, sub: t('ad.completed') },
-          { icon: '⏱️', tint: 'bg-emerald-100 text-emerald-700', label: t('ad.studyTime'), value: studyTime(stats.minutesLogged, stats.hoursLogged), sub: t('ad.ofHours', { n: stats.requiredHours }) },
-          { icon: '🎯', tint: 'bg-violet-100 text-violet-700', label: t('ad.averageScore'), value: started ? `${stats.averageScore}%` : '—', sub: started ? (scoreOk ? t('ad.passing') : t('ad.keepImproving')) : t('ad.noScoresYet') },
-          { icon: '🎓', tint: stats.certificateIssued || stats.eligible ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700', label: t('ad.certificate'), value: stats.certificateIssued || stats.eligible ? '✓' : `${metCount}/3`, sub: stats.certificateIssued ? t('ad.issuedShort') : stats.eligible ? t('ad.readyToIssue') : t('ad.requirementsMet') },
+          { icon: '⏱️', tint: 'bg-emerald-100 text-emerald-700', label: t('ad.studyTime'), value: studyTime(status ? status.minutesLogged : 0), sub: t('ad.ofHours', { n: status ? status.requiredHours : 0 }) },
+          { icon: '🎯', tint: 'bg-violet-100 text-violet-700', label: t('ad.averageScore'), value: completedInCourse ? `${status ? status.averageScore : 0}%` : '—', sub: completedInCourse ? (cr && cr.passedAssessments.met ? t('ad.passing') : t('ad.keepImproving')) : t('ad.noScoresYet') },
+          { icon: '🎓', tint: certified || certReady ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700', label: t('ad.certificate'), value: certified || certReady ? '✓' : `${metCount}/3`, sub: certified ? t('ad.issuedShort') : certReady ? t('ad.readyToIssue') : t('ad.requirementsMet') },
         ].map((s) => (
           <Card key={s.label} className="p-4 md:p-5 flex items-center gap-3 md:gap-4">
             <span className={`w-11 h-11 md:w-12 md:h-12 shrink-0 rounded-xl flex items-center justify-center text-xl ${s.tint}`} aria-hidden="true">{s.icon}</span>

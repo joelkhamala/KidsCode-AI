@@ -59,13 +59,9 @@ const AdultProgress = () => {
   const minutesLeft = Math.max(0, p.requiredHours * 60 - (p.minutesLogged || Math.round(p.hoursLogged * 60)));
   const weeksToGo = avgWeek > 0 && minutesLeft > 0 ? Math.ceil(minutesLeft / avgWeek) : null;
 
-  const req = p.requirements;
-  const requirements = [
-    { key: 'allLessonsCompleted', icon: '📚', label: t('ad.reqAllLessons'), value: `${req.allLessonsCompleted.current}/${req.allLessonsCompleted.required}` },
-    { key: 'passedAssessments', icon: '📝', label: t('ad.reqAverage', { n: req.passedAssessments.required }), value: p.completedLessons ? `${req.passedAssessments.current}%` : '—' },
-    { key: 'sufficientHours', icon: '⏱️', label: t('ad.reqHours', { n: req.sufficientHours.required }), value: studyTime(null, req.sufficientHours.current) },
-  ];
-  const metCount = requirements.filter((r) => req[r.key].met).length;
+  // One certificate per course.
+  const certs = p.courses || [];
+  const earnedCount = certs.filter((c) => c.certificate).length;
   const summary = Object.fromEntries((p.assessmentSummary || []).map((s) => [s.type, s]));
 
   return (
@@ -209,23 +205,32 @@ const AdultProgress = () => {
         <aside className="lg:sticky lg:top-4">
           <Card className="p-5">
             <div className="flex items-center justify-between gap-2 mb-1">
-              <h2 className="font-bold text-slate-900">🎓 {t('ad.certificateRequirements')}</h2>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${metCount === 3 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>{metCount}/3</span>
+              <h2 className="font-bold text-slate-900">🎓 {t('ad.certsTitle')}</h2>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${earnedCount ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>{earnedCount}/{certs.length}</span>
             </div>
-            <p className="text-xs text-slate-500 mb-4">{t('ad.certificateRequirementsHelp')}</p>
+            <p className="text-xs text-slate-500 mb-4">{t('ad.certsProgressHelp')}</p>
             <ul className="space-y-4">
-              {requirements.map((r) => (
-                <li key={r.key}>
-                  <div className="flex justify-between gap-2 text-sm mb-1.5">
-                    <span className={`font-medium ${req[r.key].met ? 'text-emerald-700' : 'text-slate-700'}`}>{req[r.key].met ? '✅' : r.icon} {r.label}</span>
-                    <span className="text-slate-500 whitespace-nowrap">{r.value}</span>
-                  </div>
-                  <Bar value={req[r.key].current} max={req[r.key].required} color={req[r.key].met ? 'bg-emerald-500' : 'bg-indigo-600'} label={r.label} />
-                </li>
-              ))}
+              {certs.map((c) => {
+                const r = c.requirements;
+                return (
+                  <li key={c.id}>
+                    <Link to={`/adult/certificate?course=${c.id}`} className="block group">
+                      <div className="flex justify-between gap-2 text-sm mb-1.5">
+                        <span className={`font-medium group-hover:text-indigo-700 ${c.certificate ? 'text-emerald-700' : 'text-slate-700'}`}>{c.certificate ? '🏅' : c.eligible ? '🎉' : '📘'} {t(`ad.stage.${c.id}`)}</span>
+                        <span className={`whitespace-nowrap text-xs font-semibold ${c.certificate ? 'text-emerald-700' : c.eligible ? 'text-amber-700' : 'text-slate-500'}`}>
+                          {c.certificate ? `✓ ${t('ad.certStatus.earned')}` : c.eligible ? t('ad.certStatus.ready') : `${r.allLessonsCompleted.current}/${r.allLessonsCompleted.required} · ${studyTime(null, r.sufficientHours.current)}/${r.sufficientHours.required} h`}
+                        </span>
+                      </div>
+                      <span className="flex gap-1" aria-hidden="true">
+                        {Object.entries(r).map(([k, x]) => <span key={k} className={`h-1.5 flex-1 rounded-full ${x.met ? 'bg-emerald-500' : 'bg-slate-200'}`} />)}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
-            <Link to="/adult/certificate" className={`mt-5 block text-center px-4 py-2.5 rounded-xl font-semibold transition ${p.eligible || p.certificateNumber ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'border border-slate-300 text-slate-700 hover:bg-slate-50'}`}>
-              {p.certificateNumber ? t('ad.viewCertificate') : p.eligible ? t('ad.getCertificateNow') : t('ad.aboutCertificate')} →
+            <Link to="/adult/certificate" className="mt-5 block text-center px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold transition">
+              {t('ad.aboutCertificate')} →
             </Link>
           </Card>
         </aside>

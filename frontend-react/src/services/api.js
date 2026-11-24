@@ -156,9 +156,9 @@ export const adultAPI = {
   complete: (id, code) => adultHttp.post(`/adult/lesson/${id}/complete`, { code }),
   activity: (data) => adultHttp.post('/adult/activity', data),
   progress: () => adultHttp.get('/adult/progress'),
-  eligibility: () => adultHttp.get('/adult/certificate/eligibility'),
-  certificate: () => adultHttp.get('/adult/certificate'),
-  issueCertificate: () => adultHttp.post('/adult/certificate'),
+  // One certificate per course: every course with its requirements, and issuing one.
+  certificates: () => adultHttp.get('/adult/certificates'),
+  issueCertificate: (courseId) => adultHttp.post(`/adult/certificates/${courseId}`),
   verifyCertificate: (code) => adultHttp.get(`/certificates/verify/${encodeURIComponent(code)}`),
   // Run code on the server. Every language answers { ok, language, output, error, tables, notes, timeMs }.
   executeCode: (language, code, input = '') => adultHttp.post(`/adult/code/execute/${language}`, { code, input }),

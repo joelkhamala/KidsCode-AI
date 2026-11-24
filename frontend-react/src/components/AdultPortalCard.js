@@ -8,7 +8,7 @@ import { adultAPI } from '../services/api';
  * from the course itself (GET /api/adult/overview), so they stay true as lessons are added;
  * the fallback below is only shown if that request fails.
  */
-const FALLBACK = { modules: 23, lessons: 101, requiredHours: 123, courses: [] };
+const FALLBACK = { modules: 23, lessons: 101, totalHours: 163, certificates: 6, courses: [] };
 
 /** The six courses in display order (ids match the backend's COURSES). */
 const COURSES = [
@@ -68,8 +68,8 @@ const AdultPortalCard = () => {
             {[
               [info.modules, t('adp.modules')],
               [info.lessons, t('adp.lessonsLabel')],
-              [info.requiredHours, t('adp.hours')],
-              ['📜', t('adp.certificate')],
+              [info.totalHours || info.requiredHours, t('adp.hours')],
+              [info.certificates || 6, t('adp.certificates')],
             ].map(([value, label]) => (
               <div key={label}>
                 <div className="text-indigo-400 font-bold text-lg">{value}</div>

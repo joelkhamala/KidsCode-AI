@@ -814,44 +814,69 @@ test('adult course: full content, real tests before completion, study time and a
   assert.equal(beat.body.credited, 1);
   assert.equal((await http('POST', '/api/adult/activity', { lessonId: first.id }, token)).body.credited, 0);
 
-  // Certificate: not yet (lessons and hours missing).
-  assert.equal((await http('POST', '/api/adult/certificate', null, token)).status, 400);
+  // Certificates are per course. Not yet: lessons and hours are missing.
+  const { COURSES } = require('../adultCourse');
+  const java = COURSES.find((c) => c.key === 'java');
+  assert.equal((await http('POST', `/api/adult/certificates/${java.id}`, null, token)).status, 400);
+  assert.equal((await http('POST', '/api/adult/certificates/99', null, token)).status, 404);
   const report = await http('GET', '/api/adult/progress', null, token);
   assert.equal(report.body.progress.completedLessons, 1);
   assert.equal(report.body.progress.modules.length, MODULES.length);
-  assert.equal(report.body.progress.requirements.sufficientHours.met, false);
+  assert.equal(report.body.progress.courses.length, COURSES.length);
+  assert.equal(report.body.progress.courses.find((c) => c.id === java.id).requirements.sufficientHours.met, false);
 
-  // Simulate finishing the course with the required hours (plus one), then the certificate can be issued once and verified publicly.
-  const { REQUIRED_HOURS } = require('../adultCourse');
-  const minutes = (REQUIRED_HOURS + 1) * 60;
+  // Finish only the Java course, with enough time in its lessons. Time outside its lessons
+  // (the playground, other courses) does not count towards the Java certificate.
   const me = reg.body.user.id;
-  const all = cur.body.curriculum.flatMap((m) => m.lessons.map((l) => [m.id, l.id]));
-  for (const [moduleId, lessonId] of all) {
+  const javaLessons = cur.body.curriculum.filter((m) => java.modules.includes(m.id)).flatMap((m) => m.lessons.map((l) => [m.id, l.id]));
+  for (const [moduleId, lessonId] of javaLessons) {
     await dbRun('INSERT OR REPLACE INTO progress (user_id, module_id, lesson_id, completed, score) VALUES (?, ?, ?, 1, 90)', [me, moduleId, lessonId]);
   }
-  await dbRun("INSERT INTO learning_hours_log (user_id, session_start, duration_minutes, activity_type) VALUES (?, datetime('now'), ?, 'lesson')", [me, minutes]);
-  const elig = await http('GET', '/api/adult/certificate/eligibility', null, token);
-  assert.equal(elig.body.eligible, true, JSON.stringify(elig.body));
-  const cert = await http('POST', '/api/adult/certificate', null, token);
+  const minutes = (java.requiredHours + 1) * 60;
+  await dbRun("INSERT INTO learning_hours_log (user_id, module_id, session_start, duration_minutes, activity_type) VALUES (?, NULL, datetime('now'), ?, 'practice')", [me, minutes]);
+  let certs = (await http('GET', '/api/adult/certificates', null, token)).body.courses;
+  assert.equal(certs.find((c) => c.id === java.id).requirements.sufficientHours.met, false, 'practice time is not Java lesson time');
+  await dbRun("INSERT INTO learning_hours_log (user_id, module_id, session_start, duration_minutes, activity_type) VALUES (?, ?, datetime('now'), ?, 'lesson')", [me, java.modules[0], minutes]);
+  certs = (await http('GET', '/api/adult/certificates', null, token)).body.courses;
+  assert.equal(certs.length, 6);
+  assert.equal(certs.find((c) => c.id === java.id).eligible, true, JSON.stringify(certs.find((c) => c.id === java.id)));
+  assert.equal(certs.find((c) => c.key === 'web').eligible, false, 'other courses are not finished');
+  assert.equal((await http('POST', '/api/adult/certificates/1', null, token)).status, 400);
+
+  const cert = await http('POST', `/api/adult/certificates/${java.id}`, null, token);
   assert.equal(cert.status, 200, JSON.stringify(cert.body));
   assert.equal(cert.body.certificate.firstName, 'Wanjiku');
-  assert.equal(cert.body.certificate.totalHours, REQUIRED_HOURS + 1);
-  const again = await http('POST', '/api/adult/certificate', null, token);
-  assert.equal(again.body.certificate.certificateNumber, cert.body.certificate.certificateNumber, 'issued only once');
+  assert.equal(cert.body.certificate.courseTitle, 'Java Programming');
+  assert.match(cert.body.certificate.certificateNumber, /^KCJAVA-\d{4}-\d{5}-[0-9A-F]{4}$/);
+  assert.equal(cert.body.certificate.curriculumCode, java.units[0]);
+  assert.equal(cert.body.certificate.totalHours, java.requiredHours + 1);
+  const again = await http('POST', `/api/adult/certificates/${java.id}`, null, token);
+  assert.equal(again.body.certificate.certificateNumber, cert.body.certificate.certificateNumber, 'issued only once per course');
   const verify = await http('GET', `/api/certificates/verify/${cert.body.certificate.verificationCode}`);
   assert.equal(verify.body.valid, true);
   assert.equal(verify.body.name, 'Wanjiku Kamau');
+  assert.equal(verify.body.course, 'Java Programming');
+  assert.equal(verify.body.lessons, java.lessonCount);
   assert.equal(verify.body.email, undefined, 'no private data on the public check');
   assert.equal((await http('GET', '/api/certificates/verify/NOPE123')).status, 404);
+  assert.equal((await http('GET', '/api/adult/curriculum', null, token)).body.stats.certificatesEarned, 1);
+
+  // A certificate from before per-course certificates (no course) is shown as Web Development.
+  const other = await http('POST', '/api/adult/register', { email: 'legacy.cert@example.com', password: 'longpassword1', firstName: 'Old', lastName: 'Cert' });
+  await dbRun("INSERT INTO certificates (user_id, course_id, certificate_number, issue_date, total_hours, overall_score, verification_code) VALUES (?, NULL, 'KCWEB-2025-00001-AAAA', '2025-06-01', 170, 88, 'LEGACY0001')", [other.body.user.id]);
+  const legacy = (await http('GET', '/api/adult/certificates', null, other.body.token)).body.courses;
+  assert.equal(legacy.find((c) => c.key === 'web').certificate.certificateNumber, 'KCWEB-2025-00001-AAAA');
+  assert.equal((await http('GET', '/api/certificates/verify/LEGACY0001')).body.course, 'Web Development');
 
   // Profile and password.
   const prof = await http('PUT', '/api/adult/profile', { firstName: 'Wanjiku', lastName: 'Njoroge', occupation: 'Developer' }, token);
   assert.equal(prof.body.user.lastName, 'Njoroge');
   // An issued certificate keeps the name it was issued with (a profile edit cannot change it).
-  assert.equal((await http('GET', '/api/adult/certificate', null, token)).body.certificate.lastName, 'Kamau');
+  const after = (await http('GET', '/api/adult/certificates', null, token)).body.courses.find((c) => c.id === java.id);
+  assert.equal(after.certificate.lastName, 'Kamau');
   assert.equal((await http('GET', `/api/certificates/verify/${cert.body.certificate.verificationCode}`)).body.name, 'Wanjiku Kamau');
   // The study time the dashboard shows is exact (minutes), not just rounded hours.
-  assert.ok((await http('GET', '/api/adult/curriculum', null, token)).body.stats.minutesLogged >= minutes);
+  assert.ok((await http('GET', '/api/adult/curriculum', null, token)).body.stats.minutesLogged >= minutes * 2);
   assert.equal((await http('PUT', '/api/adult/password', { currentPassword: 'nope', newPassword: 'newpassword2' }, token)).status, 400);
   assert.equal((await http('PUT', '/api/adult/password', { currentPassword: 'longpassword1', newPassword: 'newpassword2' }, token)).status, 200);
   assert.equal((await http('POST', '/api/adult/login', { email: 'wanjiku.adult@example.com', password: 'newpassword2' })).status, 200);

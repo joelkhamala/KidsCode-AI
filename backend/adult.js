@@ -13,7 +13,8 @@
  *   POST /api/adult/lesson/:id/complete           finish: needs the practical and written tests passed
  *   POST /api/adult/activity                      study-time heartbeat (one minute at a time)
  *   GET  /api/adult/progress                      progress report
- *   GET  /api/adult/certificate/eligibility | GET /api/adult/certificate | POST /api/adult/certificate
+ *   GET  /api/adult/certificates            every course with its requirements and certificate
+ *   POST /api/adult/certificates/:courseId  issue the certificate for one course
  *   GET  /api/certificates/verify/:code           public certificate check (for employers)
  *
  * Study time is counted from heartbeats sent once a minute while a lesson or the
@@ -47,6 +48,11 @@ function ensureReady() {
             issued_first_name = (SELECT first_name FROM users WHERE users.id = certificates.user_id),
             issued_last_name = (SELECT last_name FROM users WHERE users.id = certificates.user_id)
           WHERE issued_first_name IS NULL`).catch(() => {});
+        // One certificate per course. Certificates issued before courses had their own were for
+        // the original programme, Web Development (course 1).
+        await run('ALTER TABLE certificates ADD COLUMN course_id INTEGER').catch(() => {}); // already there
+        await run('UPDATE certificates SET course_id = 1 WHERE course_id IS NULL').catch(() => {});
+        await run('CREATE UNIQUE INDEX IF NOT EXISTS idx_cert_user_course ON certificates(user_id, course_id)').catch(() => {});
       })
       .catch((e) => { ready = null; throw e; });
   }
@@ -94,16 +100,59 @@ async function summary(userId) {
   const avg = done.length ? Math.round(done.reduce((s, p) => s + (p.score || 0), 0) / done.length) : 0;
   const minutes = await minutesOf(userId);
   const hours = Math.round((minutes / 60) * 10) / 10;
-  const req = {
-    allLessonsCompleted: { met: ids.length > 0 && done.length >= ids.length, current: done.length, required: ids.length },
-    passedAssessments: { met: done.length > 0 && avg >= course.PASS_MARK, current: avg, required: course.PASS_MARK },
-    sufficientHours: { met: hours >= course.REQUIRED_HOURS, current: minutes / 60, required: course.REQUIRED_HOURS },
-  };
   return {
     lessons, progress, completedLessons: done.length, totalLessons: ids.length, averageScore: avg, hoursLogged: hours, minutesLogged: minutes,
     progressPercentage: ids.length ? Math.round((100 * done.length) / ids.length) : 0,
-    requirements: req, eligible: Object.values(req).every((r) => r.met),
   };
+}
+
+const certificateSql = `SELECT c.*, COALESCE(c.issued_first_name, u.first_name) AS first_name, COALESCE(c.issued_last_name, u.last_name) AS last_name
+  FROM certificates c JOIN users u ON u.id = c.user_id`;
+
+function certificateView(c) {
+  const co = course.COURSES.find((x) => x.id === Number(c.course_id)) || course.COURSES[0];
+  return {
+    id: c.id, courseId: co.id, courseKey: co.key, courseTitle: co.title, certificateNumber: c.certificate_number,
+    verificationCode: c.verification_code, issueDate: c.issue_date, totalHours: c.total_hours, overallScore: c.overall_score,
+    curriculumCode: c.curriculum_code || co.units[0], firstName: c.first_name, lastName: c.last_name,
+  };
+}
+
+/**
+ * Every course with the learner's progress towards its certificate:
+ * all its lessons completed, an average of PASS_MARK or more, and its study hours
+ * (time spent in that course's lessons).
+ * @param {number} userId
+ * @param {object} [s] a summary() already loaded
+ */
+async function courseStatuses(userId, s) {
+  const sum = s || await summary(userId);
+  const prog = Object.fromEntries(sum.progress.map((p) => [p.lesson_id, p]));
+  const minutesByModule = Object.fromEntries((await all(
+    'SELECT module_id, SUM(duration_minutes) AS m FROM learning_hours_log WHERE user_id = ? AND module_id IS NOT NULL GROUP BY module_id', [userId],
+  )).map((r) => [r.module_id, r.m]));
+  const certs = await all(`${certificateSql} WHERE c.user_id = ?`, [userId]);
+  return course.COURSES.map((c) => {
+    const lessons = sum.lessons.filter((l) => c.modules.includes(l.module_id));
+    const done = lessons.filter((l) => prog[l.id] && prog[l.id].completed);
+    const avg = done.length ? Math.round(done.reduce((a, l) => a + (prog[l.id].score || 0), 0) / done.length) : 0;
+    const minutes = c.modules.reduce((n, id) => n + (minutesByModule[id] || 0), 0);
+    const requirements = {
+      allLessonsCompleted: { met: lessons.length > 0 && done.length >= lessons.length, current: done.length, required: lessons.length },
+      passedAssessments: { met: done.length > 0 && avg >= course.PASS_MARK, current: avg, required: course.PASS_MARK },
+      sufficientHours: { met: minutes / 60 >= c.requiredHours, current: minutes / 60, required: c.requiredHours },
+    };
+    // Certificates from before per-course certificates have no course: they were for Web Development.
+    const cert = certs.find((x) => (Number(x.course_id) || 1) === c.id);
+    return {
+      id: c.id, key: c.key, title: c.title, language: c.language, units: c.units, modules: c.modules.length,
+      totalLessons: lessons.length, completedLessons: done.length, averageScore: avg, minutesLogged: minutes,
+      hours: c.hours, requiredHours: c.requiredHours, started: lessons.some((l) => prog[l.id]),
+      progressPercentage: lessons.length ? Math.round((100 * done.length) / lessons.length) : 0,
+      requirements, eligible: Object.values(requirements).every((r) => r.met),
+      certificate: cert ? certificateView(cert) : null,
+    };
+  });
 }
 
 async function bestScores(userId, lessonId) {
@@ -228,15 +277,16 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
       const mods = course.MODULES.filter((m) => c.modules.includes(m.id));
       return {
         id: c.id, key: c.key, title: c.title, language: c.language, units: c.units, modules: mods.length,
-        lessons: mods.reduce((n, m) => n + m.lessons.length, 0), hours: mods.reduce((n, m) => n + m.hours, 0),
+        lessons: mods.reduce((n, m) => n + m.lessons.length, 0), hours: c.hours, requiredHours: c.requiredHours,
       };
     });
     res.json({
       courses,
       modules: course.MODULES.length,
       lessons: course.MODULES.reduce((n, m) => n + m.lessons.length, 0),
+      totalHours: course.TOTAL_HOURS,
       requiredHours: course.REQUIRED_HOURS,
-      certificate: true,
+      certificates: course.COURSES.length,   // one certificate per course
     });
   });
 
@@ -279,7 +329,7 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
     const modules = await all("SELECT * FROM modules WHERE target_audience IN ('adults', 'both') ORDER BY order_num");
     const prog = Object.fromEntries(s.progress.map((p) => [p.lesson_id, p]));
     const nextLesson = s.lessons.find((l) => !(prog[l.id] && prog[l.id].completed)) || null;
-    const cert = await get('SELECT id FROM certificates WHERE user_id = ? LIMIT 1', [req.user.id]);
+    const courses = await courseStatuses(req.user.id, s);
     return {
       curriculum: modules.map((m) => ({
         id: m.id, title: m.title, description: m.description, icon: m.icon, color: m.color, order_num: m.order_num,
@@ -291,9 +341,12 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
       })),
       stats: {
         completedLessons: s.completedLessons, totalLessons: s.totalLessons, averageScore: s.averageScore,
-        hoursLogged: s.hoursLogged, minutesLogged: s.minutesLogged, requiredHours: course.REQUIRED_HOURS, progressPercentage: s.progressPercentage, eligible: s.eligible,
-        certificateIssued: Boolean(cert),
+        hoursLogged: s.hoursLogged, minutesLogged: s.minutesLogged, requiredHours: course.REQUIRED_HOURS, progressPercentage: s.progressPercentage,
+        certificatesEarned: courses.filter((c) => c.certificate).length,
+        certificatesReady: courses.filter((c) => c.eligible && !c.certificate).length,
       },
+      // One entry per course: progress towards its certificate (and the certificate once issued).
+      courses,
       nextLesson: nextLesson ? { id: nextLesson.id, title: nextLesson.title, moduleId: nextLesson.module_id } : null,
       curriculumCode: course.CURRICULUM_CODE,
     };
@@ -415,7 +468,12 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
       firstTime: !(before && before.completed),
       next: i >= 0 && i < order.length - 1 ? { id: order[i + 1].id, title: order[i + 1].title, moduleId: order[i + 1].module_id } : null,
       moduleFinished: order.filter((l) => l.module_id === lesson.module_id).every((l) => s.progress.some((p) => p.lesson_id === l.id && p.completed)),
-      courseFinished: s.requirements.allLessonsCompleted.met,
+      // Every lesson of this lesson's course is done: its certificate may be within reach.
+      courseId: (course.courseOfModule(lesson.module_id) || {}).id || null,
+      courseFinished: (() => {
+        const co = course.courseOfModule(lesson.module_id);
+        return Boolean(co) && order.filter((l) => co.modules.includes(l.module_id)).every((l) => s.progress.some((p) => p.lesson_id === l.id && p.completed));
+      })(),
     };
   }));
 
@@ -473,7 +531,6 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
       `SELECT strftime('%Y-%W', created_at) AS week, MIN(date(created_at)) AS start, SUM(duration_minutes) AS minutes
        FROM learning_hours_log WHERE user_id = ? AND created_at >= date('now', '-56 days') GROUP BY week ORDER BY week`, [userId],
     );
-    const cert = await get('SELECT certificate_number AS number FROM certificates WHERE user_id = ? ORDER BY id DESC LIMIT 1', [userId]);
     // Average and best score per kind of assessment, across every attempt.
     const byType = await all(
       `SELECT assessment_type AS type, COUNT(*) AS attempts, ROUND(AVG(percentage)) AS average, MAX(percentage) AS best,
@@ -487,48 +544,32 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
         requiredHours: course.REQUIRED_HOURS, progressPercentage: s.progressPercentage,
         completedModules: perModule.filter((m) => m.total && m.completed === m.total).length, totalModules: perModule.length,
         modules: perModule, recentAssessments: assessments, weeklyHours: weeks.map((w) => ({ start: w.start, minutes: w.minutes, hours: Math.round((w.minutes / 60) * 10) / 10 })),
-        requirements: s.requirements, eligible: s.eligible, certificateNumber: cert ? cert.number : null,
+        courses: await courseStatuses(userId, s),
       },
     };
   }));
 
-  // ---- certificate ----
-  router.get('/certificate/eligibility', wrap(async (req) => {
-    const s = await summary(req.user.id);
-    return { eligible: s.eligible, requirements: s.requirements };
-  }));
+  // ---- certificates: one per course ----
+  router.get('/certificates', wrap(async (req) => ({ courses: await courseStatuses(req.user.id), passMark: course.PASS_MARK })));
 
-  const certificateView = (c) => ({
-    id: c.id, certificateNumber: c.certificate_number, verificationCode: c.verification_code, issueDate: c.issue_date,
-    totalHours: c.total_hours, overallScore: c.overall_score, curriculumCode: c.curriculum_code || course.CURRICULUM_CODE,
-    firstName: c.first_name, lastName: c.last_name,
-  });
-
-  router.get('/certificate', wrap(async (req) => {
-    const c = await get(
-      `SELECT c.*, COALESCE(c.issued_first_name, u.first_name) AS first_name, COALESCE(c.issued_last_name, u.last_name) AS last_name FROM certificates c JOIN users u ON u.id = c.user_id
-       WHERE c.user_id = ? ORDER BY c.id DESC LIMIT 1`, [req.user.id],
-    );
-    if (!c) throw fail(404, 'No certificate yet', 'none');
-    return { certificate: certificateView(c) };
-  }));
-
-  router.post('/certificate', wrap(async (req) => {
+  router.post('/certificates/:courseId', wrap(async (req) => {
     const userId = req.user.id;
-    const existing = await get('SELECT c.*, COALESCE(c.issued_first_name, u.first_name) AS first_name, COALESCE(c.issued_last_name, u.last_name) AS last_name FROM certificates c JOIN users u ON u.id = c.user_id WHERE c.user_id = ? ORDER BY c.id DESC LIMIT 1', [userId]);
+    const co = course.COURSES.find((c) => c.id === Number(req.params.courseId));
+    if (!co) throw fail(404, 'Course not found');
+    const existing = await get(`${certificateSql} WHERE c.user_id = ? AND c.course_id = ?`, [userId, co.id]);
     if (existing) return { success: true, certificate: certificateView(existing), alreadyIssued: true };
-    const s = await summary(userId);
-    if (!s.eligible) throw fail(400, 'You have not met all the certificate requirements yet.', 'not_eligible');
-    const number = `KCWEB-${new Date().getFullYear()}-${String(userId).padStart(5, '0')}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+    const status = (await courseStatuses(userId)).find((c) => c.id === co.id);
+    if (!status.eligible) throw fail(400, `You have not met all the requirements for the ${co.title} certificate yet.`, 'not_eligible');
+    const number = `${co.certificatePrefix}-${new Date().getFullYear()}-${String(userId).padStart(5, '0')}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
     const code = crypto.randomBytes(6).toString('hex').toUpperCase();
     const r = await run(
-      `INSERT INTO certificates (user_id, certificate_number, curriculum_code, issue_date, total_hours, overall_score, verification_code, issued_first_name, issued_last_name)
-       VALUES (?, ?, ?, date('now'), ?, ?, ?, (SELECT first_name FROM users WHERE id = ?), (SELECT last_name FROM users WHERE id = ?))`,
-      [userId, number, course.CURRICULUM_CODE, Math.round(s.hoursLogged), s.averageScore, code, userId, userId],
+      `INSERT INTO certificates (user_id, course_id, certificate_number, curriculum_code, issue_date, total_hours, overall_score, verification_code, issued_first_name, issued_last_name)
+       VALUES (?, ?, ?, ?, date('now'), ?, ?, ?, (SELECT first_name FROM users WHERE id = ?), (SELECT last_name FROM users WHERE id = ?))`,
+      [userId, co.id, number, co.units[0], Math.round(status.minutesLogged / 60), status.averageScore, code, userId, userId],
     );
     await run(`UPDATE adult_learner_profiles SET certification_eligible = 1, certification_issued_date = date('now'), certificate_number = ?
       WHERE user_id = ?`, [number, userId]);
-    const c = await get('SELECT c.*, COALESCE(c.issued_first_name, u.first_name) AS first_name, COALESCE(c.issued_last_name, u.last_name) AS last_name FROM certificates c JOIN users u ON u.id = c.user_id WHERE c.id = ?', [r.lastID]);
+    const c = await get(`${certificateSql} WHERE c.id = ?`, [r.lastID]);
     return { success: true, certificate: certificateView(c) };
   }));
 
@@ -543,14 +584,15 @@ function createCertificateVerifyRouter() {
       await ensureReady();
       const code = String(req.params.code || '').trim().toUpperCase().slice(0, 40);
       const c = await get(
-        `SELECT c.certificate_number, c.issue_date, c.total_hours, c.overall_score, c.curriculum_code, COALESCE(c.issued_first_name, u.first_name) AS first_name, COALESCE(c.issued_last_name, u.last_name) AS last_name
-         FROM certificates c JOIN users u ON u.id = c.user_id WHERE upper(c.verification_code) = ? OR upper(c.certificate_number) = ?`, [code, code],
+        `${certificateSql} WHERE upper(c.verification_code) = ? OR upper(c.certificate_number) = ?`, [code, code],
       );
       if (!c) return res.status(404).json({ valid: false });
+      const v = certificateView(c);
+      const co = course.COURSES.find((x) => x.id === v.courseId);
       return res.json({
-        valid: true, name: `${c.first_name || ''} ${c.last_name || ''}`.trim(), certificateNumber: c.certificate_number, issueDate: c.issue_date,
-        totalHours: c.total_hours, overallScore: c.overall_score, curriculumCode: c.curriculum_code || course.CURRICULUM_CODE,
-        course: 'Professional Web Development',
+        valid: true, name: `${v.firstName || ''} ${v.lastName || ''}`.trim(), certificateNumber: v.certificateNumber, issueDate: v.issueDate,
+        totalHours: v.totalHours, overallScore: v.overallScore, curriculumCode: v.curriculumCode,
+        course: v.courseTitle, courseId: v.courseId, courseKey: v.courseKey, lessons: co.lessonCount, modules: co.modules.length,
       });
     } catch (err) {
       console.error('Certificate verify error:', err.message);
@@ -560,4 +602,4 @@ function createCertificateVerifyRouter() {
   return router;
 }
 
-module.exports = { createAdultRouter, createCertificateVerifyRouter, ensureReady, summary };
+module.exports = { createAdultRouter, createCertificateVerifyRouter, ensureReady, summary, courseStatuses };

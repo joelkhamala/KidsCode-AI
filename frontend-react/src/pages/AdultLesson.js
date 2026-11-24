@@ -201,7 +201,7 @@ const AdultLesson = () => {
           <div className="flex flex-wrap gap-2 mt-4">
             {finished.next && <button type="button" className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" onClick={() => navigate(`/adult/lesson/${finished.next.id}`)}>{t('ad.nextLesson')}: {finished.next.title} →</button>}
             <Link to={`/adult/module/${lesson.moduleId}`} className="px-4 py-2 rounded-xl border border-emerald-300 text-emerald-800 font-semibold">{t('ad.backToModule')}</Link>
-            {finished.courseFinished && <Link to="/adult/certificate" className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold">🎓 {t('ad.certificate')}</Link>}
+            {finished.courseFinished && <Link to={finished.courseId ? `/adult/certificate?course=${finished.courseId}` : '/adult/certificate'} className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold">🎓 {t('ad.certificate')}</Link>}
           </div>
         </section>
       )}
