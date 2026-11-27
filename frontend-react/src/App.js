@@ -48,6 +48,19 @@ const ProtectedRoute = ({ children }) => {
   return currentUser ? children : <Navigate to="/auth" />;
 };
 
+// Teacher Dashboard - only authenticated teacher accounts may enter.
+const TeacherRoute = ({ children }) => {
+  const { currentUser, accountType, loading } = useAuth();
+
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  return currentUser && accountType === 'teacher'
+    ? children
+    : <Navigate to="/auth" replace />;
+};
+
 // Adult Protected Route — reads ONLY from adult_token/adult_user
 // Kids tokens are never accepted here.
 const AdultProtectedRoute = ({ children }) => {
@@ -262,9 +275,9 @@ function AppRoutes({ currentUser }) {
           <Route
             path="/teacher-dashboard"
             element={
-              <ProtectedRoute>
+              <TeacherRoute>
                 <TeacherDashboard />
-              </ProtectedRoute>
+              </TeacherRoute>
             }
           />
 

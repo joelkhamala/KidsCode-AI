@@ -22,7 +22,8 @@ process.env.AI_PROVIDER = 'offline';
 require.cache[require.resolve('sqlite3')] = { id: 'sqlite3', filename: 'sqlite3', loaded: true, exports: require('./sqlite3-shim') };
 
 const app = require('../server');
-const { initializeDatabase } = require('../database');
+const { getDb, initializeDatabase } = require('../database');
+const parentSupport = require('../parent-support');
 
 let server;
 let base;
@@ -217,6 +218,50 @@ test('parent profile, password change, reports and switch-back work', async () =
   const restored = await http('GET', '/api/parent/profile', undefined, switched.body.returnToken);
   assert.equal(restored.status, 200);
   assert.equal(restored.body.parent.firstName, 'Amina');
+});
+
+test('parent report only includes curriculum available to a Kids account', async () => {
+  const parent = await makeParent('report-audience@example.com');
+  const child = await http('POST', '/api/parent/children', {
+    username: 'audiencekid', displayName: 'Audience Kid', age: 10, password: 'secret123',
+  }, parent);
+  const childId = child.body.child.id;
+  const db = getDb();
+
+  // Adult courses share the lessons/progress tables, so add one explicitly.
+  await parentSupport.runOne(db,
+    `ALTER TABLE modules ADD COLUMN target_audience TEXT DEFAULT 'children'`).catch(() => {});
+  await parentSupport.runOne(db,
+    `INSERT OR REPLACE INTO modules (id, title, order_num, difficulty, target_audience)
+     VALUES (9001, 'Adult HTML Course', 99, 'beginner', 'adults')`);
+  await parentSupport.runOne(db,
+    `INSERT OR REPLACE INTO lessons (id, module_id, title, order_num)
+     VALUES (9001, 9001, 'Adult HTML Lesson', 1)`);
+
+  const saveProgress = (lessonId, moduleId, completed = 1) => parentSupport.runOne(db,
+    `INSERT OR REPLACE INTO progress (user_id, module_id, lesson_id, completed, score, updated_at)
+     VALUES (?, ?, ?, ?, 80, datetime('now'))`, [childId, moduleId, lessonId, completed]);
+
+  // Lesson 7 is in a later Kids module; it is part of the child's curriculum even
+  // before earlier lessons are complete. Lesson 9001 is adult-only and must be hidden.
+  await saveProgress(1, 1);
+  await saveProgress(7, 2, 0);
+  await saveProgress(9001, 9001);
+
+  const report = await http('GET', `/api/parent/children/${childId}/report`, undefined, parent);
+  assert.equal(report.status, 200);
+  assert.deepEqual(report.body.progress.map((p) => p.lesson_id), [1, 7]);
+  assert.ok(report.body.modules.every((m) => m.id < 9001));
+  assert.equal(report.body.modules.find((m) => m.id === 2).total, 3);
+
+  const detail = await http('GET', `/api/parent/children/${childId}/progress`, undefined, parent);
+  assert.equal(detail.status, 200);
+  assert.deepEqual(detail.body.progress.progressRecords.map((p) => p.lesson_id), [1, 7]);
+  assert.equal(detail.body.progress.completedLessons, 1);
+
+  const csv = await http('GET', `/api/parent/children/${childId}/report.csv`, undefined, parent);
+  assert.ok(csv.body.raw.includes('What is Code?'));
+  assert.ok(!csv.body.raw.includes('Adult HTML Lesson'));
 });
 
 test('invite-code linking preserves the child and unlink removes only access', async () => {

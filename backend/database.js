@@ -221,6 +221,42 @@ function initializeDatabase() {
         )
       `);
 
+      // Lesson approval requests routed to teachers with can_approve_lessons.
+      // Kept separate from parent approvals so a child can have both a parent
+      // and a teacher respond independently.
+      database.run(`
+        CREATE TABLE IF NOT EXISTS teacher_approval_requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          teacher_id INTEGER NOT NULL,
+          child_id INTEGER NOT NULL,
+          lesson_id INTEGER NOT NULL,
+          module_id INTEGER NOT NULL,
+          status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'denied')),
+          requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          responded_at DATETIME,
+          response_note TEXT,
+          FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (child_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (lesson_id) REFERENCES lessons(id),
+          UNIQUE(teacher_id, child_id, lesson_id)
+        )
+      `);
+
+      // In-app teacher notifications (no email provider required)
+      database.run(`
+        CREATE TABLE IF NOT EXISTS teacher_notifications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          teacher_id INTEGER NOT NULL,
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          body TEXT NOT NULL,
+          data_json TEXT DEFAULT '{}',
+          read_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+
       // Session logs table
       database.run(`
         CREATE TABLE IF NOT EXISTS session_logs (

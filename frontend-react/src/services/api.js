@@ -357,6 +357,7 @@ export const parentAPI = {
   updateChild: (childId, updates) => api.put(`/parent/children/${childId}`, updates),
   deleteChild: (childId) => api.delete(`/parent/children/${childId}`),
   getChildProgress: (childId) => api.get(`/parent/children/${childId}/progress`),
+  getEnrollmentCode: (childId) => api.get(`/parent/children/${childId}/enrollment-code`),
   setRestrictions: (childId, restrictions) => api.post(`/parent/children/${childId}/restrictions`, restrictions),
   getRestrictions: (childId) => api.get(`/parent/children/${childId}/restrictions`),
   deleteRestrictions: (childId) => api.delete(`/parent/children/${childId}/restrictions`),
@@ -392,8 +393,28 @@ export const teacherAPI = {
   getStudent: (studentId) => api.get(`/teacher/students/${studentId}`),
   getStudentProgress: (studentId) => api.get(`/teacher/students/${studentId}/progress`),
   getDashboard: () => api.get('/teacher/dashboard'),
-  enrollStudent: (studentEmail, className) => api.post('/teacher/students/enroll', { studentEmail, className }),
+  resolveStudent: (enrollmentCode) => api.post('/teacher/students/resolve', { enrollmentCode }),
+  enrollStudent: (studentId, className, enrollmentCode) =>
+    api.post('/teacher/students/enroll', { studentId, className, enrollmentCode }),
   removeStudent: (studentId) => api.delete(`/teacher/students/${studentId}`),
+  getStudentReport: (studentId) => api.get(`/teacher/students/${studentId}/report`),
+  downloadStudentReportCsv: (studentId) =>
+    api.get(`/teacher/students/${studentId}/report.csv`, { responseType: 'blob' }),
+  getApprovalRequests: (status = 'pending') => api.get('/teacher/approval-requests', { params: { status } }),
+  respondToApproval: (requestId, status, note) =>
+    api.post(`/teacher/approval-requests/${requestId}/respond`, { status, note }),
+  getNotifications: () => api.get('/teacher/notifications'),
+  markNotificationRead: (id) => api.patch(`/teacher/notifications/${id}/read`),
+  markAllNotificationsRead: () => api.post('/teacher/notifications/read-all'),
+  getProfile: () => api.get('/teacher/profile'),
+  updateProfile: (data) => api.put('/teacher/profile', data),
+  changePassword: (currentPassword, newPassword) =>
+    api.put('/teacher/password', { currentPassword, newPassword }),
+};
+
+export const teacherApprovalAPI = {
+  getRequests: (status) => teacherAPI.getApprovalRequests(status),
+  respond: (requestId, status, note) => teacherAPI.respondToApproval(requestId, status, note),
 };
 
 // Lesson Approval API

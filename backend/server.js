@@ -15,6 +15,7 @@ const { createSocialRouter, createParentSocialRouter } = require('./social');
 const { createAdultRouter, createCertificateVerifyRouter, ensureReady: ensureAdultCourse } = require('./adult');
 const aiEngine = require('./ai');
 const parentSupport = require('./parent-support');
+const teacherSupport = require('./teacher-support');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -679,84 +680,78 @@ app.post('/api/parent/children', authenticateToken, requireParentAccount, async 
 });
 
 // Generate a consent code a parent can hand to a teacher to enrol their child.
-// The code is an HMAC of the child id, so it proves parent consent without
-// exposing the child's email to self-registered adults.
+// The code carries the child id plus an HMAC, so it proves parent consent and
+// lets the teacher look up the child without needing a child email address.
 app.get('/api/parent/children/:childId/enrollment-code', authenticateToken, requireParentAccount, verifyParentChildAccess, (req, res) => {
   const childId = Number(req.params.childId);
-  const code = crypto.createHmac('sha256', JWT_SECRET).update(`enroll:${childId}`).digest('hex').slice(0, 12);
+  const code = teacherSupport.formatEnrollmentCode(JWT_SECRET, childId);
   res.json({ success: true, childId, enrollmentCode: code });
 });
 
 // Get all children for a parent
-app.get('/api/parent/children', authenticateToken, requireParentAccount, (req, res) => {
+app.get('/api/parent/children', authenticateToken, requireParentAccount, async (req, res) => {
   const parentId = req.user.id;
   const db = getDb();
 
-  db.all(
-    `SELECT u.id, u.username, u.display_name as displayName, u.age, u.avatar_url as avatarUrl, 
-            u.xp, u.streak, u.last_active as lastActive, u.created_at as createdAt,
-            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedLessons
-     FROM users u
-     INNER JOIN parent_child_relationships pcr ON u.id = pcr.child_id
-     WHERE pcr.parent_id = ?
-     ORDER BY u.created_at DESC`,
-    [parentId],
-    (err, children) => {
-      if (err) {
-        console.error('Failed to fetch children:', err);
-        return res.status(500).json({ error: 'Failed to load children' });
-      }
-
-      res.json({ children });
-    }
-  );
+  try {
+    const children = await parentSupport.getAll(db,
+      `SELECT u.id, u.username, u.display_name as displayName, u.age, u.avatar_url as avatarUrl,
+              u.xp, u.streak, u.last_active as lastActive, u.created_at as createdAt
+       FROM users u
+       INNER JOIN parent_child_relationships pcr ON u.id = pcr.child_id
+       WHERE pcr.parent_id = ?
+       ORDER BY u.created_at DESC`, [parentId]);
+    const curriculum = await parentSupport.childCurriculum(db);
+    const withProgress = await Promise.all(children.map(async (child) => {
+      const summary = await parentSupport.childProgressSummary(db, child.id, curriculum);
+      return { ...child, completedLessons: summary.completedLessons };
+    }));
+    res.json({ children: withProgress });
+  } catch (err) {
+    console.error('Failed to fetch children:', err);
+    return res.status(500).json({ error: 'Failed to load children' });
+  }
 });
 
 // Get specific child details
-app.get('/api/parent/children/:childId', authenticateToken, requireParentAccount, verifyParentChildAccess, (req, res) => {
+app.get('/api/parent/children/:childId', authenticateToken, requireParentAccount, verifyParentChildAccess, async (req, res) => {
   const childId = req.params.childId;
   const db = getDb();
 
-  db.get(
-    `SELECT u.*, 
-            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedLessons,
-            (SELECT COUNT(*) FROM lessons) as totalLessons
-     FROM users u
-     WHERE u.id = ?`,
-    [childId],
-    (err, child) => {
-      if (err || !child) {
-        return res.status(404).json({ error: 'Child not found' });
-      }
+  try {
+    const child = await parentSupport.getOne(db, 'SELECT * FROM users WHERE id = ?', [childId]);
+    if (!child) return res.status(404).json({ error: 'Child not found' });
 
-      // Get restrictions
-      parentSupport.restrictionsFor(db, childId).then((restrictions) => {
-          res.json({
-            child: {
-              id: child.id,
-              username: child.username,
-              displayName: child.display_name,
-              age: child.age,
-              avatarUrl: child.avatar_url,
-              xp: child.xp,
-              streak: child.streak,
-              lastActive: child.last_active,
-              completedLessons: child.completedLessons,
-              totalLessons: child.totalLessons,
-              restrictions: restrictions ? {
-                maxDailyMinutes: restrictions.max_daily_minutes,
-                allowedDays: restrictions.allowed_days ? JSON.parse(restrictions.allowed_days) : null,
-                contentFilters: restrictions.content_filters ? JSON.parse(restrictions.content_filters) : null,
-                requireParentApproval: restrictions.require_parent_approval === 1
-              } : null
-            }
-          });
-      }).catch((err) => {
-        console.error('Failed to load restrictions:', err);
-        return res.status(500).json({ error: 'Failed to load child details' });
-      });
-    }
-  );
+    const [curriculum, restrictions] = await Promise.all([
+      parentSupport.childCurriculum(db),
+      parentSupport.restrictionsFor(db, childId),
+    ]);
+    const summary = await parentSupport.childProgressSummary(db, child.id, curriculum);
+
+    res.json({
+      child: {
+        id: child.id,
+        username: child.username,
+        displayName: child.display_name,
+        age: child.age,
+        avatarUrl: child.avatar_url,
+        xp: child.xp,
+        streak: child.streak,
+        lastActive: child.last_active,
+        completedLessons: summary.completedLessons,
+        totalLessons: curriculum.lessonIds.length,
+        restrictions: restrictions ? {
+          maxDailyMinutes: restrictions.max_daily_minutes,
+          allowedDays: restrictions.allowed_days ? JSON.parse(restrictions.allowed_days) : null,
+          contentFilters: restrictions.content_filters ? JSON.parse(restrictions.content_filters) : null,
+          requireParentApproval: restrictions.require_parent_approval === 1
+        } : null
+      }
+    });
+  } catch (err) {
+    console.error('Failed to load child details:', err);
+    return res.status(500).json({ error: 'Failed to load child details' });
+  }
 });
 
 // Update child account
@@ -829,7 +824,7 @@ app.delete('/api/parent/children/:childId', authenticateToken, requireParentAcco
 });
 
 // Get child progress
-app.get('/api/parent/children/:childId/progress', authenticateToken, requireParentAccount, verifyParentChildAccess, (req, res) => {
+app.get('/api/parent/children/:childId/progress', authenticateToken, requireParentAccount, verifyParentChildAccess, async (req, res) => {
   const childId = req.params.childId;
   const db = getDb();
 
@@ -837,71 +832,52 @@ app.get('/api/parent/children/:childId/progress', authenticateToken, requirePare
     return res.status(403).json({ error: 'No permission to view this child\'s progress' });
   }
 
-  // Get user stats
-  db.get(
-    'SELECT xp, streak, last_active FROM users WHERE id = ?',
-    [childId],
-    (err, user) => {
-      if (err || !user) {
-        return res.status(404).json({ error: 'Child not found' });
+  try {
+    const [user, allProgress, achievements, sessions, curriculum] = await Promise.all([
+      parentSupport.getOne(db, 'SELECT xp, streak, last_active FROM users WHERE id = ?', [childId]),
+      parentSupport.getAll(db, 'SELECT * FROM progress WHERE user_id = ? ORDER BY updated_at DESC', [childId]),
+      parentSupport.getAll(db,
+        `SELECT a.*, ua.unlocked_at
+         FROM achievements a
+         INNER JOIN user_achievements ua ON a.id = ua.achievement_id
+         WHERE ua.user_id = ?
+         ORDER BY ua.unlocked_at DESC
+         LIMIT 5`, [childId]),
+      parentSupport.getAll(db,
+        `SELECT login_time, logout_time, duration_minutes
+         FROM session_logs
+         WHERE user_id = ?
+         ORDER BY login_time DESC
+         LIMIT 30`, [childId]),
+      parentSupport.childCurriculum(db),
+    ]);
+    if (!user) return res.status(404).json({ error: 'Child not found' });
+
+    const progress = parentSupport.filterChildProgress(allProgress, curriculum);
+    const completed = progress.filter((p) => Number(p.completed) === 1);
+    const totalMinutes = sessions.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
+
+    res.json({
+      progress: {
+        childId: parseInt(childId),
+        totalXP: user.xp,
+        currentLevel: Math.floor(user.xp / 200) + 1,
+        streak: user.streak,
+        completedLessons: completed.length,
+        averageScore: completed.length
+          ? Math.round(completed.reduce((sum, p) => sum + (p.score || 0), 0) / completed.length)
+          : 0,
+        timeSpentMinutes: totalMinutes,
+        lastActive: user.last_active,
+        recentAchievements: achievements || [],
+        progressRecords: progress,
+        recentSessions: sessions || []
       }
-
-      // Get progress records
-      db.all(
-        'SELECT * FROM progress WHERE user_id = ? ORDER BY updated_at DESC',
-        [childId],
-        (err, progress) => {
-          if (err) {
-            return res.status(500).json({ error: 'Failed to load progress' });
-          }
-
-          // Get recent achievements
-          db.all(
-            `SELECT a.*, ua.unlocked_at 
-             FROM achievements a
-             INNER JOIN user_achievements ua ON a.id = ua.achievement_id
-             WHERE ua.user_id = ?
-             ORDER BY ua.unlocked_at DESC
-             LIMIT 5`,
-            [childId],
-            (err, achievements) => {
-              // Get session logs
-              db.all(
-                `SELECT login_time, logout_time, duration_minutes 
-                 FROM session_logs 
-                 WHERE user_id = ? 
-                 ORDER BY login_time DESC 
-                 LIMIT 30`,
-                [childId],
-                (err, sessions) => {
-                  const completedLessons = progress.filter(p => p.completed).length;
-                  const totalScore = progress.reduce((sum, p) => sum + (p.score || 0), 0);
-                  const averageScore = completedLessons > 0 ? Math.round(totalScore / completedLessons) : 0;
-                  const totalMinutes = sessions.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
-
-                  res.json({
-                    progress: {
-                      childId: parseInt(childId),
-                      totalXP: user.xp,
-                      currentLevel: Math.floor(user.xp / 200) + 1,
-                      streak: user.streak,
-                      completedLessons,
-                      averageScore,
-                      timeSpentMinutes: totalMinutes,
-                      lastActive: user.last_active,
-                      recentAchievements: achievements || [],
-                      progressRecords: progress,
-                      recentSessions: sessions || []
-                    }
-                  });
-                }
-              );
-            }
-          );
-        }
-      );
-    }
-  );
+    });
+  } catch (err) {
+    console.error('Failed to load child progress:', err);
+    return res.status(500).json({ error: 'Failed to load progress' });
+  }
 });
 
 // Shared async handler for POST/PUT so both verbs validate and upsert identically.
@@ -959,49 +935,54 @@ app.delete('/api/parent/children/:childId/restrictions', authenticateToken, requ
 });
 
 // Get parent dashboard (aggregated data for all children)
-app.get('/api/parent/dashboard', authenticateToken, requireParentAccount, (req, res) => {
+app.get('/api/parent/dashboard', authenticateToken, requireParentAccount, async (req, res) => {
   const parentId = req.user.id;
   const db = getDb();
 
-  // Get all children with their stats
-  db.all(
-    `SELECT u.id, u.username, u.display_name as displayName, u.xp, u.streak, u.last_active as lastActive,
-            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedLessons,
-            (SELECT AVG(score) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as avgScore
-     FROM users u
-     INNER JOIN parent_child_relationships pcr ON u.id = pcr.child_id
-     WHERE pcr.parent_id = ?`,
-    [parentId],
-    (err, children) => {
-      if (err) {
-        return res.status(500).json({ error: 'Failed to load dashboard data' });
+  try {
+    // Count only lessons that exist in the Kids curriculum; adult courses share
+    // the progress table but must never appear in a parent's child summary.
+    const children = await parentSupport.getAll(db,
+      `SELECT u.id, u.username, u.display_name as displayName, u.xp, u.streak, u.last_active as lastActive
+       FROM users u
+       INNER JOIN parent_child_relationships pcr ON u.id = pcr.child_id
+       WHERE pcr.parent_id = ?`, [parentId]);
+    const curriculum = await parentSupport.childCurriculum(db);
+    const summaries = await Promise.all(children.map((child) =>
+      parentSupport.childProgressSummary(db, child.id, curriculum)));
+    const enriched = children.map((child, index) => ({
+      ...child,
+      completedLessons: summaries[index].completedLessons,
+      avgScore: summaries[index].averageScore,
+    }));
+
+    const totalFamilyXP = enriched.reduce((sum, child) => sum + (child.xp || 0), 0);
+    const mostActiveChild = enriched.reduce((max, child) =>
+      (child.xp > (max?.xp || 0)) ? child : max, null
+    );
+
+    res.json({
+      dashboard: {
+        parentId,
+        children: enriched.map(c => ({
+          id: c.id,
+          username: c.username,
+          displayName: c.displayName,
+          xp: c.xp,
+          streak: c.streak,
+          lastActive: c.lastActive,
+          completedLessons: c.completedLessons,
+          avgScore: c.avgScore
+        })),
+        totalFamilyXP,
+        mostActiveChild: mostActiveChild ? mostActiveChild.id : null,
+        childCount: enriched.length
       }
-
-      const totalFamilyXP = children.reduce((sum, child) => sum + (child.xp || 0), 0);
-      const mostActiveChild = children.reduce((max, child) => 
-        (child.xp > (max?.xp || 0)) ? child : max, null
-      );
-
-      res.json({
-        dashboard: {
-          parentId,
-          children: children.map(c => ({
-            id: c.id,
-            username: c.username,
-            displayName: c.displayName,
-            xp: c.xp,
-            streak: c.streak,
-            lastActive: c.lastActive,
-            completedLessons: c.completedLessons,
-            avgScore: Math.round(c.avgScore || 0)
-          })),
-          totalFamilyXP,
-          mostActiveChild: mostActiveChild ? mostActiveChild.id : null,
-          childCount: children.length
-        }
-      });
-    }
-  );
+    });
+  } catch (err) {
+    console.error('Failed to load parent dashboard:', err);
+    return res.status(500).json({ error: 'Failed to load dashboard data' });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -1176,7 +1157,7 @@ app.delete('/api/parent/children/:childId/link', authenticateToken, requireParen
 
 async function childReportData(childId) {
   const db = getDb();
-  const [user, progress, achievementsRows, sessions, modules] = await Promise.all([
+  const [user, allProgress, achievementsRows, sessions, curriculum] = await Promise.all([
     parentSupport.getOne(db, 'SELECT id, username, display_name, xp, streak, last_active FROM users WHERE id = ?', [childId]),
     parentSupport.getAll(db,
       `SELECT p.*, l.title AS lessonTitle, m.title AS moduleTitle FROM progress p
@@ -1187,10 +1168,11 @@ async function childReportData(childId) {
        JOIN achievements a ON a.id = ua.achievement_id WHERE ua.user_id = ? ORDER BY ua.unlocked_at DESC`, [childId]),
     parentSupport.getAll(db,
       'SELECT login_time, logout_time, duration_minutes FROM session_logs WHERE user_id = ? ORDER BY login_time DESC LIMIT 365', [childId]),
-    parentSupport.getAll(db, 'SELECT id, title FROM modules ORDER BY id'),
+    parentSupport.childCurriculum(db),
   ]);
   if (!user) return null;
-  const completed = progress.filter((p) => p.completed);
+  const progress = parentSupport.filterChildProgress(allProgress, curriculum);
+  const completed = progress.filter((p) => Number(p.completed) === 1);
   return {
     child: user,
     summary: {
@@ -1200,12 +1182,12 @@ async function childReportData(childId) {
       minutes: sessions.reduce((n, s) => n + (s.duration_minutes || 0), 0),
     },
     progress, achievements: achievementsRows, sessions,
-    modules: modules.map((m) => {
-      const rows = progress.filter((p) => p.module_id === m.id);
+    modules: curriculum.modules.map((m) => {
+      const rows = progress.filter((p) => Number(p.module_id) === m.id);
       return {
         id: m.id, title: m.title,
-        completed: rows.filter((p) => p.completed).length,
-        total: rows.length,
+        completed: rows.filter((p) => Number(p.completed) === 1).length,
+        total: m.lessonIds.length,
         averageScore: rows.length ? Math.round(rows.reduce((n, p) => n + (p.score || 0), 0) / rows.length) : 0,
       };
     }),
@@ -1279,264 +1261,286 @@ app.post('/api/parent/switch-child/:childId', authenticateToken, requireParentAc
 // TEACHER ACCOUNT ENDPOINTS
 // =====================
 
-// Middleware to verify teacher-student relationship
-function verifyTeacherStudentAccess(req, res, next) {
-  const studentId = req.params.studentId || req.body.studentId;
-  const teacherId = req.user.id;
-  
-  const db = getDb();
-  db.get(
-    'SELECT * FROM teacher_student_relationships WHERE teacher_id = ? AND student_id = ? AND status = ?',
-    [teacherId, studentId, 'active'],
-    (err, relationship) => {
-      if (err || !relationship) {
-        return res.status(403).json({ error: 'Access denied to this student account' });
+// Middleware factory: every teacher action is scoped by an active relationship.
+// Progress/approval routes also honour the flags that already exist on that row.
+function teacherStudentAccess({ requireProgressPermission = false, requireApprovalPermission = false } = {}) {
+  return (req, res, next) => {
+    const studentId = req.params.studentId || req.body.studentId;
+    const teacherId = req.user.id;
+
+    getDb().get(
+      'SELECT * FROM teacher_student_relationships WHERE teacher_id = ? AND student_id = ? AND status = ?',
+      [teacherId, studentId, 'active'],
+      (err, relationship) => {
+        if (err || !relationship) {
+          return res.status(403).json({ error: 'Access denied to this student account' });
+        }
+        if (requireProgressPermission && !relationship.can_view_progress) {
+          return res.status(403).json({ error: 'Progress viewing is not enabled for this student' });
+        }
+        if (requireApprovalPermission && !relationship.can_approve_lessons) {
+          return res.status(403).json({ error: 'Lesson approvals are not enabled for this student' });
+        }
+        req.relationship = relationship;
+        next();
       }
-      req.relationship = relationship;
-      next();
-    }
-  );
+    );
+  };
 }
 
-// Get all students for a teacher
-app.get('/api/teacher/students', authenticateToken, requireTeacherAccount, (req, res) => {
-  const teacherId = req.user.id;
-  const db = getDb();
+const verifyTeacherStudentAccess = teacherStudentAccess();
 
-  db.all(
-    `SELECT u.id, u.username, u.display_name as displayName, u.age, u.avatar_url as avatarUrl, 
+// Roster shared by the students list and dashboard. Progress counts only use
+// lessons from the Kids curriculum, so adult courses cannot inflate them.
+async function teacherStudentsWithSummaries(teacherId) {
+  const db = getDb();
+  const rows = await parentSupport.getAll(db,
+    `SELECT u.id, u.username, u.display_name as displayName, u.age, u.avatar_url as avatarUrl,
             u.xp, u.streak, u.last_active as lastActive, u.created_at as createdAt,
             tsr.class_name as className, tsr.enrollment_date as enrollmentDate,
-            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedLessons
+            tsr.can_view_progress as canViewProgress, tsr.can_approve_lessons as canApproveLessons
      FROM users u
      INNER JOIN teacher_student_relationships tsr ON u.id = tsr.student_id
      WHERE tsr.teacher_id = ? AND tsr.status = 'active'
-     ORDER BY tsr.enrollment_date DESC`,
-    [teacherId],
-    (err, students) => {
-      if (err) {
-        console.error('Failed to fetch students:', err);
-        return res.status(500).json({ error: 'Failed to load students' });
-      }
+     ORDER BY tsr.enrollment_date DESC`, [teacherId]);
+  const curriculum = await parentSupport.childCurriculum(db);
+  const summaries = await Promise.all(rows.map((row) =>
+    parentSupport.childProgressSummary(db, row.id, curriculum)));
+  return rows.map((row, index) => ({
+    ...row,
+    completedLessons: summaries[index].completedLessons,
+    avgScore: summaries[index].averageScore,
+    canViewProgress: Boolean(row.canViewProgress),
+    canApproveLessons: Boolean(row.canApproveLessons),
+  }));
+}
 
-      res.json({ children: students }); // Using 'children' key for compatibility with frontend
-    }
-  );
+app.get('/api/teacher/students', authenticateToken, requireTeacherAccount, async (req, res) => {
+  try {
+    res.json({ children: await teacherStudentsWithSummaries(req.user.id) });
+  } catch (err) {
+    console.error('Failed to fetch students:', err);
+    return res.status(500).json({ error: 'Failed to load students' });
+  }
 });
 
 // Get specific student details
-app.get('/api/teacher/students/:studentId', authenticateToken, requireTeacherAccount, verifyTeacherStudentAccess, (req, res) => {
-  const studentId = req.params.studentId;
+app.get('/api/teacher/students/:studentId', authenticateToken, requireTeacherAccount,
+  teacherStudentAccess({ requireProgressPermission: true }), async (req, res) => {
   const db = getDb();
-
-  db.get(
-    `SELECT u.*, 
-            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedLessons,
-            (SELECT COUNT(*) FROM lessons) as totalLessons
-     FROM users u
-     WHERE u.id = ?`,
-    [studentId],
-    (err, student) => {
-      if (err || !student) {
-        return res.status(404).json({ error: 'Student not found' });
+  try {
+    const student = await parentSupport.getOne(db, 'SELECT * FROM users WHERE id = ?', [req.params.studentId]);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    const curriculum = await parentSupport.childCurriculum(db);
+    const summary = await parentSupport.childProgressSummary(db, student.id, curriculum);
+    res.json({
+      child: {
+        id: student.id,
+        username: student.username,
+        displayName: student.display_name,
+        age: student.age,
+        avatarUrl: student.avatar_url,
+        xp: student.xp,
+        streak: student.streak,
+        lastActive: student.last_active,
+        className: req.relationship.class_name,
+        permissions: {
+          canViewProgress: Boolean(req.relationship.can_view_progress),
+          canApproveLessons: Boolean(req.relationship.can_approve_lessons),
+        },
+        completedLessons: summary.completedLessons,
+        averageScore: summary.averageScore,
+        totalLessons: curriculum.lessonIds.length,
       }
-
-      res.json({
-        child: {
-          id: student.id,
-          username: student.username,
-          displayName: student.display_name,
-          age: student.age,
-          avatarUrl: student.avatar_url,
-          xp: student.xp,
-          streak: student.streak,
-          lastActive: student.last_active,
-          completedLessons: student.completedLessons,
-          totalLessons: student.totalLessons
-        }
-      });
-    }
-  );
+    });
+  } catch (err) {
+    console.error('Failed to load student:', err);
+    return res.status(500).json({ error: 'Failed to load student' });
+  }
 });
 
-// Get student progress
-app.get('/api/teacher/students/:studentId/progress', authenticateToken, requireTeacherAccount, verifyTeacherStudentAccess, (req, res) => {
-  const studentId = req.params.studentId;
+// Get student progress. Only Kids-account lessons are returned to teachers.
+app.get('/api/teacher/students/:studentId/progress', authenticateToken, requireTeacherAccount,
+  teacherStudentAccess({ requireProgressPermission: true }), async (req, res) => {
+  const studentId = Number(req.params.studentId);
   const db = getDb();
+  try {
+    const student = await parentSupport.getOne(db, 'SELECT xp, streak, last_active FROM users WHERE id = ?', [studentId]);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
 
-  // Get user stats
-  db.get(
-    'SELECT xp, streak, last_active FROM users WHERE id = ?',
-    [studentId],
-    (err, user) => {
-      if (err || !user) {
-        return res.status(404).json({ error: 'Student not found' });
+    const [allProgress, achievements, sessions, curriculum] = await Promise.all([
+      parentSupport.getAll(db, 'SELECT * FROM progress WHERE user_id = ? ORDER BY updated_at DESC', [studentId]),
+      parentSupport.getAll(db,
+        `SELECT a.*, ua.unlocked_at FROM achievements a
+         INNER JOIN user_achievements ua ON a.id = ua.achievement_id
+         WHERE ua.user_id = ? ORDER BY ua.unlocked_at DESC LIMIT 5`, [studentId]),
+      parentSupport.getAll(db,
+        `SELECT login_time, logout_time, duration_minutes FROM session_logs
+         WHERE user_id = ? ORDER BY login_time DESC LIMIT 30`, [studentId]),
+      parentSupport.childCurriculum(db),
+    ]);
+
+    const progress = parentSupport.filterChildProgress(allProgress, curriculum);
+    const completed = progress.filter((p) => Number(p.completed) === 1);
+    res.json({
+      progress: {
+        childId: studentId,
+        totalXP: student.xp || 0,
+        currentLevel: Math.floor((student.xp || 0) / 200) + 1,
+        streak: student.streak || 0,
+        completedLessons: completed.length,
+        averageScore: completed.length
+          ? Math.round(completed.reduce((n, p) => n + (p.score || 0), 0) / completed.length) : 0,
+        timeSpentMinutes: sessions.reduce((n, s) => n + (s.duration_minutes || 0), 0),
+        lastActive: student.last_active,
+        recentAchievements: achievements,
+        progressRecords: progress,
+        recentSessions: sessions,
+        totalLessons: curriculum.lessonIds.length,
       }
-
-      // Get progress records
-      db.all(
-        'SELECT * FROM progress WHERE user_id = ? ORDER BY updated_at DESC',
-        [studentId],
-        (err, progress) => {
-          if (err) {
-            return res.status(500).json({ error: 'Failed to load progress' });
-          }
-
-          // Get recent achievements
-          db.all(
-            `SELECT a.*, ua.unlocked_at 
-             FROM achievements a
-             INNER JOIN user_achievements ua ON a.id = ua.achievement_id
-             WHERE ua.user_id = ?
-             ORDER BY ua.unlocked_at DESC
-             LIMIT 5`,
-            [studentId],
-            (err, achievements) => {
-              // Get session logs
-              db.all(
-                `SELECT login_time, logout_time, duration_minutes 
-                 FROM session_logs 
-                 WHERE user_id = ? 
-                 ORDER BY login_time DESC 
-                 LIMIT 30`,
-                [studentId],
-                (err, sessions) => {
-                  const completedLessons = progress.filter(p => p.completed).length;
-                  const totalScore = progress.reduce((sum, p) => sum + (p.score || 0), 0);
-                  const averageScore = completedLessons > 0 ? Math.round(totalScore / completedLessons) : 0;
-                  const totalMinutes = sessions.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
-
-                  res.json({
-                    progress: {
-                      childId: parseInt(studentId),
-                      totalXP: user.xp,
-                      currentLevel: Math.floor(user.xp / 200) + 1,
-                      streak: user.streak,
-                      completedLessons,
-                      averageScore,
-                      timeSpentMinutes: totalMinutes,
-                      lastActive: user.last_active,
-                      recentAchievements: achievements || [],
-                      progressRecords: progress,
-                      recentSessions: sessions || []
-                    }
-                  });
-                }
-              );
-            }
-          );
-        }
-      );
-    }
-  );
+    });
+  } catch (err) {
+    console.error('Failed to load student progress:', err);
+    return res.status(500).json({ error: 'Failed to load progress' });
+  }
 });
 
 // Get teacher dashboard (aggregated data for all students)
-app.get('/api/teacher/dashboard', authenticateToken, requireTeacherAccount, (req, res) => {
-  const teacherId = req.user.id;
-  const db = getDb();
+app.get('/api/teacher/dashboard', authenticateToken, requireTeacherAccount, async (req, res) => {
+  try {
+    const students = await teacherStudentsWithSummaries(req.user.id);
+    const totalClassXP = students.reduce((sum, student) => sum + (student.xp || 0), 0);
+    const mostActiveStudent = students.reduce((max, student) =>
+      (student.xp > (max?.xp || 0)) ? student : max, null);
+    const needsAttention = students.filter((student) => {
+      if (!student.lastActive) return true;
+      const days = (Date.now() - new Date(student.lastActive).getTime()) / 86400000;
+      return days > 7;
+    }).length;
 
-  // Get all students with their stats
-  db.all(
-    `SELECT u.id, u.username, u.display_name as displayName, u.xp, u.streak, u.last_active as lastActive,
-            (SELECT COUNT(*) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as completedLessons,
-            (SELECT AVG(score) FROM progress WHERE user_id = u.id AND completed = 1 AND CAST(lesson_id AS TEXT) NOT LIKE 'quiz%') as avgScore
-     FROM users u
-     INNER JOIN teacher_student_relationships tsr ON u.id = tsr.student_id
-     WHERE tsr.teacher_id = ? AND tsr.status = 'active'`,
-    [teacherId],
-    (err, students) => {
-      if (err) {
-        return res.status(500).json({ error: 'Failed to load dashboard data' });
+    res.json({
+      dashboard: {
+        teacherId: req.user.id,
+        children: students.map((s) => ({
+          id: s.id,
+          username: s.username,
+          displayName: s.displayName,
+          className: s.className,
+          xp: s.xp,
+          streak: s.streak,
+          lastActive: s.lastActive,
+          completedLessons: s.completedLessons,
+          avgScore: s.avgScore,
+        })),
+        totalFamilyXP: totalClassXP,
+        mostActiveChild: mostActiveStudent ? mostActiveStudent.id : null,
+        childCount: students.length,
+        needsAttention,
+        classes: [...new Set(students.map((s) => s.className).filter(Boolean))],
       }
-
-      const totalClassXP = students.reduce((sum, student) => sum + (student.xp || 0), 0);
-      const mostActiveStudent = students.reduce((max, student) => 
-        (student.xp > (max?.xp || 0)) ? student : max, null
-      );
-
-      res.json({
-        dashboard: {
-          teacherId,
-          children: students.map(s => ({
-            id: s.id,
-            username: s.username,
-            displayName: s.displayName,
-            xp: s.xp,
-            streak: s.streak,
-            lastActive: s.lastActive,
-            completedLessons: s.completedLessons,
-            avgScore: Math.round(s.avgScore || 0)
-          })),
-          totalFamilyXP: totalClassXP,
-          mostActiveChild: mostActiveStudent ? mostActiveStudent.id : null,
-          childCount: students.length
-        }
-      });
-    }
-  );
+    });
+  } catch (err) {
+    console.error('Failed to load dashboard data:', err);
+    return res.status(500).json({ error: 'Failed to load dashboard data' });
+  }
 });
 
-// Add student to teacher's class (enrollment)
-app.post('/api/teacher/students/enroll', authRateLimit, authenticateToken, requireTeacherAccount, (req, res) => {
-  const { studentEmail, className, enrollmentCode } = req.body;
-  const teacherId = req.user.id;
-  const db = getDb();
-
-  if (!studentEmail) {
-    return res.status(400).json({ error: 'Student email is required' });
+// Resolve a parent-issued classroom code to the child it authorises. Children
+// may not have an email address, so teachers select from this lookup instead.
+app.post('/api/teacher/students/resolve', authRateLimit, authenticateToken, requireTeacherAccount, async (req, res) => {
+  const enrollmentCode = req.body?.enrollmentCode;
+  if (!String(enrollmentCode || '').trim()) {
+    return res.status(400).json({ error: 'Enter the classroom code from the parent' });
   }
 
-  // Find student by email
-  db.get(
-    'SELECT id, username, display_name, account_type FROM users WHERE email = ? AND account_type = ?',
-    [studentEmail, 'child'],
-    (err, student) => {
-      if (err || !student) {
-        return res.status(404).json({ error: 'Student not found with that email' });
-      }
-
-      // Require a parent-provided consent code. Never allow enrollment by email alone.
-      const expectedCode = crypto.createHmac('sha256', JWT_SECRET).update(`enroll:${student.id}`).digest('hex').slice(0, 12);
-      if (!enrollmentCode || enrollmentCode !== expectedCode) {
-        return res.status(403).json({ error: 'A parent-provided enrollment code is required to enrol this child' });
-      }
-
-      // Check if relationship already exists
-      db.get(
-        'SELECT id FROM teacher_student_relationships WHERE teacher_id = ? AND student_id = ?',
-        [teacherId, student.id],
-        (err, existing) => {
-          if (existing) {
-            return res.status(400).json({ error: 'Student already enrolled in your class' });
-          }
-
-          // Create relationship
-          db.run(
-            `INSERT INTO teacher_student_relationships (teacher_id, student_id, class_name, status) 
-             VALUES (?, ?, ?, 'active')`,
-            [teacherId, student.id, className || 'Default Class'],
-            function (err) {
-              if (err) {
-                console.error('Failed to enroll student:', err);
-                return res.status(500).json({ error: 'Failed to enroll student' });
-              }
-
-              res.json({
-                success: true,
-                message: 'Student enrolled successfully',
-                student: {
-                  id: student.id,
-                  username: student.username,
-                  displayName: student.display_name
-                }
-              });
-            }
-          );
-        }
-      );
+  const db = getDb();
+  try {
+    const children = await teacherSupport.resolveEnrollmentCode(db, JWT_SECRET, enrollmentCode);
+    if (!children.length) {
+      return res.status(404).json({ error: 'No child found for that classroom code' });
     }
-  );
+    const active = await parentSupport.getAll(db,
+      "SELECT student_id FROM teacher_student_relationships WHERE teacher_id = ? AND status = 'active'",
+      [req.user.id]);
+    const activeIds = new Set(active.map((row) => Number(row.student_id)));
+    return res.json({
+      success: true,
+      children: children.map((child) => ({ ...child, enrolled: activeIds.has(Number(child.id)) })),
+    });
+  } catch (err) {
+    console.error('Failed to resolve enrollment code:', err);
+    return res.status(500).json({ error: 'Failed to look up that classroom code' });
+  }
+});
+
+// Add student to teacher's class (enrollment). A parent-issued consent code is
+// always required, even when re-enrolling a previously removed student.
+app.post('/api/teacher/students/enroll', authRateLimit, authenticateToken, requireTeacherAccount, async (req, res) => {
+  const { studentId, studentUsername, studentEmail, className, enrollmentCode } = req.body || {};
+  const teacherId = req.user.id;
+  const childId = Number(studentId);
+  const username = String(studentUsername || '').trim();
+  const email = String(studentEmail || '').trim().toLowerCase();
+  if (!childId && !username && !email) {
+    return res.status(400).json({ error: 'Look up the child with the parent classroom code first' });
+  }
+
+  const db = getDb();
+  try {
+    let student = null;
+    if (Number.isSafeInteger(childId) && childId > 0) {
+      student = await parentSupport.getOne(db,
+        "SELECT id, username, display_name, account_type FROM users WHERE id = ? AND account_type = 'child'", [childId]);
+    } else if (username) {
+      student = await parentSupport.getOne(db,
+        "SELECT id, username, display_name, account_type FROM users WHERE username = ? AND account_type = 'child'", [username]);
+    } else {
+      student = await parentSupport.getOne(db,
+        "SELECT id, username, display_name, account_type FROM users WHERE email = ? AND account_type = 'child'", [email]);
+    }
+    if (!student) return res.status(404).json({ error: 'Child not found' });
+
+    const authorised = await teacherSupport.resolveEnrollmentCode(db, JWT_SECRET, enrollmentCode);
+    if (!authorised.some((child) => Number(child.id) === Number(student.id))) {
+      return res.status(403).json({ error: 'A parent-provided classroom code is required to enrol this child' });
+    }
+
+    const name = String(className || '').trim().slice(0, 80) || 'Default Class';
+    const existing = await parentSupport.getOne(db,
+      'SELECT id, status FROM teacher_student_relationships WHERE teacher_id = ? AND student_id = ?',
+      [teacherId, student.id]);
+    if (existing?.status === 'active') {
+      return res.status(400).json({ error: 'Student already enrolled in your class' });
+    }
+
+    if (existing) {
+      // Removal is reversible: reactivate and reassign the existing relationship.
+      await parentSupport.runOne(db,
+        `UPDATE teacher_student_relationships
+         SET status = 'active', class_name = ?, enrollment_date = datetime('now'),
+             can_view_progress = 1, can_approve_lessons = 1, updated_at = datetime('now')
+         WHERE id = ?`, [name, existing.id]);
+    } else {
+      await parentSupport.runOne(db,
+        `INSERT INTO teacher_student_relationships (teacher_id, student_id, class_name, status)
+         VALUES (?, ?, ?, 'active')`, [teacherId, student.id, name]);
+    }
+
+    res.json({
+      success: true,
+      reactivated: Boolean(existing),
+      message: existing ? 'Student re-enrolled successfully' : 'Student enrolled successfully',
+      student: {
+        id: student.id,
+        username: student.username,
+        displayName: student.display_name,
+        className: name,
+      }
+    });
+  } catch (err) {
+    console.error('Failed to enroll student:', err);
+    return res.status(500).json({ error: 'Failed to enroll student' });
+  }
 });
 
 // Remove student from teacher's class
@@ -1557,6 +1561,99 @@ app.delete('/api/teacher/students/:studentId', authenticateToken, requireTeacher
       res.json({ success: true, message: 'Student removed from class' });
     }
   );
+});
+
+// Teacher reports reuse the same Kids-account-only report as parents.
+app.get('/api/teacher/students/:studentId/report', authenticateToken, requireTeacherAccount,
+  teacherStudentAccess({ requireProgressPermission: true }), async (req, res) => {
+  const report = await childReportData(req.params.studentId);
+  if (!report) return res.status(404).json({ error: 'Student not found' });
+  res.json(report);
+});
+
+app.get('/api/teacher/students/:studentId/report.csv', authenticateToken, requireTeacherAccount,
+  teacherStudentAccess({ requireProgressPermission: true }), async (req, res) => {
+  const report = await childReportData(req.params.studentId);
+  if (!report) return res.status(404).json({ error: 'Student not found' });
+  const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [
+    ['Section', 'Module', 'Lesson', 'Completed', 'Score', 'Recorded'].map(cell).join(','),
+    ...report.progress.map((p) => ['Progress', p.moduleTitle || p.module_id, p.lessonTitle || p.lesson_id,
+      p.completed ? 'yes' : 'no', p.score ?? '', p.updated_at || ''].map(cell).join(',')),
+    ...report.achievements.map((a) => ['Achievement', '', a.name, '', '', a.unlocked_at || ''].map(cell).join(',')),
+    ...report.sessions.map((s) => ['Session', '', '', '', s.duration_minutes || '', s.login_time || ''].map(cell).join(',')),
+  ];
+  res.type('text/csv').set('Content-Disposition', `attachment; filename="student-${req.params.studentId}-progress.csv"`).send(lines.join('\r\n'));
+});
+
+// Teacher account settings and in-app notifications.
+app.get('/api/teacher/profile', authenticateToken, requireTeacherAccount, async (req, res) => {
+  const row = await parentSupport.getOne(getDb(),
+    'SELECT id, email, first_name, last_name, phone_number, created_at FROM users WHERE id = ?', [req.user.id]);
+  if (!row) return res.status(404).json({ error: 'Teacher account not found' });
+  res.json({ teacher: {
+    id: row.id, email: row.email, firstName: row.first_name, lastName: row.last_name,
+    phoneNumber: row.phone_number, createdAt: row.created_at,
+  } });
+});
+
+app.put('/api/teacher/profile', authenticateToken, requireTeacherAccount, async (req, res) => {
+  const { firstName, lastName, phoneNumber, email } = req.body || {};
+  const db = getDb();
+  if (!String(firstName || '').trim() || !String(lastName || '').trim()) {
+    return res.status(400).json({ error: 'First and last name are required' });
+  }
+  if (email !== undefined) {
+    const cleanEmail = String(email).trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return res.status(400).json({ error: 'Invalid email address' });
+    const existing = await parentSupport.getOne(db, 'SELECT id FROM users WHERE email = ? AND id != ?', [cleanEmail, req.user.id]);
+    if (existing) return res.status(400).json({ error: 'Email already in use' });
+    await parentSupport.runOne(db, 'UPDATE users SET email = ? WHERE id = ?', [cleanEmail, req.user.id]);
+  }
+  await parentSupport.runOne(db,
+    'UPDATE users SET first_name = ?, last_name = ?, phone_number = ?, updated_at = datetime(\'now\') WHERE id = ?',
+    [String(firstName).trim(), String(lastName).trim(), phoneNumber ? String(phoneNumber).trim() : null, req.user.id]);
+  res.json({ success: true, message: 'Profile updated' });
+});
+
+app.put('/api/teacher/password', authenticateToken, requireTeacherAccount, async (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (typeof newPassword !== 'string' || newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  }
+  const db = getDb();
+  const user = await parentSupport.getOne(db, 'SELECT password FROM users WHERE id = ?', [req.user.id]);
+  if (!user || !(await bcrypt.compare(String(currentPassword || ''), user.password))) {
+    return res.status(403).json({ error: 'Current password is incorrect' });
+  }
+  await parentSupport.runOne(db, 'UPDATE users SET password = ?, updated_at = datetime(\'now\') WHERE id = ?',
+    [await bcrypt.hash(newPassword, BCRYPT_ROUNDS), req.user.id]);
+  res.json({ success: true, message: 'Password changed' });
+});
+
+app.get('/api/teacher/notifications', authenticateToken, requireTeacherAccount, async (req, res) => {
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+  const rows = await parentSupport.getAll(getDb(),
+    `SELECT id, type, title, body, data_json, read_at, created_at FROM teacher_notifications
+     WHERE teacher_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`, [req.user.id, limit]);
+  res.json({
+    notifications: rows.map((r) => ({ ...r, data: JSON.parse(r.data_json || '{}'), read: Boolean(r.read_at) })),
+    unread: rows.filter((r) => !r.read_at).length,
+  });
+});
+
+app.patch('/api/teacher/notifications/:id/read', authenticateToken, requireTeacherAccount, async (req, res) => {
+  const result = await parentSupport.runOne(getDb(),
+    'UPDATE teacher_notifications SET read_at = datetime(\'now\') WHERE id = ? AND teacher_id = ? AND read_at IS NULL',
+    [req.params.id, req.user.id]);
+  if (!result.changes) return res.status(404).json({ error: 'Unread notification not found' });
+  res.json({ success: true });
+});
+
+app.post('/api/teacher/notifications/read-all', authenticateToken, requireTeacherAccount, async (req, res) => {
+  const result = await parentSupport.runOne(getDb(),
+    'UPDATE teacher_notifications SET read_at = datetime(\'now\') WHERE teacher_id = ? AND read_at IS NULL', [req.user.id]);
+  res.json({ success: true, updated: result.changes });
 });
 
 // =====================
@@ -2510,99 +2607,103 @@ function getFriendlyError(errorMsg) {
 // LESSON APPROVAL ENDPOINTS
 // =====================
 
-// Request lesson approval (child)
-app.post('/api/lesson-approval/request', authenticateToken, requireChildAccount, (req, res) => {
-  const { lessonId, moduleId } = req.body;
+// Request lesson approval (child). Requests are routed to the linked parent
+// and to every teacher with can_approve_lessons, so a child in a classroom can
+// be approved even when they have no parent account.
+app.post('/api/lesson-approval/request', authenticateToken, requireChildAccount, async (req, res) => {
+  const { lessonId, moduleId } = req.body || {};
   const childId = req.user.id;
-  const db = getDb();
-
   if (!lessonId || !moduleId) {
     return res.status(400).json({ error: 'Lesson ID and Module ID are required' });
   }
 
-  // Get parent ID
-  db.get('SELECT parent_id FROM users WHERE id = ?', [childId], (err, user) => {
-    if (err || !user || !user.parent_id) {
-      return res.status(400).json({ error: 'No parent account linked' });
+  const db = getDb();
+  try {
+    const child = await parentSupport.getOne(db, 'SELECT parent_id FROM users WHERE id = ?', [childId]);
+    if (!child) return res.status(404).json({ error: 'Child account not found' });
+    const teachers = await teacherSupport.approvalTeachersFor(db, childId);
+    if (!child.parent_id && !teachers.length) {
+      return res.status(400).json({ error: 'No parent or teacher account linked' });
     }
 
-    const parentId = user.parent_id;
+    const approvals = [];
+    let primary = null;
 
-    // Check if approval already exists
-    db.get(
-      'SELECT * FROM lesson_approvals WHERE child_id = ? AND lesson_id = ?',
-      [childId, lessonId],
-      (err, existing) => {
-        if (existing) {
-          return res.json({
-            success: true,
-            approval: {
-              id: existing.id,
-              status: existing.status,
-              requestedAt: existing.requested_at,
-              respondedAt: existing.responded_at
-            }
-          });
-        }
-
-        // Create new approval request
-        db.run(
+    if (child.parent_id) {
+      let approval = await parentSupport.getOne(db,
+        'SELECT * FROM lesson_approvals WHERE child_id = ? AND lesson_id = ?', [childId, lessonId]);
+      if (!approval) {
+        const result = await parentSupport.runOne(db,
           `INSERT INTO lesson_approvals (child_id, parent_id, lesson_id, module_id, status)
-           VALUES (?, ?, ?, ?, 'pending')`,
-          [childId, parentId, lessonId, moduleId],
-          function (err) {
-            if (err) {
-              console.error('Failed to create approval request:', err);
-              return res.status(500).json({ error: 'Failed to request approval' });
-            }
-
-            parentSupport.notifyParent(db, parentId, 'approval',
-              'Lesson approval requested',
-              'Your child requested approval to complete a lesson.',
-              { childId, lessonId, requestId: this.lastID }).catch((e) =>
-              console.error('Failed to create parent notification:', e.message));
-            res.json({
-              success: true,
-              approval: {
-                id: this.lastID,
-                status: 'pending',
-                requestedAt: new Date().toISOString()
-              }
-            });
-          }
-        );
+           VALUES (?, ?, ?, ?, 'pending')`, [childId, child.parent_id, lessonId, moduleId]);
+        approval = { id: result.lastID, status: 'pending', requested_at: new Date().toISOString() };
+        parentSupport.notifyParent(db, child.parent_id, 'approval',
+          'Lesson approval requested',
+          'Your child requested approval to complete a lesson.',
+          { childId, lessonId, requestId: approval.id }).catch((e) =>
+          console.error('Failed to create parent notification:', e.message));
       }
-    );
-  });
+      primary = { source: 'parent', id: approval.id, status: approval.status,
+        requestedAt: approval.requested_at, respondedAt: approval.responded_at };
+      approvals.push(primary);
+    }
+
+    for (const { teacher_id: teacherId } of teachers) {
+      let request = await parentSupport.getOne(db,
+        `SELECT * FROM teacher_approval_requests
+         WHERE teacher_id = ? AND child_id = ? AND lesson_id = ?`, [teacherId, childId, lessonId]);
+      if (!request) {
+        const result = await parentSupport.runOne(db,
+          `INSERT INTO teacher_approval_requests (teacher_id, child_id, lesson_id, module_id, status)
+           VALUES (?, ?, ?, ?, 'pending')`, [teacherId, childId, lessonId, moduleId]);
+        request = { id: result.lastID, status: 'pending', requested_at: new Date().toISOString() };
+        teacherSupport.notifyTeacher(db, teacherId, 'approval',
+          'Lesson approval requested',
+          'A student requested approval to complete a lesson.',
+          { childId, lessonId, requestId: request.id }).catch((e) =>
+          console.error('Failed to create teacher notification:', e.message));
+      }
+      const routed = { source: 'teacher', id: request.id, status: request.status,
+        requestedAt: request.requested_at, respondedAt: request.responded_at };
+      if (!primary) primary = routed;
+      approvals.push(routed);
+    }
+
+    res.json({ success: true, approval: primary, approvals });
+  } catch (err) {
+    console.error('Failed to create approval request:', err);
+    return res.status(500).json({ error: 'Failed to request approval' });
+  }
 });
 
-// Check lesson approval status (child)
-app.get('/api/lesson-approval/check/:lessonId', authenticateToken, requireChildAccount, (req, res) => {
+// Check lesson approval status (child). Either a parent or a teacher can approve.
+app.get('/api/lesson-approval/check/:lessonId', authenticateToken, requireChildAccount, async (req, res) => {
   const lessonId = req.params.lessonId;
   const childId = req.user.id;
   const db = getDb();
+  try {
+    const [parentApproval, teacherApprovals] = await Promise.all([
+      parentSupport.getOne(db,
+        'SELECT * FROM lesson_approvals WHERE child_id = ? AND lesson_id = ?', [childId, lessonId]),
+      parentSupport.getAll(db,
+        'SELECT * FROM teacher_approval_requests WHERE child_id = ? AND lesson_id = ?', [childId, lessonId]),
+    ]);
+    const approvedByTeacher = teacherApprovals.find((a) => a.status === 'approved');
+    const approval = approvedByTeacher || parentApproval;
+    if (!approval) return res.json({ approved: false, status: 'not_requested' });
 
-  db.get(
-    'SELECT * FROM lesson_approvals WHERE child_id = ? AND lesson_id = ?',
-    [childId, lessonId],
-    (err, approval) => {
-      if (err) {
-        return res.status(500).json({ error: 'Failed to check approval status' });
-      }
-
-      if (!approval) {
-        return res.json({ approved: false, status: 'not_requested' });
-      }
-
-      res.json({
-        approved: approval.status === 'approved',
-        status: approval.status,
-        requestedAt: approval.requested_at,
-        respondedAt: approval.responded_at,
-        responseNote: approval.response_note
-      });
-    }
-  );
+    res.json({
+      approved: approval.status === 'approved',
+      status: approval.status,
+      requestedAt: approval.requested_at,
+      respondedAt: approval.responded_at,
+      responseNote: approval.response_note || null,
+      approvedBy: approvedByTeacher ? 'teacher' : 'parent',
+    });
+  } catch (err) {
+    console.error('Failed to check approval status:', err);
+    return res.status(500).json({ error: 'Failed to check approval status' });
+  }
 });
 
 // Get all approval requests for parent
@@ -2693,6 +2794,78 @@ app.post('/api/parent/approval-requests/:requestId/respond', authenticateToken, 
       );
     }
   );
+});
+
+// Teacher approval queue — only requests routed to this teacher are visible.
+app.get('/api/teacher/approval-requests', authenticateToken, requireTeacherAccount, async (req, res) => {
+  const requestedStatus = String(req.query.status || 'pending').toLowerCase();
+  const statuses = ['pending', 'approved', 'denied'];
+  if (requestedStatus !== 'all' && !statuses.includes(requestedStatus)) {
+    return res.status(400).json({ error: 'Invalid status filter' });
+  }
+  const params = [req.user.id];
+  let sql = `
+    SELECT tar.*, u.username, u.display_name as childName, l.title as lessonTitle, m.title as moduleTitle,
+           tsr.class_name as className
+    FROM teacher_approval_requests tar
+    INNER JOIN users u ON tar.child_id = u.id
+    INNER JOIN lessons l ON tar.lesson_id = l.id
+    INNER JOIN modules m ON tar.module_id = m.id
+    LEFT JOIN teacher_student_relationships tsr
+      ON tsr.teacher_id = tar.teacher_id AND tsr.student_id = tar.child_id
+    WHERE tar.teacher_id = ?`;
+  if (requestedStatus !== 'all') {
+    sql += ' AND tar.status = ?';
+    params.push(requestedStatus);
+  }
+  sql += ' ORDER BY tar.requested_at DESC, tar.id DESC';
+
+  try {
+    const rows = await parentSupport.getAll(getDb(), sql, params);
+    res.json({ requests: rows.map((r) => ({
+      id: r.id,
+      childId: r.child_id,
+      childName: r.childName || r.username,
+      className: r.className || null,
+      lessonId: r.lesson_id,
+      lessonTitle: r.lessonTitle,
+      moduleId: r.module_id,
+      moduleTitle: r.moduleTitle,
+      status: r.status,
+      requestedAt: r.requested_at,
+      respondedAt: r.responded_at,
+      responseNote: r.response_note,
+    })) });
+  } catch (err) {
+    console.error('Failed to fetch teacher approval requests:', err);
+    return res.status(500).json({ error: 'Failed to load approval requests' });
+  }
+});
+
+app.post('/api/teacher/approval-requests/:requestId/respond', authenticateToken, requireTeacherAccount, async (req, res) => {
+  const { status, note } = req.body || {};
+  if (!['approved', 'denied'].includes(status)) {
+    return res.status(400).json({ error: 'Status must be "approved" or "denied"' });
+  }
+  const db = getDb();
+  try {
+    const request = await parentSupport.getOne(db,
+      'SELECT * FROM teacher_approval_requests WHERE id = ? AND teacher_id = ?', [req.params.requestId, req.user.id]);
+    if (!request) return res.status(404).json({ error: 'Approval request not found' });
+    if (request.status !== 'pending') {
+      return res.status(400).json({ error: 'This request has already been responded to' });
+    }
+    await parentSupport.runOne(db,
+      `UPDATE teacher_approval_requests
+       SET status = ?, responded_at = datetime('now'), response_note = ? WHERE id = ?`,
+      [status, note ? String(note).slice(0, 500) : null, request.id]);
+    res.json({ success: true, message: `Lesson ${status}`, approval: {
+      id: request.id, status, respondedAt: new Date().toISOString(), responseNote: note || null,
+    } });
+  } catch (err) {
+    console.error('Failed to respond to teacher approval request:', err);
+    return res.status(500).json({ error: 'Failed to update approval' });
+  }
 });
 
 // =====================

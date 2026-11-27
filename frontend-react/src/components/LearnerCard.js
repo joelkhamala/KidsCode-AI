@@ -38,6 +38,9 @@ export const LearnerCard = ({ learner, totalLessons, fallbackIcon = '🧒', onVi
           <p className="text-sm text-slate-500 truncate">
             @{learner.username}{learner.age ? ` · ${t('adultUi.age', { age: learner.age })}` : ''}
           </p>
+          {learner.className && (
+            <p className="text-xs font-bold text-indigo-600 truncate">🏫 {learner.className}</p>
+          )}
           <p className="text-sm font-semibold mt-1 flex items-center gap-2" style={{ color: status.color }}>
             <span className="status-dot" style={{ background: status.color }} aria-hidden="true" />
             {t(`adultUi.status.${status.key}`, { days: status.days })}
@@ -80,7 +83,7 @@ export const LearnerCard = ({ learner, totalLessons, fallbackIcon = '🧒', onVi
   );
 };
 
-export const LearnerDetail = ({ progress, name, onClose }) => {
+export const LearnerDetail = ({ progress, name, onClose, onDownloadReport, downloadingReport }) => {
   const { t } = useTranslation();
   if (!progress) return null;
   const items = [
@@ -101,7 +104,14 @@ export const LearnerDetail = ({ progress, name, onClose }) => {
             {t('parent.lastActive')}: {progress.lastActive ? new Date(progress.lastActive).toLocaleDateString() : t('parent.never')}
           </p>
         </div>
-        <button type="button" onClick={onClose} className="btn-secondary text-sm py-1 px-3" aria-label={t('ui.close')}>✕</button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {onDownloadReport && (
+            <button type="button" onClick={onDownloadReport} disabled={downloadingReport} className="btn-secondary text-sm py-1 px-3">
+              ⬇ {t('adultUi.downloadReport')}
+            </button>
+          )}
+          <button type="button" onClick={onClose} className="btn-secondary text-sm py-1 px-3" aria-label={t('ui.close')}>✕</button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">

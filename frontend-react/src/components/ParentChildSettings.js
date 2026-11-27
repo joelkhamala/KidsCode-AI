@@ -17,6 +17,7 @@ const ParentChildSettings = ({ children, onChanged }) => {
   const [form, setForm] = useState(blankForm);
   const [report, setReport] = useState(null);
   const [linkCode, setLinkCode] = useState('');
+  const [enrollmentCode, setEnrollmentCode] = useState('');
   const [loading, setLoading] = useState(false);
 
   const dayLabel = useCallback((key) => {
@@ -30,9 +31,10 @@ const ParentChildSettings = ({ children, onChanged }) => {
   const load = useCallback(async () => {
     if (!childId) return;
     try {
-      const [detailRes, reportRes] = await Promise.all([
-        parentAPI.getChild(childId), parentAPI.getReport(childId),
+      const [detailRes, reportRes, codeRes] = await Promise.all([
+        parentAPI.getChild(childId), parentAPI.getReport(childId), parentAPI.getEnrollmentCode(childId),
       ]);
+      setEnrollmentCode(codeRes.data.enrollmentCode || '');
       const child = detailRes.data.child;
       const r = child.restrictions || {};
       setForm({
@@ -244,6 +246,30 @@ const ParentChildSettings = ({ children, onChanged }) => {
               </>
             )}
             <button type="button" onClick={downloadCsv} className="btn-primary">⬇️ {t('parent.downloadCsv')}</button>
+          </section>
+
+          <section className="card p-6">
+            <h2 className="font-display text-2xl text-slate-800 mb-1">🏫 {t('parent.classroomCodeTitle')}</h2>
+            <p className="text-slate-600 text-sm mb-4">{t('parent.classroomCodeHelp')}</p>
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch">
+              <code className="form-input flex-1 text-lg font-bold tracking-widest text-indigo-700" aria-label={t('parent.classroomCode')}>
+                {enrollmentCode || '—'}
+              </code>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={!enrollmentCode}
+                onClick={() => {
+                  if (!navigator.clipboard?.writeText) return;
+                  navigator.clipboard.writeText(enrollmentCode)
+                    .then(() => notify(t('parent.codeCopied'), 'success'))
+                    .catch(() => notify(t('adultUi.actionFailed'), 'error'));
+                }}
+              >
+                📋 {t('parent.copyCode')}
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mt-3">{t('parent.classroomCodeWarning')}</p>
           </section>
 
           <section className="card p-6">

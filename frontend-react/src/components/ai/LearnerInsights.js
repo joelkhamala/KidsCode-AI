@@ -97,12 +97,28 @@ export const ClassInsights = () => {
   const loc = i18n.language === 'sw' ? 'sw' : 'en';
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    aiAPI.classInsights().then((res) => setData(res.data)).catch((err) => setError(err.response?.data?.error || t('coach.error')));
+    let active = true;
+    setLoading(true);
+    aiAPI.classInsights()
+      .then((res) => { if (active) setData(res.data); })
+      .catch((err) => { if (active) setError(err.response?.data?.error || t('coach.error')); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [t]);
 
-  if (error) return null;
+  if (loading) {
+    return <div className="card p-6 text-center text-slate-600">⏳ {t('parent.approval.loading')}</div>;
+  }
+  if (error) {
+    return (
+      <div className="card p-6 text-center" role="alert">
+        <p className="text-red-600 font-semibold">{error}</p>
+      </div>
+    );
+  }
   if (!data) return null;
 
   return (

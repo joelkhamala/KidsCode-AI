@@ -121,7 +121,7 @@ const ParentDashboard = () => {
     return (
       <div className="max-w-7xl mx-auto px-4 py-16 text-center">
         <div className="text-6xl mb-4 animate-float" aria-hidden="true">👨‍👩‍👧</div>
-        <h2 className="font-display text-2xl text-slate-800">{t('teacher.loading')}</h2>
+        <h2 className="font-display text-2xl text-slate-800">{t('parent.loading')}</h2>
       </div>
     );
   }

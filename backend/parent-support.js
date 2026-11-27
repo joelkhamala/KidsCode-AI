@@ -136,10 +136,12 @@ async function checkChildPolicy(db, childId, lessonId = null) {
   }
 
   if (lessonId && r.require_parent_approval === 1) {
-    const approval = await getOne(db,
-      'SELECT status FROM lesson_approvals WHERE child_id = ? AND lesson_id = ?',
-      [childId, lessonId]);
-    if (!approval || approval.status !== 'approved') {
+    const [parentApproval, teacherApproval] = await Promise.all([
+      getOne(db, 'SELECT status FROM lesson_approvals WHERE child_id = ? AND lesson_id = ?', [childId, lessonId]),
+      getOne(db, 'SELECT status FROM teacher_approval_requests WHERE child_id = ? AND lesson_id = ?', [childId, lessonId]),
+    ]);
+    const approved = parentApproval?.status === 'approved' || teacherApproval?.status === 'approved';
+    if (!approved) {
       return { allowed: false, reason: 'parent_approval_required', restrictions: r };
     }
   }
@@ -174,6 +176,64 @@ function parseChildInviteCode(secret, code) {
   return expected === match[2].toLowerCase() ? id : null;
 }
 
+/**
+ * Curriculum available to a Kids account. Adult courses share the lessons
+ * table but live in modules with target_audience = 'adults', so parent reports
+ * must filter by audience before showing any lesson progress.
+ */
+async function childCurriculum(db) {
+  let moduleRows;
+  try {
+    moduleRows = await getAll(db,
+      `SELECT id, title FROM modules
+       WHERE target_audience IS NULL OR target_audience IN ('children', 'both')
+       ORDER BY order_num, id`);
+  } catch (err) {
+    // Older databases have no audience column; all their modules are child-safe.
+    if (!/no such column/i.test(err.message)) throw err;
+    moduleRows = await getAll(db, 'SELECT id, title FROM modules ORDER BY order_num, id');
+  }
+
+  const lessons = await getAll(db, 'SELECT id, module_id FROM lessons ORDER BY module_id, order_num, id');
+  const moduleIds = new Set(moduleRows.map((m) => Number(m.id)));
+  const lessonsByModule = new Map();
+  const lessonIds = [];
+
+  lessons.forEach((lesson) => {
+    const moduleId = Number(lesson.module_id);
+    if (!moduleIds.has(moduleId)) return;
+    if (!lessonsByModule.has(moduleId)) lessonsByModule.set(moduleId, []);
+    lessonsByModule.get(moduleId).push(Number(lesson.id));
+    lessonIds.push(Number(lesson.id));
+  });
+
+  const modules = moduleRows
+    .map((m) => ({ id: Number(m.id), title: m.title, lessonIds: lessonsByModule.get(Number(m.id)) || [] }))
+    .filter((m) => m.lessonIds.length);
+  return { modules, lessonIds };
+}
+
+/** Keep only progress for lessons that belong to a Kids-account module. */
+function filterChildProgress(rows, curriculum) {
+  const allowed = new Set((curriculum?.lessonIds || []).map(String));
+  return rows.filter((row) => allowed.has(String(row.lesson_id)));
+}
+
+/** Completed lessons and average score, restricted to the Kids curriculum. */
+async function childProgressSummary(db, childId, curriculum) {
+  const activeCurriculum = curriculum || await childCurriculum(db);
+  const rows = await getAll(db, 'SELECT lesson_id, completed, score FROM progress WHERE user_id = ?', [childId]);
+  const progress = filterChildProgress(rows, activeCurriculum);
+  const completed = progress.filter((p) => Number(p.completed) === 1);
+  return {
+    progress,
+    completedLessons: completed.length,
+    averageScore: completed.length
+      ? Math.round(completed.reduce((n, p) => n + (p.score || 0), 0) / completed.length)
+      : 0,
+  };
+}
+
 module.exports = {
   DAY_NAMES,
   getOne,
@@ -185,6 +245,9 @@ module.exports = {
   minutesToday,
   checkChildPolicy,
   notifyParent,
+  childCurriculum,
+  filterChildProgress,
+  childProgressSummary,
   childInviteCode,
   parseChildInviteCode,
 };
