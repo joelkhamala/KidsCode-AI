@@ -358,8 +358,27 @@ export const parentAPI = {
   deleteChild: (childId) => api.delete(`/parent/children/${childId}`),
   getChildProgress: (childId) => api.get(`/parent/children/${childId}/progress`),
   setRestrictions: (childId, restrictions) => api.post(`/parent/children/${childId}/restrictions`, restrictions),
+  getRestrictions: (childId) => api.get(`/parent/children/${childId}/restrictions`),
+  deleteRestrictions: (childId) => api.delete(`/parent/children/${childId}/restrictions`),
+  getReport: (childId) => api.get(`/parent/children/${childId}/report`),
+  downloadReportCsv: (childId) => api.get(`/parent/children/${childId}/report.csv`, { responseType: 'blob' }),
+  linkChild: (code) => api.post('/parent/children/link', { code }),
+  unlinkChild: (childId) => api.delete(`/parent/children/${childId}/link`),
+  getNotifications: () => api.get('/parent/notifications'),
+  markNotificationRead: (id) => api.patch(`/parent/notifications/${id}/read`),
+  markAllNotificationsRead: () => api.post('/parent/notifications/read-all'),
+  getNotificationPreferences: () => api.get('/parent/notification-preferences'),
+  updateNotificationPreferences: (prefs) => api.put('/parent/notification-preferences', prefs),
+  getProfile: () => api.get('/parent/profile'),
+  updateProfile: (data) => api.put('/parent/profile', data),
+  changePassword: (currentPassword, newPassword) => api.put('/parent/password', { currentPassword, newPassword }),
   getDashboard: () => api.get('/parent/dashboard'),
   switchToChild: (childId) => api.post(`/parent/switch-child/${childId}`),
+};
+
+export const childAPI = {
+  parentInviteCode: () => api.get('/child/parent-invite-code'),
+  restrictions: () => api.get('/child/restrictions'),
 };
 
 // Leaderboard API

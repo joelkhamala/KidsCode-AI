@@ -14,6 +14,7 @@ const achievements = require('./achievements');
 const { createSocialRouter, createParentSocialRouter } = require('./social');
 const { createAdultRouter, createCertificateVerifyRouter, ensureReady: ensureAdultCourse } = require('./adult');
 const aiEngine = require('./ai');
+const parentSupport = require('./parent-support');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -147,6 +148,37 @@ function requireTeacherAccount(req, res, next) {
   next();
 }
 
+// Children may read/write their own learning state; parents are read-only here.
+function requireChildAccount(req, res, next) {
+  if (req.user.accountType !== 'child') {
+    return res.status(403).json({ error: 'Child account required', code: 'CHILD_ACCOUNT_REQUIRED' });
+  }
+  next();
+}
+
+// Learner route policy: day/time limits on play, parent approval on lesson progress.
+function enforceChildRestrictions({ approval = false } = {}) {
+  return async (req, res, next) => {
+    if (req.user.accountType !== 'child') return next();
+    try {
+      const decision = await parentSupport.checkChildPolicy(
+        getDb(), req.user.id, approval ? (req.params.id || req.body.lessonId || req.body.lesson_id || null) : null
+      );
+      if (!decision.allowed) {
+        return res.status(403).json({
+          error: decision.reason.replace(/_/g, ' '),
+          code: decision.reason,
+          restrictions: decision.restrictions,
+        });
+      }
+      next();
+    } catch (err) {
+      console.error('Restriction check failed:', err);
+      return res.status(500).json({ error: 'Could not verify access restrictions' });
+    }
+  };
+}
+
 // Middleware to verify parent-child relationship
 function verifyParentChildAccess(req, res, next) {
   const childId = req.params.childId || req.body.childId;
@@ -263,7 +295,7 @@ app.post('/api/parent/login', authRateLimit, (req, res) => {
       }
 
       // Update last active
-      db.run('UPDATE users SET last_active = date("now") WHERE id = ?', [user.id]);
+      db.run('UPDATE users SET last_active = date(\'now\') WHERE id = ?', [user.id]);
 
       const token = jwt.sign(
         { id: user.id, email: user.email, accountType: 'parent' },
@@ -385,7 +417,7 @@ app.post('/api/teacher/login', authRateLimit, (req, res) => {
       }
 
       // Update last active
-      db.run('UPDATE users SET last_active = date("now") WHERE id = ?', [user.id]);
+      db.run('UPDATE users SET last_active = date(\'now\') WHERE id = ?', [user.id]);
 
       const token = jwt.sign(
         { id: user.id, email: user.email, accountType: 'teacher' },
@@ -488,12 +520,12 @@ app.post('/api/login', authRateLimit, (req, res) => {
     }
 
     // Update last active
-    db.run('UPDATE users SET last_active = date("now") WHERE id = ?', [user.id]);
+    db.run('UPDATE users SET last_active = date(\'now\') WHERE id = ?', [user.id]);
 
     // Log session for child accounts
     if (user.account_type === 'child') {
       db.run(
-        'INSERT INTO session_logs (user_id, login_time) VALUES (?, datetime("now"))',
+        'INSERT INTO session_logs (user_id, login_time) VALUES (?, datetime(\'now\'))',
         [user.id]
       );
     }
@@ -540,6 +572,13 @@ app.post('/api/parent/children', authenticateToken, requireParentAccount, async 
 
   if (age < 4 || age > 17) {
     return res.status(400).json({ error: 'Age must be between 4 and 17' });
+  }
+
+  let validatedRestrictions;
+  try {
+    validatedRestrictions = parentSupport.validateRestrictions(restrictions || {});
+  } catch (err) {
+    return res.status(400).json({ error: err.message || 'Invalid restrictions' });
   }
 
   const db = getDb();
@@ -605,22 +644,10 @@ app.post('/api/parent/children', authenticateToken, requireParentAccount, async 
                   return res.status(500).json({ error: 'Failed to link child to parent' });
                 }
 
-                // Create restrictions if provided
-                if (restrictions) {
-                  db.run(
-                    `INSERT INTO account_restrictions 
-                     (child_id, max_daily_minutes, allowed_days, content_filters, require_parent_approval, created_by) 
-                     VALUES (?, ?, ?, ?, ?, ?)`,
-                    [
-                      childId,
-                      restrictions.maxDailyMinutes || null,
-                      restrictions.allowedDays ? JSON.stringify(restrictions.allowedDays) : null,
-                      restrictions.contentFilters ? JSON.stringify(restrictions.contentFilters) : null,
-                      restrictions.requireParentApproval ? 1 : 0,
-                      parentId
-                    ]
-                  );
-                }
+                // Create validated restrictions if provided (bad input must not
+                // silently create an unrestricted child account).
+                parentSupport.saveRestrictions(db, childId, parentId, validatedRestrictions)
+                  .catch((err) => console.error('Failed to save initial restrictions:', err));
 
                 res.json({
                   success: true,
@@ -703,10 +730,7 @@ app.get('/api/parent/children/:childId', authenticateToken, requireParentAccount
       }
 
       // Get restrictions
-      db.get(
-        'SELECT * FROM account_restrictions WHERE child_id = ? ORDER BY created_at DESC LIMIT 1',
-        [childId],
-        (err, restrictions) => {
+      parentSupport.restrictionsFor(db, childId).then((restrictions) => {
           res.json({
             child: {
               id: child.id,
@@ -727,8 +751,10 @@ app.get('/api/parent/children/:childId', authenticateToken, requireParentAccount
               } : null
             }
           });
-        }
-      );
+      }).catch((err) => {
+        console.error('Failed to load restrictions:', err);
+        return res.status(500).json({ error: 'Failed to load child details' });
+      });
     }
   );
 });
@@ -746,13 +772,16 @@ app.put('/api/parent/children/:childId', authenticateToken, requireParentAccount
   const updates = [];
   const values = [];
 
-  if (displayName) {
+  if (displayName !== undefined) {
+    if (!String(displayName).trim()) return res.status(400).json({ error: 'Display name cannot be empty' });
     updates.push('display_name = ?');
-    values.push(displayName);
+    values.push(String(displayName).trim());
   }
-  if (age) {
+  if (age !== undefined) {
+    const n = Number(age);
+    if (!Number.isInteger(n) || n < 4 || n > 17) return res.status(400).json({ error: 'Age must be between 4 and 17' });
     updates.push('age = ?');
-    values.push(age);
+    values.push(n);
   }
   if (avatarUrl !== undefined) {
     updates.push('avatar_url = ?');
@@ -763,7 +792,7 @@ app.put('/api/parent/children/:childId', authenticateToken, requireParentAccount
     return res.status(400).json({ error: 'No fields to update' });
   }
 
-  updates.push('updated_at = datetime("now")');
+  updates.push('updated_at = datetime(\'now\')');
   values.push(childId);
 
   db.run(
@@ -875,38 +904,58 @@ app.get('/api/parent/children/:childId/progress', authenticateToken, requirePare
   );
 });
 
-// Set/update restrictions for a child
-app.post('/api/parent/children/:childId/restrictions', authenticateToken, requireParentAccount, verifyParentChildAccess, (req, res) => {
-  const childId = req.params.childId;
-  const parentId = req.user.id;
-  const { maxDailyMinutes, allowedDays, contentFilters, requireParentApproval } = req.body;
-  const db = getDb();
-
+// Shared async handler for POST/PUT so both verbs validate and upsert identically.
+async function updateRestrictions(req, res) {
   if (!req.relationship.can_manage_restrictions) {
     return res.status(403).json({ error: 'No permission to manage restrictions for this child' });
   }
+  try {
+    const values = parentSupport.validateRestrictions(req.body);
+    const restrictions = await parentSupport.saveRestrictions(getDb(), req.params.childId, req.user.id, values);
+    res.json({
+      success: true,
+      message: 'Restrictions updated',
+      restrictions: {
+        maxDailyMinutes: restrictions.max_daily_minutes,
+        allowedDays: restrictions.allowed_days ? JSON.parse(restrictions.allowed_days) : null,
+        contentFilters: restrictions.content_filters ? JSON.parse(restrictions.content_filters) : null,
+        requireParentApproval: restrictions.require_parent_approval === 1,
+      },
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Failed to set restrictions' });
+  }
+}
 
-  db.run(
-    `INSERT INTO account_restrictions 
-     (child_id, max_daily_minutes, allowed_days, content_filters, require_parent_approval, created_by) 
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [
-      childId,
-      maxDailyMinutes || null,
-      allowedDays ? JSON.stringify(allowedDays) : null,
-      contentFilters ? JSON.stringify(contentFilters) : null,
-      requireParentApproval ? 1 : 0,
-      parentId
-    ],
-    function (err) {
-      if (err) {
-        console.error('Failed to set restrictions:', err);
-        return res.status(500).json({ error: 'Failed to set restrictions' });
-      }
+app.post('/api/parent/children/:childId/restrictions', authenticateToken, requireParentAccount, verifyParentChildAccess, updateRestrictions);
+app.put('/api/parent/children/:childId/restrictions', authenticateToken, requireParentAccount, verifyParentChildAccess, updateRestrictions);
 
-      res.json({ success: true, message: 'Restrictions updated' });
-    }
-  );
+app.get('/api/parent/children/:childId/restrictions', authenticateToken, requireParentAccount, verifyParentChildAccess, async (req, res) => {
+  try {
+    const restrictions = await parentSupport.restrictionsFor(getDb(), req.params.childId);
+    res.json({
+      restrictions: restrictions ? {
+        maxDailyMinutes: restrictions.max_daily_minutes,
+        allowedDays: restrictions.allowed_days ? JSON.parse(restrictions.allowed_days) : null,
+        contentFilters: restrictions.content_filters ? JSON.parse(restrictions.content_filters) : null,
+        requireParentApproval: restrictions.require_parent_approval === 1,
+      } : null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load restrictions' });
+  }
+});
+
+app.delete('/api/parent/children/:childId/restrictions', authenticateToken, requireParentAccount, verifyParentChildAccess, async (req, res) => {
+  if (!req.relationship.can_manage_restrictions) {
+    return res.status(403).json({ error: 'No permission to manage restrictions for this child' });
+  }
+  try {
+    await parentSupport.runOne(getDb(), 'DELETE FROM account_restrictions WHERE child_id = ?', [req.params.childId]);
+    res.json({ success: true, message: 'Restrictions removed' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to remove restrictions' });
+  }
 });
 
 // Get parent dashboard (aggregated data for all children)
@@ -955,6 +1004,236 @@ app.get('/api/parent/dashboard', authenticateToken, requireParentAccount, (req, 
   );
 });
 
+// ---------------------------------------------------------------------------
+// Parent profile, notifications, reports and account linking
+// ---------------------------------------------------------------------------
+
+app.get('/api/parent/profile', authenticateToken, requireParentAccount, (req, res) => {
+  getDb().get(
+    'SELECT id, email, first_name, last_name, phone_number, created_at FROM users WHERE id = ?',
+    [req.user.id],
+    (err, row) => {
+      if (err || !row) return res.status(404).json({ error: 'Parent account not found' });
+      res.json({
+        parent: {
+          id: row.id, email: row.email, firstName: row.first_name, lastName: row.last_name,
+          phoneNumber: row.phone_number, createdAt: row.created_at,
+        },
+      });
+    }
+  );
+});
+
+app.put('/api/parent/profile', authenticateToken, requireParentAccount, async (req, res) => {
+  const { firstName, lastName, phoneNumber, email } = req.body || {};
+  const db = getDb();
+  if (!String(firstName || '').trim() || !String(lastName || '').trim()) {
+    return res.status(400).json({ error: 'First and last name are required' });
+  }
+  if (email !== undefined) {
+    const cleanEmail = String(email).trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return res.status(400).json({ error: 'Invalid email address' });
+    const existing = await parentSupport.getOne(db, 'SELECT id FROM users WHERE email = ? AND id != ?', [cleanEmail, req.user.id]);
+    if (existing) return res.status(400).json({ error: 'Email already in use' });
+    await parentSupport.runOne(db, 'UPDATE users SET email = ? WHERE id = ?', [cleanEmail, req.user.id]);
+  }
+  await parentSupport.runOne(db,
+    'UPDATE users SET first_name = ?, last_name = ?, phone_number = ?, updated_at = datetime(\'now\') WHERE id = ?',
+    [String(firstName).trim(), String(lastName).trim(), phoneNumber ? String(phoneNumber).trim() : null, req.user.id]);
+  res.json({ success: true, message: 'Profile updated' });
+});
+
+app.put('/api/parent/password', authenticateToken, requireParentAccount, async (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (typeof newPassword !== 'string' || newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  }
+  const db = getDb();
+  const user = await parentSupport.getOne(db, 'SELECT password FROM users WHERE id = ?', [req.user.id]);
+  if (!user || !(await bcrypt.compare(String(currentPassword || ''), user.password))) {
+    return res.status(403).json({ error: 'Current password is incorrect' });
+  }
+  await parentSupport.runOne(db, 'UPDATE users SET password = ?, updated_at = datetime(\'now\') WHERE id = ?',
+    [await bcrypt.hash(newPassword, BCRYPT_ROUNDS), req.user.id]);
+  res.json({ success: true, message: 'Password changed' });
+});
+
+app.get('/api/parent/notifications', authenticateToken, requireParentAccount, async (req, res) => {
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+  const rows = await parentSupport.getAll(getDb(),
+    'SELECT id, type, title, body, data_json, read_at, created_at FROM parent_notifications WHERE parent_id = ? ORDER BY created_at DESC, id DESC LIMIT ?',
+    [req.user.id, limit]);
+  res.json({
+    notifications: rows.map((r) => ({ ...r, data: JSON.parse(r.data_json || '{}'), read: Boolean(r.read_at) })),
+    unread: rows.filter((r) => !r.read_at).length,
+  });
+});
+
+app.patch('/api/parent/notifications/:id/read', authenticateToken, requireParentAccount, async (req, res) => {
+  const result = await parentSupport.runOne(getDb(),
+    'UPDATE parent_notifications SET read_at = datetime(\'now\') WHERE id = ? AND parent_id = ? AND read_at IS NULL',
+    [req.params.id, req.user.id]);
+  if (!result.changes) return res.status(404).json({ error: 'Unread notification not found' });
+  res.json({ success: true });
+});
+
+app.post('/api/parent/notifications/read-all', authenticateToken, requireParentAccount, async (req, res) => {
+  const result = await parentSupport.runOne(getDb(),
+    'UPDATE parent_notifications SET read_at = datetime(\'now\') WHERE parent_id = ? AND read_at IS NULL', [req.user.id]);
+  res.json({ success: true, updated: result.changes });
+});
+
+app.get('/api/parent/notification-preferences', authenticateToken, requireParentAccount, async (req, res) => {
+  const db = getDb();
+  let prefs = await parentSupport.getOne(db, 'SELECT * FROM notification_preferences WHERE parent_id = ?', [req.user.id]);
+  if (!prefs) {
+    await parentSupport.runOne(db, 'INSERT INTO notification_preferences (parent_id) VALUES (?)', [req.user.id]);
+    prefs = await parentSupport.getOne(db, 'SELECT * FROM notification_preferences WHERE parent_id = ?', [req.user.id]);
+  }
+  res.json({ preferences: {
+    emailNotifications: Boolean(prefs.email_notifications), weeklyReports: Boolean(prefs.weekly_reports),
+    achievementAlerts: Boolean(prefs.achievement_alerts), loginAlerts: Boolean(prefs.login_alerts),
+    reportDay: prefs.report_day, reportTime: prefs.report_time,
+  } });
+});
+
+app.put('/api/parent/notification-preferences', authenticateToken, requireParentAccount, async (req, res) => {
+  const b = req.body || {};
+  const day = String(b.reportDay || 'sunday').toLowerCase();
+  const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  if (!validDays.includes(day)) return res.status(400).json({ error: 'Invalid report day' });
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(b.reportTime || '18:00'))) return res.status(400).json({ error: 'Invalid report time' });
+  await parentSupport.runOne(getDb(), `
+    INSERT INTO notification_preferences (parent_id, email_notifications, weekly_reports, achievement_alerts, login_alerts, report_day, report_time)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(parent_id) DO UPDATE SET email_notifications = excluded.email_notifications,
+      weekly_reports = excluded.weekly_reports, achievement_alerts = excluded.achievement_alerts,
+      login_alerts = excluded.login_alerts, report_day = excluded.report_day, report_time = excluded.report_time,
+      updated_at = datetime('now')`,
+    [req.user.id, b.emailNotifications ? 1 : 0, b.weeklyReports ? 1 : 0, b.achievementAlerts ? 1 : 0,
+      b.loginAlerts ? 1 : 0, day, b.reportTime || '18:00']);
+  res.json({ success: true, message: 'Notification preferences saved' });
+});
+
+// A child can read its own active restrictions (read-only, never writable).
+app.get('/api/child/restrictions', authenticateToken, requireChildAccount, async (req, res) => {
+  const db = getDb();
+  const r = await parentSupport.restrictionsFor(db, req.user.id);
+  res.json({ restrictions: r ? {
+    maxDailyMinutes: r.max_daily_minutes,
+    allowedDays: r.allowed_days ? JSON.parse(r.allowed_days) : null,
+    contentFilters: r.content_filters ? JSON.parse(r.content_filters) : null,
+    requireParentApproval: r.require_parent_approval === 1,
+  } : null });
+});
+
+// Invite-code linking: the child generates a signed code; a parent redeems it.
+app.get('/api/child/parent-invite-code', authenticateToken, requireChildAccount, async (req, res) => {
+  const db = getDb();
+  const parents = await parentSupport.getAll(db, `
+    SELECT u.id, u.first_name, u.last_name, u.username, pcr.relationship_type
+    FROM parent_child_relationships pcr INNER JOIN users u ON u.id = pcr.parent_id
+    WHERE pcr.child_id = ? ORDER BY pcr.id`, [req.user.id]);
+  res.json({
+    inviteCode: parentSupport.childInviteCode(JWT_SECRET, req.user.id),
+    linkedParents: parents.map((p) => ({
+      id: p.id,
+      displayName: [p.first_name, p.last_name].filter(Boolean).join(' ') || p.username,
+      relationshipType: p.relationship_type,
+    })),
+  });
+});
+
+app.post('/api/parent/children/link', authenticateToken, requireParentAccount, async (req, res) => {
+  const code = String((req.body || {}).code || '').trim();
+  const childId = parentSupport.parseChildInviteCode(JWT_SECRET, code);
+  if (!childId) return res.status(400).json({ error: 'Invalid or expired invite code' });
+  const db = getDb();
+  const child = await parentSupport.getOne(db, "SELECT id, username, display_name, parent_id FROM users WHERE id = ? AND account_type = 'child'", [childId]);
+  if (!child) return res.status(404).json({ error: 'Child account not found' });
+  const count = await parentSupport.getOne(db, 'SELECT COUNT(*) AS count FROM parent_child_relationships WHERE parent_id = ?', [req.user.id]);
+  if (count.count >= 10) return res.status(400).json({ error: 'Maximum 10 children per parent account' });
+  const exists = await parentSupport.getOne(db,
+    'SELECT id FROM parent_child_relationships WHERE parent_id = ? AND child_id = ?', [req.user.id, childId]);
+  if (exists) return res.json({ success: true, alreadyLinked: true, childId });
+  await parentSupport.runOne(db,
+    "INSERT INTO parent_child_relationships (parent_id, child_id, relationship_type) VALUES (?, ?, 'secondary')",
+    [req.user.id, childId]);
+  // Only claim the approval parent when the child has none; never steal a child.
+  if (!child.parent_id) {
+    await parentSupport.runOne(db, 'UPDATE users SET parent_id = ? WHERE id = ? AND parent_id IS NULL', [req.user.id, childId]);
+  }
+  res.json({ success: true, childId, username: child.username, displayName: child.display_name });
+});
+
+app.delete('/api/parent/children/:childId/link', authenticateToken, requireParentAccount, verifyParentChildAccess, async (req, res) => {
+  const db = getDb();
+  await parentSupport.runOne(db, 'DELETE FROM parent_child_relationships WHERE parent_id = ? AND child_id = ?', [req.user.id, req.params.childId]);
+  await parentSupport.runOne(db, 'UPDATE users SET parent_id = NULL WHERE id = ? AND parent_id = ?', [req.params.childId, req.user.id]);
+  await parentSupport.runOne(db, "UPDATE lesson_approvals SET status = 'denied' WHERE child_id = ? AND parent_id = ? AND status = 'pending'", [req.params.childId, req.user.id]);
+  res.json({ success: true, message: 'Child unlinked; both accounts were preserved' });
+});
+
+async function childReportData(childId) {
+  const db = getDb();
+  const [user, progress, achievementsRows, sessions, modules] = await Promise.all([
+    parentSupport.getOne(db, 'SELECT id, username, display_name, xp, streak, last_active FROM users WHERE id = ?', [childId]),
+    parentSupport.getAll(db,
+      `SELECT p.*, l.title AS lessonTitle, m.title AS moduleTitle FROM progress p
+       LEFT JOIN lessons l ON l.id = p.lesson_id LEFT JOIN modules m ON m.id = p.module_id
+       WHERE p.user_id = ? ORDER BY m.id, l.id`, [childId]),
+    parentSupport.getAll(db,
+      `SELECT a.name, a.description, ua.unlocked_at FROM user_achievements ua
+       JOIN achievements a ON a.id = ua.achievement_id WHERE ua.user_id = ? ORDER BY ua.unlocked_at DESC`, [childId]),
+    parentSupport.getAll(db,
+      'SELECT login_time, logout_time, duration_minutes FROM session_logs WHERE user_id = ? ORDER BY login_time DESC LIMIT 365', [childId]),
+    parentSupport.getAll(db, 'SELECT id, title FROM modules ORDER BY id'),
+  ]);
+  if (!user) return null;
+  const completed = progress.filter((p) => p.completed);
+  return {
+    child: user,
+    summary: {
+      totalXP: user.xp || 0, streak: user.streak || 0,
+      completedLessons: completed.length,
+      averageScore: completed.length ? Math.round(completed.reduce((n, p) => n + (p.score || 0), 0) / completed.length) : 0,
+      minutes: sessions.reduce((n, s) => n + (s.duration_minutes || 0), 0),
+    },
+    progress, achievements: achievementsRows, sessions,
+    modules: modules.map((m) => {
+      const rows = progress.filter((p) => p.module_id === m.id);
+      return {
+        id: m.id, title: m.title,
+        completed: rows.filter((p) => p.completed).length,
+        total: rows.length,
+        averageScore: rows.length ? Math.round(rows.reduce((n, p) => n + (p.score || 0), 0) / rows.length) : 0,
+      };
+    }),
+  };
+}
+
+app.get('/api/parent/children/:childId/report', authenticateToken, requireParentAccount, verifyParentChildAccess, async (req, res) => {
+  if (!req.relationship.can_view_progress) return res.status(403).json({ error: 'No permission to view this child\'s progress' });
+  const report = await childReportData(req.params.childId);
+  if (!report) return res.status(404).json({ error: 'Child not found' });
+  res.json(report);
+});
+
+app.get('/api/parent/children/:childId/report.csv', authenticateToken, requireParentAccount, verifyParentChildAccess, async (req, res) => {
+  if (!req.relationship.can_view_progress) return res.status(403).json({ error: 'No permission to view this child\'s progress' });
+  const report = await childReportData(req.params.childId);
+  if (!report) return res.status(404).json({ error: 'Child not found' });
+  const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [
+    ['Section', 'Module', 'Lesson', 'Completed', 'Score', 'Recorded'].map(cell).join(','),
+    ...report.progress.map((p) => ['Progress', p.moduleTitle || p.module_id, p.lessonTitle || p.lesson_id,
+      p.completed ? 'yes' : 'no', p.score ?? '', p.updated_at || ''].map(cell).join(',')),
+    ...report.achievements.map((a) => ['Achievement', '', a.name, '', '', a.unlocked_at || ''].map(cell).join(',')),
+    ...report.sessions.map((s) => ['Session', '', '', '', s.duration_minutes || '', s.login_time || ''].map(cell).join(',')),
+  ];
+  res.type('text/csv').set('Content-Disposition', `attachment; filename="child-${req.params.childId}-progress.csv"`).send(lines.join('\r\n'));
+});
+
 // Switch to child account view (generates child token for parent)
 app.post('/api/parent/switch-child/:childId', authenticateToken, requireParentAccount, verifyParentChildAccess, (req, res) => {
   const childId = req.params.childId;
@@ -965,7 +1244,8 @@ app.post('/api/parent/switch-child/:childId', authenticateToken, requireParentAc
       return res.status(404).json({ error: 'Child not found' });
     }
 
-    // Generate a token for the child account
+    // Generate a token for the child account plus a restore token for the parent.
+    const tokenreturn = jwt.sign({ id: req.user.id, accountType: 'parent' }, JWT_SECRET, { expiresIn: '24h' });
     const token = jwt.sign(
       {
         id: child.id,
@@ -981,6 +1261,7 @@ app.post('/api/parent/switch-child/:childId', authenticateToken, requireParentAc
     res.json({
       success: true,
       token,
+      returnToken: tokenreturn,
       child: {
         id: child.id,
         username: child.username,
@@ -1399,7 +1680,7 @@ app.get('/api/lesson/:lessonId/unlocked', authenticateToken, (req, res) => {
 // PROGRESS ENDPOINTS
 // =====================
 
-app.get('/api/progress', authenticateToken, (req, res) => {
+app.get('/api/progress', authenticateToken, requireChildAccount, (req, res) => {
   const db = getDb();
   db.all('SELECT * FROM progress WHERE user_id = ?', [req.user.id], (err, progress) => {
     if (err) return res.status(500).json({ error: 'Failed to load progress' });
@@ -1421,7 +1702,7 @@ const getLesson = (id) => new Promise((resolve, reject) => {
 const challengeLocale = (v) => (v === 'sw' ? 'sw' : 'en');
 
 // The checklist for a lesson challenge, so learners know what to aim for.
-app.get('/api/lessons/:id/challenge', authenticateToken, async (req, res) => {
+app.get('/api/lessons/:id/challenge', authenticateToken, requireChildAccount, async (req, res) => {
   try {
     const lesson = await getLesson(Number(req.params.id));
     if (!lesson) return res.status(404).json({ error: 'Lesson not found' });
@@ -1436,7 +1717,7 @@ app.get('/api/lessons/:id/challenge', authenticateToken, async (req, res) => {
 });
 
 // Score the learner's code against the challenge checklist and remember their best score.
-app.post('/api/lessons/:id/check', authenticateToken, async (req, res) => {
+app.post('/api/lessons/:id/check', authenticateToken, requireChildAccount, enforceChildRestrictions(), async (req, res) => {
   try {
     const lesson = await getLesson(Number(req.params.id));
     if (!lesson) return res.status(404).json({ error: 'Lesson not found' });
@@ -1457,7 +1738,7 @@ app.post('/api/lessons/:id/check', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/progress', authenticateToken, (req, res) => {
+app.post('/api/progress', authenticateToken, requireChildAccount, enforceChildRestrictions({ approval: true }), (req, res) => {
   const { module_id, lesson_id, completed, last_code, learningMetrics } = req.body; // any "score" sent by the browser is ignored
   const db = getDb();
 
@@ -1525,7 +1806,21 @@ app.post('/api/progress', authenticateToken, (req, res) => {
 
         db.run('UPDATE users SET xp = xp + ? WHERE id = ?', [xpGain, req.user.id]);
         checkAndAwardAchievements(req.user.id, db);
-        return res.json({ success: true, xpEarned: xpGain });
+        (async () => {
+          try {
+            const child = await parentSupport.getOne(db,
+              'SELECT parent_id, username, display_name FROM users WHERE id = ?', [req.user.id]);
+            if (child?.parent_id) {
+              await parentSupport.notifyParent(db, child.parent_id, 'lesson',
+                'Lesson completed',
+                `${child.display_name || child.username} completed lesson ${lesson_id} and earned ${xpGain} XP.`,
+                { childId: req.user.id, lessonId: Number(lesson_id), xpEarned: xpGain });
+            }
+          } catch (e) {
+            console.error('Failed to create lesson notification:', e.message);
+          }
+          return res.json({ success: true, xpEarned: xpGain });
+        })();
       }
     );
   });
@@ -1536,7 +1831,7 @@ app.post('/api/progress', authenticateToken, (req, res) => {
 // =====================
 
 // Submit quiz results
-app.post('/api/quiz/submit', authenticateToken, (req, res) => {
+app.post('/api/quiz/submit', authenticateToken, requireChildAccount, enforceChildRestrictions(), (req, res) => {
   const { moduleId, score, totalQuestions, percentage, timeTaken, answersData } = req.body;
   const db = getDb();
   const userId = req.user.id;
@@ -2046,7 +2341,7 @@ app.get('/api/achievements', authenticateToken, async (req, res) => {
 // CODE HISTORY ENDPOINTS
 // =====================
 
-app.post('/api/code-history', authenticateToken, (req, res) => {
+app.post('/api/code-history', authenticateToken, requireChildAccount, (req, res) => {
   const { title, code, blocks_xml, language, source, lesson_id } = req.body;
   const db = getDb();
 
@@ -2141,10 +2436,23 @@ app.post('/api/run-code', runRateLimit, async (req, res) => {
     });
   }
 
+  const runner = optionalUser(req);
+  // Guests can explore; authenticated parents/teachers cannot execute code.
+  if (runner && runner.accountType !== 'child') {
+    return res.status(403).json({ error: 'Child account required', code: 'CHILD_ACCOUNT_REQUIRED' });
+  }
+  if (runner) {
+    const policy = await parentSupport.checkChildPolicy(getDb(), runner.id).catch(() => ({ allowed: true }));
+    if (!policy.allowed) {
+      return res.status(403).json({
+        error: policy.reason.replace(/_/g, ' '), code: policy.reason, restrictions: policy.restrictions,
+      });
+    }
+  }
+
   try {
     // Runs in an isolated worker thread with no access to the server (see sandbox/).
     const result = await runJavaScript(code, { timeoutMs: 3000 });
-    const runner = optionalUser(req);
     if (runner) achievements.noteCoding(runner.id, { code, turtleUsed: (result.turtleCommands || []).length > 0 });
 
     if (result.error) {
@@ -2203,7 +2511,7 @@ function getFriendlyError(errorMsg) {
 // =====================
 
 // Request lesson approval (child)
-app.post('/api/lesson-approval/request', authenticateToken, (req, res) => {
+app.post('/api/lesson-approval/request', authenticateToken, requireChildAccount, (req, res) => {
   const { lessonId, moduleId } = req.body;
   const childId = req.user.id;
   const db = getDb();
@@ -2248,6 +2556,11 @@ app.post('/api/lesson-approval/request', authenticateToken, (req, res) => {
               return res.status(500).json({ error: 'Failed to request approval' });
             }
 
+            parentSupport.notifyParent(db, parentId, 'approval',
+              'Lesson approval requested',
+              'Your child requested approval to complete a lesson.',
+              { childId, lessonId, requestId: this.lastID }).catch((e) =>
+              console.error('Failed to create parent notification:', e.message));
             res.json({
               success: true,
               approval: {
@@ -2264,7 +2577,7 @@ app.post('/api/lesson-approval/request', authenticateToken, (req, res) => {
 });
 
 // Check lesson approval status (child)
-app.get('/api/lesson-approval/check/:lessonId', authenticateToken, (req, res) => {
+app.get('/api/lesson-approval/check/:lessonId', authenticateToken, requireChildAccount, (req, res) => {
   const lessonId = req.params.lessonId;
   const childId = req.user.id;
   const db = getDb();

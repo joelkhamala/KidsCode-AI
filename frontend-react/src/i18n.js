@@ -16,6 +16,7 @@ const resources = {
       "nav.profile": "Profile",
       "nav.dashboard": "Dashboard",
       "nav.signOut": "Sign Out",
+      "nav.returnToParent": "Return to parent dashboard",
       
       // Auth
       "auth.signIn": "Sign In",
@@ -327,6 +328,7 @@ const resources = {
       "nav.profile": "Wasifu",
       "nav.dashboard": "Dashibodi",
       "nav.signOut": "Toka",
+      "nav.returnToParent": "Rudi kwenye dashibodi ya mzazi",
       
       // Auth
       "auth.signIn": "Ingia",

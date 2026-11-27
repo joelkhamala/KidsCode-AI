@@ -7,6 +7,8 @@ import { parentAPI, approvalAPI, curriculumAPI } from '../services/api';
 import ChildAccountManager from '../components/ChildAccountManager';
 import ApprovalQueue from '../components/ApprovalQueue';
 import ParentFriendsPanel from '../components/ParentFriendsPanel';
+import ParentChildSettings from '../components/ParentChildSettings';
+import ParentNotifications from '../components/ParentNotifications';
 import { LearnerCard, LearnerDetail, activityStatus } from '../components/LearnerCard';
 
 const ParentDashboard = () => {
@@ -21,18 +23,21 @@ const ParentDashboard = () => {
   const [selected, setSelected] = useState(null); // { progress, name }
   const [activeTab, setActiveTab] = useState('overview');
   const [pendingCount, setPendingCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [totalLessons, setTotalLessons] = useState(0);
   const [switching, setSwitching] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [childrenRes, dashboardRes] = await Promise.all([
+      const [childrenRes, dashboardRes, notesRes] = await Promise.all([
         parentAPI.getChildren(),
         parentAPI.getDashboard(),
+        parentAPI.getNotifications().catch(() => ({ data: { unread: 0 } })),
       ]);
       setChildren(childrenRes.data.children || []);
       setDashboardData(dashboardRes.data.dashboard);
+      setUnreadCount(notesRes.data.unread || 0);
     } catch (err) {
       console.error('Failed to load parent dashboard:', err);
       notify(t('adultUi.loadFailed'), 'error');
@@ -149,10 +154,21 @@ const ParentDashboard = () => {
           📬 {t('parent.approvals')}
           {pendingCount > 0 && <span className="tab-count">{pendingCount}</span>}
         </button>
+        <button type="button" onClick={() => setActiveTab('settings')} className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}>
+          ⚙️ {t('parent.tab.settings')}
+        </button>
+        <button type="button" onClick={() => setActiveTab('notifications')} className={`tab-btn ${activeTab === 'notifications' ? 'active' : ''}`}>
+          🔔 {t('parent.tab.notifications')}
+          {unreadCount > 0 && <span className="tab-count">{unreadCount}</span>}
+        </button>
       </nav>
 
       {activeTab === 'approvals' ? (
         <ApprovalQueue onChange={loadPending} />
+      ) : activeTab === 'settings' ? (
+        <ParentChildSettings children={children} onChanged={loadData} />
+      ) : activeTab === 'notifications' ? (
+        <ParentNotifications />
       ) : children.length === 0 ? (
         /* First-time parent: explain the 3 steps */
         <section className="card p-6 md:p-10 text-center" aria-labelledby="getting-started">

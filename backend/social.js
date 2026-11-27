@@ -358,7 +358,12 @@ async function duelView(d, viewerId, locale, names) {
 // ---------------------------------------------------------------------------
 function createSocialRouter({ authenticateToken }) {
   const router = express.Router();
-  router.use(authenticateToken);
+  router.use(authenticateToken, (req, res, next) => {
+    if (req.user.accountType !== 'child') {
+      return res.status(403).json({ error: 'Child account required', code: 'CHILD_ACCOUNT_REQUIRED' });
+    }
+    next();
+  });
   const wrap = (fn) => async (req, res) => {
     try {
       await ensureTables();

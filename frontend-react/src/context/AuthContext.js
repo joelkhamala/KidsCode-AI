@@ -23,6 +23,7 @@ export const AuthProvider = ({ children }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     checkAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkAuth = async () => {
@@ -211,11 +212,19 @@ export const AuthProvider = ({ children }) => {
   const switchToChild = async (childId) => {
     try {
       const res = await parentAPI.switchToChild(childId);
+      // Keep the parent session so the child can return without logging in again.
+      const parentSession = {
+        token: res.data.returnToken || currentToken,
+        user: currentUser?.accountType === 'parent' ? currentUser : null,
+      };
+      if (parentSession.user) {
+        localStorage.setItem('codequest_parent_session', JSON.stringify(parentSession));
+      }
       setCurrentToken(res.data.token);
-      setCurrentUser(res.data.child);
+      setCurrentUser({ ...res.data.child, switchedByParent: true });
       setAccountType('child');
       localStorage.setItem('codequest_token', res.data.token);
-      localStorage.setItem('codequest_user', JSON.stringify(res.data.child));
+      localStorage.setItem('codequest_user', JSON.stringify({ ...res.data.child, switchedByParent: true }));
       await loadProgress();
       return { success: true };
     } catch (err) {
@@ -223,6 +232,26 @@ export const AuthProvider = ({ children }) => {
         success: false, 
         error: err.response?.data?.error || 'Failed to switch to child account' 
       };
+    }
+  };
+
+  const restoreParent = async () => {
+    try {
+      const raw = localStorage.getItem('codequest_parent_session');
+      if (!raw) return { success: false, error: 'No parent session to restore' };
+      const session = JSON.parse(raw);
+      setCurrentToken(session.token);
+      setCurrentUser(session.user);
+      setAccountType('parent');
+      localStorage.setItem('codequest_token', session.token);
+      localStorage.setItem('codequest_user', JSON.stringify(session.user));
+      localStorage.removeItem('codequest_parent_session');
+      setUserProgress({});
+      setUserXP(0);
+      setUserStreak(0);
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Could not restore parent session' };
     }
   };
 
@@ -236,6 +265,7 @@ export const AuthProvider = ({ children }) => {
     // Only clear kids keys — adult session remains untouched
     localStorage.removeItem('codequest_token');
     localStorage.removeItem('codequest_user');
+    localStorage.removeItem('codequest_parent_session');
   };
 
   const updateProgress = async (moduleId, lessonId, completed, lastCode, score, learningMetrics = null) => {
@@ -277,7 +307,8 @@ export const AuthProvider = ({ children }) => {
     logout,
     updateProgress,
     loadProgress,
-    switchToChild
+    switchToChild,
+    restoreParent
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

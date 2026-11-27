@@ -109,7 +109,7 @@ app.post('/api/adult/login', (req, res) => {
       }
 
       // Update last active
-      db.run('UPDATE users SET last_active = date("now") WHERE id = ?', [user.id]);
+      db.run('UPDATE users SET last_active = date('now') WHERE id = ?', [user.id]);
 
       // Get profile
       db.get(

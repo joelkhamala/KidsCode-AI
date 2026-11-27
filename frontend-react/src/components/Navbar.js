@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useRestrictions } from '../context/RestrictionsContext';
 import { useTranslation } from 'react-i18next';
@@ -7,11 +7,18 @@ import { ChevronDown, Clock } from 'feather-icons-react';
 import LanguageSwitcher from './LanguageSwitcher';
 
 const Navbar = () => {
-  const { currentUser, userXP, userStreak, logout, accountType } = useAuth();
+  const { currentUser, userXP, userStreak, logout, accountType, restoreParent } = useAuth();
   const { getRemainingTime } = useRestrictions();
   const { t } = useTranslation();
   const location = useLocation();
+  const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
+
+  const returnToParent = async () => {
+    setShowUserMenu(false);
+    const result = await restoreParent();
+    if (result.success) navigate('/parent-dashboard');
+  };
   
   const remainingMinutes = getRemainingTime();
 
@@ -201,6 +208,15 @@ const Navbar = () => {
                   >
                     👨‍🏫 {t('nav.teacherDashboard')}
                   </Link>
+                )}
+                {currentUser?.switchedByParent && (
+                  <button
+                    type="button"
+                    onClick={returnToParent}
+                    className="w-full text-left px-4 py-2 hover:bg-indigo-50 text-sm font-semibold text-indigo-700"
+                  >
+                    ↩️ {t('nav.returnToParent')}
+                  </button>
                 )}
                 <button 
                   onClick={logout}

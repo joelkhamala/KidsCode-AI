@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { progressAPI, curriculumAPI } from '../services/api';
 import { getTranslatedLesson } from '../translations/lessons';
 import { isDone } from '../utils/learningPath';
+import ChildParentLink from '../components/ChildParentLink';
 
 // How to earn each badge (keyed by the badge's condition) and where to go to do it.
 const BADGE_HOW = {
@@ -23,7 +24,7 @@ const AVATARS =['🦊', '🐼', '🦁', '🐸', '🐵', '🦄', '🐯', '🐙', 
 const Profile = () => {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
-  const { currentUser, userXP, userStreak, userProgress, logout } = useAuth();
+  const { currentUser, accountType, userXP, userStreak, userProgress, logout } = useAuth();
   const [achievements, setAchievements] = useState([]);
   const [lessonsById, setLessonsById] = useState({});
 
@@ -122,6 +123,8 @@ const Profile = () => {
               🚪 {t('nav.signOut')}
             </button>
           </section>
+
+          {accountType === 'child' && <ChildParentLink />}
         </aside>
 
         {/* Right: badges + history */}

@@ -23,7 +23,13 @@ const safety = require('./safety');
 
 function createRoutes(engine, { authenticateToken }) {
   const router = express.Router();
-  router.use(authenticateToken);
+  router.use(authenticateToken, (req, res, next) => {
+    // The coach writes learner state. Parents/teachers must use the read-only
+    // insights endpoints; adult learners use the same coach via /api/ai.
+    if (req.path === '/status' || req.path.startsWith('/insights/')) return next();
+    if (req.user.accountType === 'child' || req.user.accountType === 'adult_learner') return next();
+    return res.status(403).json({ error: 'Learner account required', code: 'LEARNER_ACCOUNT_REQUIRED' });
+  });
 
   const wrap = (fn) => async (req, res) => {
     try {

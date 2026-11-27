@@ -206,6 +206,21 @@ function initializeDatabase() {
         )
       `);
 
+      // In-app parent notifications (no email provider required)
+      database.run(`
+        CREATE TABLE IF NOT EXISTS parent_notifications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          parent_id INTEGER NOT NULL,
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          body TEXT NOT NULL,
+          data_json TEXT DEFAULT '{}',
+          read_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (parent_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+
       // Session logs table
       database.run(`
         CREATE TABLE IF NOT EXISTS session_logs (
@@ -531,6 +546,7 @@ function initializeDatabase() {
       database.run('CREATE INDEX IF NOT EXISTS idx_users_xp ON users(xp DESC)');
       database.run('CREATE INDEX IF NOT EXISTS idx_progress_user_lesson ON progress(user_id, lesson_id)');
       database.run('CREATE INDEX IF NOT EXISTS idx_analytics_ts ON analytics_events(ts)');
+      database.run('CREATE INDEX IF NOT EXISTS idx_parent_notifications ON parent_notifications(parent_id, read_at, created_at)');
 
       // Insert sample modules
       database.get('SELECT COUNT(*) as count FROM modules', (err, row) => {

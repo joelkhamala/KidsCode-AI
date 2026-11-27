@@ -52,7 +52,7 @@ const ApprovalQueue = ({ onChange }) => {
     return (
       <div className="text-center py-8">
         <div className="text-4xl mb-4">⏳</div>
-        <p className="text-slate-600">Loading approval requests...</p>
+        <p className="text-slate-600">{t('parent.approval.loading')}</p>
       </div>
     );
   }
@@ -62,13 +62,13 @@ const ApprovalQueue = ({ onChange }) => {
       {/* Pending Requests */}
       <div>
         <h2 className="font-display text-2xl text-slate-800 mb-4">
-          📬 Pending Requests ({pendingRequests.length})
+          📬 {t('parent.approval.pending', { n: pendingRequests.length })}
         </h2>
         
         {pendingRequests.length === 0 ? (
           <div className="card p-8 text-center">
             <div className="text-6xl mb-4">✅</div>
-            <p className="text-slate-600">No pending approval requests</p>
+            <p className="text-slate-600">{t('parent.approval.empty')}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -83,13 +83,13 @@ const ApprovalQueue = ({ onChange }) => {
                       </h3>
                     </div>
                     <p className="text-slate-700 mb-1">
-                      <span className="font-semibold">Module:</span> {request.moduleTitle}
+                      <span className="font-semibold">{t('parent.approval.module')}</span> {request.moduleTitle}
                     </p>
                     <p className="text-slate-700 mb-2">
-                      <span className="font-semibold">Lesson:</span> {request.lessonTitle}
+                      <span className="font-semibold">{t('parent.approval.lesson')}</span> {request.lessonTitle}
                     </p>
                     <p className="text-xs text-slate-500">
-                      Requested: {new Date(request.requestedAt).toLocaleString()}
+                      {t('parent.approval.requested')} {new Date(request.requestedAt).toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -97,14 +97,14 @@ const ApprovalQueue = ({ onChange }) => {
                 {showNoteFor === request.id && (
                   <div className="mb-4">
                     <label className="block text-sm font-bold text-slate-700 mb-2">
-                      Add a note (optional):
+                      {t('parent.approval.noteLabel')}
                     </label>
                     <textarea
                       value={responseNote}
                       onChange={(e) => setResponseNote(e.target.value)}
                       className="w-full p-3 border-2 border-slate-300 rounded-lg focus:border-indigo-500 outline-none"
                       rows="2"
-                      placeholder="Add a message for your child..."
+                      placeholder={t('parent.approval.notePlaceholder')}
                     />
                   </div>
                 )}
@@ -116,7 +116,7 @@ const ApprovalQueue = ({ onChange }) => {
                     className="flex-1 btn-primary justify-center py-3"
                   >
                     <CheckCircle size={18} />
-                    {responding === request.id ? 'Approving...' : 'Approve'}
+                    {responding === request.id ? t('parent.approval.approving') : t('parent.approval.approve')}
                   </button>
                   <button
                     onClick={() => {
@@ -130,7 +130,7 @@ const ApprovalQueue = ({ onChange }) => {
                     className="flex-1 btn-secondary justify-center py-3 bg-red-100 hover:bg-red-200 text-red-700"
                   >
                     <XCircle size={18} />
-                    {showNoteFor === request.id ? 'Confirm Deny' : 'Deny'}
+                    {showNoteFor === request.id ? t('parent.approval.confirmDeny') : t('parent.approval.deny')}
                   </button>
                 </div>
               </div>
@@ -143,7 +143,7 @@ const ApprovalQueue = ({ onChange }) => {
       {respondedRequests.length > 0 && (
         <div>
           <h2 className="font-display text-2xl text-slate-800 mb-4">
-            📋 Recent Responses
+            📋 {t('parent.approval.recent')}
           </h2>
           <div className="space-y-3">
             {respondedRequests.slice(0, 5).map(request => (
@@ -163,7 +163,7 @@ const ApprovalQueue = ({ onChange }) => {
                       <span className="text-sm text-slate-600">{request.lessonTitle}</span>
                     </div>
                     {request.responseNote && (
-                      <p className="text-xs text-slate-600 ml-6">Note: {request.responseNote}</p>
+                      <p className="text-xs text-slate-600 ml-6">{t('parent.approval.note')} {request.responseNote}</p>
                     )}
                   </div>
                   <div className="text-xs text-slate-500">

@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
-import { parentAPI } from '../services/api';
+import { childAPI } from '../services/api';
 
 const RestrictionsContext = createContext();
 
@@ -15,7 +15,6 @@ export const useRestrictions = () => {
 export const RestrictionsProvider = ({ children }) => {
   const { currentUser, accountType } = useAuth();
   const [restrictions, setRestrictions] = useState(null);
-  const [sessionStartTime, setSessionStartTime] = useState(null);
   const [timeSpentToday, setTimeSpentToday] = useState(0);
   const [isBlocked, setIsBlocked] = useState(false);
   const [blockReason, setBlockReason] = useState('');
@@ -29,21 +28,14 @@ export const RestrictionsProvider = ({ children }) => {
     }
 
     try {
-      // Check if child has a parent
-      if (!currentUser.parentId) {
-        // Independent child account (no parent), no restrictions
-        setRestrictions(null);
-        setLoading(false);
-        return;
-      }
+      // Children read their own restrictions directly; the server is the
+      // authoritative gate, this context only powers the friendly UI banner.
+      const res = await childAPI.restrictions();
+      const active = res.data.restrictions;
+      setRestrictions(active);
 
-      // Get child details including restrictions
-      const res = await parentAPI.getChild(currentUser.id);
-      setRestrictions(res.data.child.restrictions);
-      
-      // Check if today is allowed
-      checkAllowedDay(res.data.child.restrictions);
-      
+      checkAllowedDay(active);
+
       // Load today's time spent from localStorage
       const today = new Date().toDateString();
       const storedData = localStorage.getItem(`session_time_${currentUser.id}`);
@@ -51,9 +43,8 @@ export const RestrictionsProvider = ({ children }) => {
         const { date, minutes } = JSON.parse(storedData);
         if (date === today) {
           setTimeSpentToday(minutes);
-          checkTimeLimit(minutes, res.data.child.restrictions);
+          checkTimeLimit(minutes, active);
         } else {
-          // New day, reset
           setTimeSpentToday(0);
           localStorage.setItem(`session_time_${currentUser.id}`, JSON.stringify({ date: today, minutes: 0 }));
         }
@@ -75,14 +66,8 @@ export const RestrictionsProvider = ({ children }) => {
   // Start session timer
   useEffect(() => {
     if (accountType === 'child' && currentUser && !isBlocked && restrictions) {
-      const startTime = Date.now();
-      setSessionStartTime(startTime);
-
       // Update time spent every minute
       const interval = setInterval(() => {
-        const now = Date.now();
-        const sessionMinutes = Math.floor((now - startTime) / 60000);
-        
         setTimeSpentToday(prevTime => {
           const newTimeSpent = prevTime + 1; // Increment by 1 minute
           
