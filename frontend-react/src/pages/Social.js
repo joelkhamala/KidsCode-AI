@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { codeHistoryAPI, socialAPI } from '../services/api';
+import { trackEvent } from '../services/analytics';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import {
@@ -94,6 +95,10 @@ const Social = () => {
       document.removeEventListener('visibilitychange', onBack);
     };
   }, [load]);
+
+  useEffect(() => {
+    if (tab === 'leaderboard') trackEvent('leaderboard_viewed', { timeframe });
+  }, [tab, timeframe]);
 
   // Opening the inbox marks it as read (after the child has seen what is new).
   useEffect(() => {

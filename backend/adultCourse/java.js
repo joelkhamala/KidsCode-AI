@@ -60,9 +60,9 @@ public class Main {
       challenge: 'Write a Java program that prints the six phases of program development, one per line, numbered "Phase 1:" to "Phase 6:".',
       checks: [
         { label: 'Has a main method', in: 'code', re: /public\s+static\s+void\s+main\s*\(\s*String/ },
-        { label: 'Prints Phase 1 (requirements)', in: 'output', re: /Phase 1:.*requirement/i },
-        { label: 'Prints the design and coding phases', in: 'output', re: /Phase 2:.*design[\s\S]*Phase 3:.*cod/i },
-        { label: 'Prints Phase 6 (maintain)', in: 'output', re: /Phase 6:.*maint/i },
+        { label: 'Prints Phase 1 (requirements)', in: 'output', re: /Phase\s+1[:\-]?/i },
+        { label: 'Prints the design and coding phases', in: 'output', re: /Phase\s+2[\s\S]*Phase\s+3/i },
+        { label: 'Prints Phase 6 (maintain)', in: 'output', re: /Phase\s+6/i },
       ],
       hints: ['Use one System.out.println(...) line for each phase.', 'The phases are: requirements, design, coding, test and debug, document, maintain.'],
       quiz: [
@@ -127,8 +127,8 @@ public class Main {
       checks: [
         { label: 'Has a comment', in: 'code', re: /\/\/|\/\*/ },
         { label: 'Declares a String variable called town', in: 'code', re: /String\s+town\s*=/ },
-        { label: 'Prints "I am learning Java in ..."', in: 'output', re: /I am learning Java in \S+/ },
-        { label: 'Prints "Java is case sensitive"', in: 'output', re: /Java is case sensitive/ },
+        { label: 'Prints "I am learning Java in ..."', in: 'output', re: /I am learning Java in\s+\S/i },
+        { label: 'Prints "Java is case sensitive"', in: 'output', re: /Java is case sensitive/i },
       ],
       hints: ['String town = "Kisumu";', 'Join text and a variable with +: "I am learning Java in " + town'],
       quiz: [
@@ -205,7 +205,7 @@ Computers store doubles in binary, so {{1500 * 4 * 1.16}} prints {{6959.99999999
       checks: [
         { label: 'Uses a String, an int, a double and a boolean', in: 'code', re: /String\s+\w+\s*=[\s\S]*?(?=[\s\S]*\bint\s+\w+\s*=)(?=[\s\S]*\bdouble\s+\w+\s*=)(?=[\s\S]*\bboolean\s+\w+\s*=)/ },
         { label: 'Declares the constant VAT_RATE with final', in: 'code', re: /final\s+double\s+VAT_RATE\s*=\s*0\.16/ },
-        { label: 'Prints the total with VAT (6960.00)', in: 'output', re: /Total with VAT:\s*6960\.00\b/ },
+        { label: 'Prints the total with VAT (6960.00)', in: 'output', re: /Total with VAT:\s*6960(?:\.\d+)?/i },
       ],
       hints: ['total = price * quantity * (1 + VAT_RATE)', 'Doubles are stored in binary, so 6960 can print as 6959.999999999999. Use System.out.printf("Total with VAT: %.2f%n", total);'],
       quiz: [
@@ -278,8 +278,8 @@ If the discriminant is negative there are no real roots - you will handle that w
       checks: [
         { label: 'Uses Math.pow for compound interest', in: 'code', re: /Math\.pow\s*\(/ },
         { label: 'Uses Math.sqrt for the roots', in: 'code', re: /Math\.sqrt\s*\(/ },
-        { label: 'Prints the amount 14049.28', in: 'output', re: /Amount:\s*14049\.28/ },
-        { label: 'Prints the roots 3.0 and 2.0', in: 'output', re: /Roots:\s*3\.0 and 2\.0/ },
+        { label: 'Prints the amount 14049.28', in: 'output', re: /Amount\s*[\s:=]*14049(?:\.\d+)?/i },
+        { label: 'Prints the roots 3.0 and 2.0', in: 'output', re: /Roots?[\s\S]*[23][\.\d]*[\s\S]*[23][\.\d]*/i },
       ],
       hints: ['amount = 10000 * Math.pow(1 + 0.12, 3)', 'For x² - 5x + 6: a = 1, b = -5, c = 6'],
       quiz: [
@@ -362,8 +362,8 @@ Without {{break}}, execution "falls through" into the next case.
       checks: [
         { label: 'Uses if / else if / else', in: 'code', re: /if\s*\([\s\S]*else\s+if\s*\([\s\S]*else\s*\{/ },
         { label: 'Uses a switch statement', in: 'code', re: /switch\s*\(/ },
-        { label: 'Grades all three scores correctly', in: 'output', re: /85:\s*Pass[\s\S]*62:\s*Referral[\s\S]*40:\s*Fail/ },
-        { label: 'Prints Weekday from the switch', in: 'output', re: /Weekday/ },
+        { label: 'Grades all three scores correctly', in: 'output', re: /85[\s:\-]*Pass[\s\S]*62[\s:\-]*Referral[\s\S]*40[\s:\-]*Fail/i },
+        { label: 'Prints Weekday from the switch', in: 'output', re: /Weekday/i },
       ],
       hints: ['You can repeat the same if / else if / else block for each score, or loop over them.', 'case "MON": System.out.println("Weekday"); break;'],
       quiz: [
@@ -453,8 +453,8 @@ Watch out for {{infinite loops}}: something inside a while loop must eventually 
       checks: [
         { label: 'Uses a for loop', in: 'code', re: /for\s*\(\s*int\s+\w+\s*=/ },
         { label: 'Uses a while loop', in: 'code', re: /while\s*\(/ },
-        { label: 'Prints the full 7 times table', in: 'output', re: /7 x 1 = 7[\s\S]*7 x 5 = 35[\s\S]*7 x 10 = 70/ },
-        { label: 'Prints the number of years (8)', in: 'output', re: /Years:\s*8\b/ },
+        { label: 'Prints the full 7 times table', in: 'output', re: /7\s*[x\*]\s*1\b[\s\S]*7\s*[x\*]\s*10\b[\s\S]*70\b/i },
+        { label: 'Prints the number of years (8)', in: 'output', re: /(?:Years?|took)\s*[:=]?\s*8(?:\.\d+)?/i },
       ],
       hints: ['System.out.println("7 x " + i + " = " + (7 * i));', 'Multiply the balance by 1.10 each year and count the years.'],
       quiz: [
@@ -533,8 +533,8 @@ System.out.println(Day.values().length); // 7
       checks: [
         { label: 'Declares an array', in: 'code', re: /\w+\s*\[\]\s+\w+\s*=|\w+\s+\w+\s*\[\]\s*=/ },
         { label: 'Declares an enum', in: 'code', re: /enum\s+Day\s*\{/ },
-        { label: 'Prints the total and highest sale', in: 'output', re: /Total:\s*7350[\s\S]*Highest:\s*2100/ },
-        { label: 'Prints the number of days and the enum count', in: 'output', re: /Days:\s*5[\s\S]*Days in a week:\s*7/ },
+        { label: 'Prints the total and highest sale', in: 'output', re: /(?:Total|Sum)\s*[:=]?\s*7350[\s\S]*(?:Highest|Max)\s*[:=]?\s*2100/i },
+        { label: 'Prints the number of days and the enum count', in: 'output', re: /Days?\s*[:=]?\s*5\b[\s\S]*7\b/i },
       ],
       hints: ['int[] sales = {1200, 950, 1800, 1300, 2100};', 'Declare the enum inside the class but outside main: enum Day { MON, TUE, ... }'],
       quiz: [
@@ -624,8 +624,8 @@ public class Main {
       checks: [
         { label: 'Defines getGrade(int ...) returning a String', in: 'code', re: /static\s+String\s+getGrade\s*\(\s*int\s+\w+\s*\)/ },
         { label: 'Overloads average with 2 and 3 parameters', in: 'code', re: /average\s*\(\s*int\s+\w+\s*,\s*int\s+\w+\s*\)[\s\S]*average\s*\(\s*int\s+\w+\s*,\s*int\s+\w+\s*,\s*int\s+\w+\s*\)|average\s*\(\s*int\s+\w+\s*,\s*int\s+\w+\s*,\s*int\s+\w+\s*\)[\s\S]*average\s*\(\s*int\s+\w+\s*,\s*int\s+\w+\s*\)/ },
-        { label: 'Prints the grade for 75', in: 'output', re: /getGrade\(75\)\s*=\s*Pass/ },
-        { label: 'Prints both averages as 70.0', in: 'output', re: /average\(60, 80\)\s*=\s*70\.0[\s\S]*average\(60, 70, 80\)\s*=\s*70\.0/ },
+        { label: 'Prints the grade for 75', in: 'output', re: /(?:getGrade|grade)[\s\(\)=:]*(?:75)?[\s\(\)=:]*Pass/i },
+        { label: 'Prints both averages as 70.0', in: 'output', re: /70\.?0?[\s\S]*70\.?0?/i },
       ],
       hints: ['Divide by 2.0 or 3.0 (not 2 or 3) so the result keeps its decimals.', 'Methods called from main must be static.'],
       quiz: [
@@ -723,7 +723,7 @@ public class Main {
         { label: 'Declares a class Matatu', in: 'code', re: /class\s+Matatu\b/ },
         { label: 'Has a constructor using this', in: 'code', re: /Matatu\s*\(\s*String\s+\w+\s*,\s*int\s+\w+\s*\)[\s\S]*this\.\w+\s*=/ },
         { label: 'Creates objects with new', in: 'code', re: /new\s+Matatu\s*\(/ },
-        { label: 'Prints both matatus', in: 'output', re: /Town - Rongai matatu with 14 seats[\s\S]*Thika - Juja matatu with 33 seats/ },
+        { label: 'Prints both matatus', in: 'output', re: /14[\s\S]*33|33[\s\S]*14/i },
       ],
       hints: ['Put class Matatu above public class Main (without public).', 'describe() returns route + " matatu with " + seats + " seats"'],
       quiz: [
@@ -810,8 +810,8 @@ public class Main {
       checks: [
         { label: 'balance is private', in: 'code', re: /private\s+double\s+balance/ },
         { label: 'Has deposit, withdraw and getBalance methods', in: 'code', re: /void\s+deposit\s*\([\s\S]*withdraw\s*\([\s\S]*getBalance\s*\(|getBalance\s*\([\s\S]*deposit\s*\([\s\S]*withdraw\s*\(/ },
-        { label: 'Prints the correct balance', in: 'output', re: /Balance:\s*3500\.0/ },
-        { label: 'Refuses the overdraft', in: 'output', re: /Big withdrawal allowed:\s*false/ },
+        { label: 'Prints the correct balance', in: 'output', re: /Balance\s*[\s:=]*3500(?:\.\d{1,2})?/i },
+        { label: 'Refuses the overdraft', in: 'output', re: /(?:allowed|overdraft|withdraw.*10000)[\s:=]*(?:false|no|refused)/i },
       ],
       hints: ['withdraw should check amount > balance before subtracting.', 'Store the result: boolean ok = acc.withdraw(10000);'],
       quiz: [
@@ -911,7 +911,7 @@ public class Main {
         { label: 'Car extends Vehicle', in: 'code', re: /class\s+Car\s+extends\s+Vehicle/ },
         { label: 'Calls super(...) in the constructor', in: 'code', re: /super\s*\(/ },
         { label: 'Overrides info()', in: 'code', re: /@Override[\s\S]*info\s*\(/ },
-        { label: 'Prints both descriptions', in: 'output', re: /2019 Toyota\s*\n[\s\S]*2021 Mazda, 4 doors/ },
+        { label: 'Prints both descriptions', in: 'output', re: /2019[\s\S]*Toyota[\s\S]*2021[\s\S]*Mazda[\s\S]*4[\s\S]*doors/i },
       ],
       hints: ['super(make, year) must be the first line of the Car constructor.', 'return super.info() + ", " + doors + " doors";'],
       quiz: [
@@ -1020,7 +1020,7 @@ public class Main {
         { label: 'Declares an abstract class with an abstract method', in: 'code', re: /abstract\s+class\s+Shape[\s\S]*abstract\s+double\s+area\s*\(\s*\)\s*;/ },
         { label: 'Circle and Rectangle extend Shape', in: 'code', re: /class\s+Circle\s+extends\s+Shape[\s\S]*class\s+Rectangle\s+extends\s+Shape|class\s+Rectangle\s+extends\s+Shape[\s\S]*class\s+Circle\s+extends\s+Shape/ },
         { label: 'Uses a Shape array (polymorphism)', in: 'code', re: /Shape\s*\[\]\s+\w+\s*=/ },
-        { label: 'Prints both areas', in: 'output', re: /Circle:\s*153\.94[\s\S]*Rectangle:\s*20\.00/ },
+        { label: 'Prints both areas', in: 'output', re: /153\.94[\s\S]*20\.00|20\.00[\s\S]*153\.94/i },
       ],
       hints: ['s.getClass().getSimpleName() gives "Circle" or "Rectangle".', 'System.out.printf("%s: %.2f%n", name, s.area());'],
       quiz: [

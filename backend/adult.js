@@ -26,6 +26,7 @@ const crypto = require('crypto');
 const { getDb } = require('./database');
 const course = require('./adultCourse');
 const safety = require('./ai/safety');
+const { createAdultFriendsRouter } = require('./adult-friends');
 
 const all = (sql, p = []) => new Promise((res, rej) => getDb().all(sql, p, (e, r) => (e ? rej(e) : res(r || []))));
 const get = (sql, p = []) => new Promise((res, rej) => getDb().get(sql, p, (e, r) => (e ? rej(e) : res(r))));
@@ -324,6 +325,10 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
 
   // Everything below needs an adult learner login.
   router.use(authenticateToken, adultOnly);
+
+  // Friends & study circle: adult-only social features, mounted after the guard
+  // so no child/parent/teacher token can reach them.
+  router.use('/friends', createAdultFriendsRouter({ ensureReady, summary, courseStatuses }));
 
   router.get('/me', wrap(async (req) => {
     const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);

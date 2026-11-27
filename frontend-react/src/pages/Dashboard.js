@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import api, { curriculumAPI, aiAPI } from '../services/api';
+import { trackEvent } from '../services/analytics';
 import { getTranslatedLesson, getTranslatedModule } from '../translations/lessons';
 import { isDone, mapProgress } from '../utils/learningPath';
 
@@ -24,12 +25,19 @@ const greetingKey = () => {
 const Dashboard = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { currentUser, userXP, userStreak, userProgress } = useAuth();
+  const { currentUser, accountType, userXP, userStreak, userProgress } = useAuth();
   const [curriculum, setCurriculum] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [quizPassed, setQuizPassed] = useState({}); // moduleId -> bool
   const [journey, setJourney] = useState(null); // life-long Coding Journey summary
+
+  useEffect(() => {
+    const role = currentUser?.role || currentUser?.accountType || accountType;
+    if (typeof role === 'string' || typeof role === 'number') {
+      trackEvent('dashboard_viewed', { role });
+    }
+  }, [currentUser, accountType]);
 
   const loadCurriculum = useCallback(async () => {
     try {

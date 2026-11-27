@@ -9,9 +9,9 @@ services:
     # Frankfurt is the closest Render region to East Africa.
     region: frankfurt
     buildCommand: >-
-      cd backend && npm install --no-audit --no-fund &&
-      cd ../frontend-react && npm install --no-audit --no-fund &&
-      CI=false npm run build
+      cd backend && npm ci --no-audit --no-fund &&
+      cd ../frontend-react && npm ci --no-audit --no-fund &&
+      npm run build
     # setup-database.js is safe to run on every start: it only adds what is missing.
     startCommand: cd backend && node setup-database.js && node server.js
     healthCheckPath: /api/curriculum
@@ -30,6 +30,14 @@ services:
         generateValue: true
       - key: SESSION_SECRET
         generateValue: true
+      # Same-origin by default. Set only if the frontend is served from a
+      # different origin (e.g. REACT_APP_API_URL points elsewhere).
+      - key: CORS_ORIGINS
+        sync: false
+      # Comma-separated approved school domains for teacher self-registration.
+      # Empty = open registration (not recommended in production).
+      - key: TEACHER_EMAIL_DOMAINS
+        sync: false
       # --- AI Coach (optional). Leave OPENAI_API_KEY empty to run in offline mode. ---
       - key: AI_PROVIDER
         value: openai

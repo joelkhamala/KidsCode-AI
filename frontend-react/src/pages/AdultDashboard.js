@@ -271,6 +271,7 @@ const AdultDashboard = () => {
             {[
               ['/adult/coach', '🤖', t('adc.title'), t('adc.shortcut'), 'bg-sky-100'],
               ['/adult/progress', '📈', t('ad.myProgress'), t('ad.myProgressText'), 'bg-violet-100'],
+              ['/adult/friends', '🤝', t('adf.tab.friends'), t('adf.shortcut'), 'bg-emerald-100'],
               ['/adult/profile', '👤', t('ad.profileSettings'), t('ad.profileShortcut'), 'bg-slate-100'],
             ].map(([to, icon, title, text, tint]) => (
               <Link key={to} to={to} className="flex items-center gap-3 rounded-xl p-3 hover:bg-slate-50 transition">

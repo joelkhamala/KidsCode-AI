@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { RestrictionsProvider, useRestrictions } from './context/RestrictionsContext';
@@ -32,7 +32,9 @@ import AdultCoach from './pages/AdultCoach';
 import AdultProgress from './pages/AdultProgress';
 import AdultCertificate from './pages/AdultCertificate';
 import AdultProfile from './pages/AdultProfile';
+import AdultFriends from './pages/AdultFriends';
 import CertificateVerify from './pages/CertificateVerify';
+import { trackEvent } from './services/analytics';
 import './index.css';
 
 // Protected Route Component
@@ -119,6 +121,11 @@ function AppContent() {
 
 function AppRoutes({ currentUser }) {
   const location = useLocation();
+
+  useEffect(() => {
+    trackEvent('page_view', { path: location.pathname });
+  }, [location.pathname]);
+
   const isAdultPage = location.pathname.startsWith('/adult');
   const adultUser = getAdultUser();
   const showAdultNavbar = isAdultPage && adultUser && location.pathname !== '/adult/auth';
@@ -138,6 +145,10 @@ function AppRoutes({ currentUser }) {
               </PublicRoute>
             }
           />
+
+          {/* Guest playground: play first, register later. Progress is saved
+              locally; server saves simply fail silently for anonymous users. */}
+          <Route path="/try" element={<Playground />} />
 
           {/* Protected Routes - Child Only */}
           <Route
@@ -332,6 +343,15 @@ function AppRoutes({ currentUser }) {
               </AdultProtectedRoute>
             }
           />
+          <Route
+            path="/adult/friends"
+            element={
+              <AdultProtectedRoute>
+                <AdultFriends />
+              </AdultProtectedRoute>
+            }
+          />
+          <Route path="/adult/social" element={<Navigate to="/adult/friends" replace />} />
           <Route path="/adult" element={<Navigate to={getAdultToken() ? '/adult/dashboard' : '/adult/auth'} replace />} />
 
           {/* Public: anyone can check a certificate */}
@@ -346,6 +366,10 @@ function AppRoutes({ currentUser }) {
 }
 
 function App() {
+  useEffect(() => {
+    trackEvent('session_started');
+  }, []);
+
   return (
     <AuthProvider>
       <RestrictionsProvider>

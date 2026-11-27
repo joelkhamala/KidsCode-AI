@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router-dom';
 import { aiAPI } from '../services/api';
+import { trackEvent } from '../services/analytics';
 import { useAuth } from '../context/AuthContext';
 import ActivityPlayer from '../components/ai/ActivityPlayer';
 import BloomLadder from '../components/ai/BloomLadder';
@@ -40,6 +41,10 @@ const AICoach = () => {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [showLocked, setShowLocked] = useState(false);
+
+  useEffect(() => {
+    trackEvent('coach_opened', { language: locale });
+  }, [locale]);
 
   const loadProfile = useCallback(async (lang) => {
     const res = await aiAPI.profile(lang, locale);
@@ -95,7 +100,12 @@ const AICoach = () => {
 
   const practiseConcept = (conceptId) => loadNext({ lang: language, concept: conceptId });
 
-  const onFinished = async () => {
+  const onFinished = async (result) => {
+    trackEvent('coach_activity_completed', {
+      concept: result?.concept || current?.recommendation?.concept,
+      bloomLevel: result?.level || current?.recommendation?.level,
+      language: language || result?.language,
+    });
     await loadProfile(language).catch(() => {});
     if (loadProgress) loadProgress();
   };

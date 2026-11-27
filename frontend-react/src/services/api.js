@@ -1,9 +1,124 @@
 import axios from 'axios';
+import { getAnalyticsSessionStart, trackEvent } from './analytics';
 
 // Relative URL works both in development (CRA proxies /api to the backend, see
 // "proxy" in package.json) and in production (Express serves the built app).
 // Set REACT_APP_API_URL to point at a backend on another domain.
 const API_BASE = process.env.REACT_APP_API_URL || '/api';
+
+// ---------------------------------------------------------------------------
+// Analytics helpers. Only IDs and numeric metrics are ever sent; request and
+// response bodies (which can contain code, answers or personal data) are never
+// forwarded as event properties.
+// ---------------------------------------------------------------------------
+let firstCodeRunTracked = false;
+
+const requestData = (config) => {
+  try {
+    const data = config?.data;
+    if (!data) return {};
+    if (typeof data === 'string') return JSON.parse(data);
+    if (typeof data === 'object') return data;
+  } catch {
+    // A malformed request body is irrelevant to analytics.
+  }
+  return {};
+};
+
+const isSafeId = (value) => (
+  (typeof value === 'number' && Number.isFinite(value))
+  || (typeof value === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(value))
+);
+
+const firstId = (source, keys) => {
+  if (!source || typeof source !== 'object') return undefined;
+  for (const key of keys) {
+    if (isSafeId(source[key])) return source[key];
+  }
+  return undefined;
+};
+
+const idFromPath = (url, pattern) => {
+  const match = String(url || '').match(pattern);
+  return match ? match[1] : undefined;
+};
+
+const compact = (props) => Object.keys(props).reduce((acc, key) => {
+  if (props[key] !== undefined && props[key] !== null) acc[key] = props[key];
+  return acc;
+}, {});
+
+function trackApiAnalytics(response) {
+  const status = response?.status;
+  if (typeof status !== 'number' || status < 200 || status >= 300) return;
+
+  const config = response?.config || {};
+  const url = String(config.url || '');
+  const method = String(config.method || 'get').toUpperCase();
+  const data = response?.data;
+
+  if (method === 'POST' && /\/run-code(?:\?|$)/.test(url)) {
+    if (!firstCodeRunTracked) {
+      firstCodeRunTracked = true;
+      const elapsed = Date.now() - getAnalyticsSessionStart();
+      trackEvent('first_code_run_success', { ttfs_ms: Math.max(0, Math.round(elapsed)) });
+    }
+    return;
+  }
+
+  if (method === 'POST' && /\/progress(?:\?|$)/.test(url)) {
+    const body = requestData(config);
+    if (data?.success === true && body.completed) {
+      trackEvent('lesson_completed', compact({
+        lessonId: firstId(body, ['lesson_id', 'lessonId']) ?? firstId(data, ['lessonId', 'lesson_id']),
+        moduleId: firstId(body, ['module_id', 'moduleId']) ?? firstId(data, ['moduleId', 'module_id']),
+      }));
+    }
+    return;
+  }
+
+  if (method === 'POST' && /\/lessons\/[^/?]+\/check(?:\?|$)/.test(url) && data?.passed === true) {
+    trackEvent('lesson_completed', compact({
+      lessonId: idFromPath(url, /\/lessons\/([^/?]+)\/check/),
+    }));
+    return;
+  }
+
+  if (method === 'POST' && /\/quiz\/submit(?:\?|$)/.test(url) && data?.passed === true) {
+    trackEvent('quiz_passed', compact({
+      moduleId: firstId(requestData(config), ['moduleId', 'module_id']) ?? firstId(data, ['moduleId', 'module_id']),
+      attemptNumber: data.attemptNumber,
+    }));
+    return;
+  }
+
+  if (method === 'POST' && /\/ai\/activities\/[^/?]+\/submit(?:\?|$)/.test(url)) {
+    trackEvent('coach_activity_completed', compact({
+      activityId: idFromPath(url, /\/ai\/activities\/([^/?]+)\/submit/),
+    }));
+    return;
+  }
+
+  if (method === 'POST' && /\/social\/friends\/(?:request|accept\/[^/?]+)(?:\?|$)/.test(url)) {
+    if (data?.status === 'accepted' || /\/accept\//.test(url)) {
+      trackEvent('friend_added', compact({
+        requestId: firstId(data, ['requestId', 'request_id']) ?? idFromPath(url, /\/accept\/([^/?]+)/),
+      }));
+    }
+    return;
+  }
+
+  if (method === 'POST' && /\/social\/projects(?:\?|$)/.test(url)) {
+    trackEvent('project_shared', compact({
+      projectId: firstId(data, ['projectId', 'project_id']),
+    }));
+    return;
+  }
+
+  if (method === 'POST' && /\/social\/cheers(?:\?|$)/.test(url)) {
+    trackEvent('cheer_sent', {});
+  }
+}
 
 // Create axios instance
 const api = axios.create({
@@ -31,7 +146,14 @@ api.interceptors.request.use((config) => {
 
 // Handle 431 errors globally
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    try {
+      trackApiAnalytics(response);
+    } catch {
+      // Analytics is best-effort: never alter the API response.
+    }
+    return response;
+  },
   (error) => {
     if (error.response?.status === 431) {
       console.error('431 Error: Request headers too large. Clearing localStorage...');
@@ -167,6 +289,43 @@ export const adultAPI = {
   executeSQL: (query) => adultHttp.post('/adult/code/execute/sql', { code: query }),
   sqlTables: () => adultHttp.get('/adult/code/sql/tables'),
   codeStatus: () => adultHttp.get('/adult/code/status'),
+};
+
+// Adult friends: separate from socialAPI because this must use adult_token,
+// never a child's codequest_token.
+export const adultSocialAPI = {
+  summary: () => adultHttp.get('/adult/friends/summary'),
+  search: (q) => adultHttp.get('/adult/friends/search', { params: { q } }),
+  sendRequest: (toUserId, note) => adultHttp.post('/adult/friends/requests', { toUserId, note }),
+  getRequests: () => adultHttp.get('/adult/friends/requests'),
+  acceptRequest: (id) => adultHttp.post(`/adult/friends/requests/${id}/accept`),
+  declineRequest: (id) => adultHttp.post(`/adult/friends/requests/${id}/decline`),
+  cancelRequest: (id) => adultHttp.post(`/adult/friends/requests/${id}/cancel`),
+  getFriends: () => adultHttp.get('/adult/friends/friends'),
+  removeFriend: (friendId) => adultHttp.delete(`/adult/friends/${friendId}`),
+  getProfile: (friendId) => adultHttp.get(`/adult/friends/${friendId}`),
+  getActivity: (friendId, limit = 30) => adultHttp.get(`/adult/friends/${friendId}/activity`, { params: { limit } }),
+  getFeed: (limit = 30) => adultHttp.get('/adult/friends/feed', { params: { limit } }),
+  getLeaderboard: (metric = 'lessons', period = 'all') => adultHttp.get('/adult/friends/leaderboard', { params: { metric, period } }),
+  getGoals: () => adultHttp.get('/adult/friends/goals'),
+  saveGoal: (goal) => adultHttp.put('/adult/friends/goals', goal),
+  checkIn: (note) => adultHttp.post('/adult/friends/checkins', { note }),
+  getCheers: (limit = 30) => adultHttp.get('/adult/friends/cheers', { params: { limit } }),
+  sendCheer: (toUserId, kind, note, eventKey) => adultHttp.post('/adult/friends/cheers', { toUserId, kind, note, eventKey }),
+  markCheerRead: (id) => adultHttp.post(`/adult/friends/cheers/${id}/read`),
+  getConversations: () => adultHttp.get('/adult/friends/conversations'),
+  getMessages: (friendId, params = {}) => adultHttp.get(`/adult/friends/messages/${friendId}`, { params }),
+  sendMessage: (toUserId, body) => adultHttp.post('/adult/friends/messages', { toUserId, body }),
+  markMessagesRead: (friendId) => adultHttp.post(`/adult/friends/messages/${friendId}/read`),
+  deleteMessage: (id) => adultHttp.delete(`/adult/friends/messages/${id}`),
+  getNotifications: (limit = 50) => adultHttp.get('/adult/friends/notifications', { params: { limit } }),
+  markNotificationsRead: (ids) => adultHttp.post('/adult/friends/notifications/read', { ids }),
+  getPrivacy: () => adultHttp.get('/adult/friends/privacy'),
+  savePrivacy: (privacy) => adultHttp.put('/adult/friends/privacy', privacy),
+  getBlocked: () => adultHttp.get('/adult/friends/blocked'),
+  block: (userId, reason) => adultHttp.post('/adult/friends/block', { userId, reason }),
+  unblock: (userId) => adultHttp.delete(`/adult/friends/block/${userId}`),
+  report: (data) => adultHttp.post('/adult/friends/report', data),
 };
 
 // Parents: their child's friends and sharing settings

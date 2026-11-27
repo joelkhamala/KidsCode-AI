@@ -22,13 +22,27 @@ const Navbar = () => {
   const isActive = (path) => location.pathname === path;
   const isChild = accountType !== "parent" && accountType !== "teacher";
   const displayName = isChild
-    ? (currentUser?.username?.split("_")[0] || "Coder")
-    : (currentUser?.firstName || (accountType === "teacher" ? "Teacher" : "Parent"));
+    ? (currentUser?.username?.split("_")[0] || t('nav.defaultCoder'))
+    : (currentUser?.firstName || (accountType === "teacher" ? t('nav.defaultTeacher') : t('nav.defaultParent')));
+
+  // Every role gets a scrollable strip of links on small screens.
+  const mobileLinks = accountType === 'parent'
+    ? [{ to: '/parent-dashboard', label: t('nav.dashboard'), icon: '👨‍👩‍👧' }]
+    : accountType === 'teacher'
+    ? [{ to: '/teacher-dashboard', label: t('nav.dashboard'), icon: '👨‍🏫' }]
+    : [
+        { to: '/', label: t('nav.home'), icon: '🏠' },
+        { to: '/curriculum', label: t('nav.learn'), icon: '📚' },
+        { to: '/coach', label: t('nav.coach'), icon: '🤖' },
+        { to: '/journey', label: t('nav.journey'), icon: '🗺️' },
+        { to: '/playground', label: t('nav.playShort'), icon: '💻' },
+        { to: '/profile', label: t('nav.meShort'), icon: '👤' }
+      ];
 
   return (
     <nav className="navbar sticky top-0 z-40 px-4 py-3">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
-        <Link to={accountType === 'parent' ? '/parent-dashboard' : accountType === 'teacher' ? '/teacher-dashboard' : '/'} className="flex items-center gap-2 cursor-pointer">
+        <Link to={accountType === 'parent' ? '/parent-dashboard' : accountType === 'teacher' ? '/teacher-dashboard' : '/'} className="flex items-center gap-2 cursor-pointer shrink-0">
           <img 
             src="/kidscode_logo.png" 
             alt="KIDSCODE" 
@@ -45,14 +59,14 @@ const Navbar = () => {
           </div>
         </Link>
 
-        <div className="hidden md:flex items-center gap-1">
+        <div className="hidden lg:flex items-center gap-1">
           {accountType === 'parent' ? (
             // Parent navigation
             <Link 
               to="/parent-dashboard" 
               className={`nav-item ${isActive('/parent-dashboard') ? 'active' : ''}`}
             >
-              👨‍👩‍👧 Dashboard
+              👨‍👩‍👧 {t('nav.dashboard')}
             </Link>
           ) : accountType === 'teacher' ? (
             // Teacher navigation
@@ -60,7 +74,7 @@ const Navbar = () => {
               to="/teacher-dashboard" 
               className={`nav-item ${isActive('/teacher-dashboard') ? 'active' : ''}`}
             >
-              👨‍🏫 Dashboard
+              👨‍🏫 {t('nav.dashboard')}
             </Link>
           ) : (
             // Child navigation
@@ -69,13 +83,13 @@ const Navbar = () => {
                 to="/" 
                 className={`nav-item ${isActive('/') ? 'active' : ''}`}
               >
-                🏠 Home
+                🏠 {t('nav.home')}
               </Link>
               <Link 
                 to="/curriculum" 
                 className={`nav-item ${isActive('/curriculum') ? 'active' : ''}`}
               >
-                📚 Learn
+                📚 {t('nav.learn')}
               </Link>
               <Link 
                 to="/coach" 
@@ -93,13 +107,13 @@ const Navbar = () => {
                 to="/playground" 
                 className={`nav-item ${isActive('/playground') ? 'active' : ''}`}
               >
-                💻 Playground
+                💻 {t('nav.playground')}
               </Link>
               <Link 
                 to="/profile" 
                 className={`nav-item ${isActive('/profile') ? 'active' : ''}`}
               >
-                👤 Profile
+                👤 {t('nav.profile')}
               </Link>
             </>
           )}
@@ -108,19 +122,19 @@ const Navbar = () => {
         <div className="flex items-center gap-3">
           {/* Time Remaining Indicator - Only for children with time limits */}
           {isChild && remainingMinutes !== null && (
-            <div className={`hidden md:flex items-center gap-1 px-3 py-1 rounded-lg ${
+            <div className={`hidden lg:flex items-center gap-1 px-3 py-1 rounded-lg ${
               remainingMinutes <= 10 ? 'bg-red-100 text-red-700' : 
               remainingMinutes <= 30 ? 'bg-yellow-100 text-yellow-700' : 
               'bg-green-100 text-green-700'
             }`}>
               <Clock size={14} />
-              <span className="text-xs font-bold">{remainingMinutes}m left</span>
+              <span className="text-xs font-bold">{t('nav.timeLeft', { n: remainingMinutes })}</span>
             </div>
           )}
 
           {/* XP Display - Only for children */}
           {isChild && (
-            <div className="hidden md:flex items-center gap-2">
+            <div className="hidden xl:flex items-center gap-2">
               <div className="level-badge">{level}</div>
               <div>
                 <div className="flex items-center gap-1 mb-1">
@@ -135,7 +149,7 @@ const Navbar = () => {
 
           {/* Streak - Only for children */}
           {isChild && (
-            <div className="text-orange-600 font-bold text-sm hidden md:flex items-center gap-1">
+            <div className="text-orange-600 font-bold text-sm hidden xl:flex items-center gap-1">
               🔥 {userStreak}
             </div>
           )}
@@ -167,7 +181,7 @@ const Navbar = () => {
                     className="block px-4 py-2 hover:bg-slate-100 text-sm font-semibold"
                     onClick={() => setShowUserMenu(false)}
                   >
-                    👤 My Profile
+                    👤 {t('nav.myProfile')}
                   </Link>
                 )}
                 {accountType === 'parent' && (
@@ -176,7 +190,7 @@ const Navbar = () => {
                     className="block px-4 py-2 hover:bg-slate-100 text-sm font-semibold"
                     onClick={() => setShowUserMenu(false)}
                   >
-                    👨‍👩‍👧 Parent Dashboard
+                    👨‍👩‍👧 {t('nav.parentDashboard')}
                   </Link>
                 )}
                 {accountType === 'teacher' && (
@@ -185,14 +199,14 @@ const Navbar = () => {
                     className="block px-4 py-2 hover:bg-slate-100 text-sm font-semibold"
                     onClick={() => setShowUserMenu(false)}
                   >
-                    👨‍🏫 Teacher Dashboard
+                    👨‍🏫 {t('nav.teacherDashboard')}
                   </Link>
                 )}
                 <button 
                   onClick={logout}
                   className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm font-semibold text-red-400"
                 >
-                  🚪 Sign Out
+                  🚪 {t('nav.signOut')}
                 </button>
               </div>
             )}
@@ -200,29 +214,18 @@ const Navbar = () => {
         </div>
       </div>
 
-      {/* Mobile Nav - Only for children */}
-      {isChild && (
-        <div className="md:hidden flex gap-2 mt-2 overflow-x-auto pb-1">
-          <Link to="/" className={`nav-item whitespace-nowrap ${isActive('/') ? 'active' : ''}`}>
-            🏠 Home
+      {/* Mobile nav for every role, not just children */}
+      <div className="lg:hidden flex gap-2 mt-2 overflow-x-auto pb-1" aria-label={t('nav.sectionLinks')}>
+        {mobileLinks.map((link) => (
+          <Link
+            key={link.to}
+            to={link.to}
+            className={`nav-item whitespace-nowrap ${isActive(link.to) ? 'active' : ''}`}
+          >
+            {link.icon} {link.label}
           </Link>
-          <Link to="/curriculum" className={`nav-item whitespace-nowrap ${isActive('/curriculum') ? 'active' : ''}`}>
-            📚 Learn
-          </Link>
-          <Link to="/coach" className={`nav-item whitespace-nowrap ${isActive('/coach') ? 'active' : ''}`}>
-            🤖 {t('nav.coach')}
-          </Link>
-          <Link to="/journey" className={`nav-item whitespace-nowrap ${isActive('/journey') ? 'active' : ''}`}>
-            🗺️ {t('nav.journey')}
-          </Link>
-          <Link to="/playground" className={`nav-item whitespace-nowrap ${isActive('/playground') ? 'active' : ''}`}>
-            💻 Play
-          </Link>
-          <Link to="/profile" className={`nav-item whitespace-nowrap ${isActive('/profile') ? 'active' : ''}`}>
-            👤 Me
-          </Link>
-        </div>
-      )}
+        ))}
+      </div>
     </nav>
   );
 };

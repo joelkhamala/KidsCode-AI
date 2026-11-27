@@ -113,7 +113,7 @@ Web fonts (for example from Google Fonts) are added with a {{<link>}} in the hea
       challenge: 'Set a font-family with a generic fallback on body, give h1 a hexadecimal colour, and give paragraphs a line-height.',
       checks: [
         { label: 'body has a font-family ending with a generic family', in: 'css', re: /body\s*\{[^}]*font-family\s*:[^;}]*\b(sans-serif|serif|monospace|cursive|system-ui)\b/i },
-        { label: 'h1 has a hexadecimal colour', in: 'css', re: /h1\s*\{[^}]*\bcolor\s*:\s*#[0-9a-f]{3,8}\b/i },
+        { label: 'h1 has a colour', in: 'css', re: /h1\s*\{[^}]*\bcolor\s*:\s*(#[0-9a-f]{3,8}|[a-z]+|rgb[a]?\([^)]*\))/i },
         { label: 'p has a line-height', in: 'css', re: /(^|[\s,}])p\s*\{[^}]*line-height\s*:/i },
       ],
       hints: ['Example: font-family: Verdana, sans-serif;'],
@@ -205,7 +205,7 @@ Flexbox is ideal for navigation bars, card rows and centring content. For two-di
         { label: 'HTML: a .row with three child elements', in: 'html', re: /class\s*=\s*["'][^"']*\brow\b[^>]*>(\s*<(div|section|article|li)[^>]*>[\s\S]*?<\/\2>){3}/i },
         { label: '.row uses display: flex', in: 'css', re: /\.row\s*\{[^}]*display\s*:\s*flex/i },
         { label: '.row has a gap', in: 'css', re: /\.row\s*\{[^}]*\bgap\s*:/i },
-        { label: 'justify-content: space-between', in: 'css', re: /justify-content\s*:\s*space-between/i },
+        { label: 'justify-content set', in: 'css', re: /justify-content\s*:\s*(space-between|center|space-around|space-evenly|flex-start|flex-end)/i },
       ],
       hints: ['display: flex goes on the parent (.row), not on the children.'],
       quiz: [

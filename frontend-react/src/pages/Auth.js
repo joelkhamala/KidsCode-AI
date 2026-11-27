@@ -38,9 +38,9 @@ const Auth = () => {
     setError('');
     
     if (!formData.email || !formData.password) {
-      setError(accountMode === 'child' 
-        ? '⚠️ Please enter your username/email and password!' 
-        : '⚠️ Please enter your email and password!');
+      setError(accountMode === 'child'
+        ? t('authUi.errorChildLogin')
+        : t('authUi.errorAdultLogin'));
       return;
     }
 
@@ -57,7 +57,7 @@ const Auth = () => {
         navigate(accountMode === 'parent' ? '/parent-dashboard' : '/');
       }
     } else {
-      setError(`❌ ${result.error}`);
+      setError(t('authUi.errorPrefix', { message: result.error }));
     }
   };
 
@@ -68,12 +68,12 @@ const Auth = () => {
     if (accountMode === 'parent' || accountMode === 'teacher') {
       // Parent/Teacher registration
       if (!formData.firstName || !formData.lastName || !formData.email || !formData.password) {
-        setError('⚠️ Please fill in all required fields!');
+        setError(t('authUi.errorFillAll'));
         return;
       }
 
       if (formData.password.length < 8) {
-        setError('⚠️ Password must be at least 8 characters!');
+        setError(t('authUi.errorShortPassword', { min: 8 }));
         return;
       }
 
@@ -92,12 +92,12 @@ const Auth = () => {
       if (result.success) {
         navigate(accountMode === 'teacher' ? '/teacher-dashboard' : '/parent-dashboard');
       } else {
-        setError(`❌ ${result.error}`);
+        setError(t('authUi.errorPrefix', { message: result.error }));
       }
     } else {
       // Child registration
       if (!formData.username || !formData.email || !formData.password) {
-        setError('⚠️ Please fill in all required fields!');
+        setError(t('authUi.errorFillAll'));
         return;
       }
 
@@ -105,7 +105,7 @@ const Auth = () => {
       if (result.success) {
         navigate('/');
       } else {
-        setError(`❌ ${result.error}`);
+        setError(t('authUi.errorPrefix', { message: result.error }));
       }
     }
   };
@@ -117,32 +117,32 @@ const Auth = () => {
         <div className="max-w-lg">
           <div className="text-7xl mb-6 animate-float">🚀</div>
           <h1 className="font-display text-5xl text-slate-800 mb-4 leading-tight">
-            Learn to Code.<br />Have <span className="text-indigo-600">Epic</span> Adventures!
+            {t('authUi.heroLine1')}<br />{t('authUi.heroLine2a')}<span className="text-indigo-600">{t('authUi.heroLine2Highlight')}</span>{t('authUi.heroLine2b')}
           </h1>
-          <p className="text-slate-600 text-xl mb-10 leading-relaxed">
-            Join thousands of young coders on an amazing journey through JavaScript, animations, games, and more!
+          <p className="text-slate-700 text-xl mb-10 leading-relaxed">
+            {t('authUi.heroSubtitle')}
           </p>
 
           <div className="space-y-3">
             <div className="flex items-center gap-3 p-3 bg-white rounded-2xl border-2 border-sky-200">
-              <span className="text-3xl">🎮</span>
+              <span className="text-3xl" aria-hidden="true">🎮</span>
               <div>
-                <div className="font-bold">5 Epic Learning Modules</div>
-                <div className="text-slate-600 text-sm">From "Hello World" to building your own games!</div>
+                <div className="font-bold">{t('authUi.feature1Title')}</div>
+                <div className="text-slate-700 text-sm">{t('authUi.feature1Text')}</div>
               </div>
             </div>
             <div className="flex items-center gap-3 p-3 bg-white rounded-2xl border-2 border-sky-200">
-              <span className="text-3xl">🐢</span>
+              <span className="text-3xl" aria-hidden="true">🐢</span>
               <div>
-                <div className="font-bold">Visual Turtle Graphics</div>
-                <div className="text-slate-600 text-sm">Draw amazing art with code using our turtle!</div>
+                <div className="font-bold">{t('authUi.feature2Title')}</div>
+                <div className="text-slate-700 text-sm">{t('authUi.feature2Text')}</div>
               </div>
             </div>
             <div className="flex items-center gap-3 p-3 bg-white rounded-2xl border-2 border-sky-200">
-              <span className="text-3xl">🏆</span>
+              <span className="text-3xl" aria-hidden="true">🏆</span>
               <div>
-                <div className="font-bold">Achievements & XP</div>
-                <div className="text-slate-600 text-sm">Level up and unlock badges as you learn!</div>
+                <div className="font-bold">{t('authUi.feature3Title')}</div>
+                <div className="text-slate-700 text-sm">{t('authUi.feature3Text')}</div>
               </div>
             </div>
           </div>
@@ -170,6 +170,32 @@ const Auth = () => {
             </div>
           </div>
 
+          {/* Guest-first path: prominent, friendly, and available at every width. */}
+          <div className="guest-cta mb-6 rounded-2xl border-2 border-indigo-200 bg-gradient-to-r from-sky-50 via-white to-indigo-50 p-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-3">
+              <div
+                className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white text-2xl shadow-sm"
+                aria-hidden="true"
+              >
+                🎮
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="mb-1 inline-flex rounded-full bg-indigo-100 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-indigo-700">
+                  {t('authUi.tryBadge')}
+                </span>
+                <p className="text-sm font-extrabold leading-tight text-slate-800">{t('authUi.tryTitle')}</p>
+                <p className="mt-0.5 text-xs leading-snug text-slate-600">{t('authUi.tryNote')}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/try')}
+                className="btn-primary w-full shrink-0 justify-center px-4 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 sm:w-auto"
+              >
+                {t('authUi.tryAction')} <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          </div>
+
           {/* Tabs */}
           <div className="flex gap-2 mb-6 bg-white p-1 rounded-xl">
             <button
@@ -191,7 +217,7 @@ const Auth = () => {
           </div>
 
           {/* Account Type Selector */}
-          <div className="grid grid-cols-3 gap-2 mb-6 bg-slate-100 p-1 rounded-xl">
+          <div className="grid grid-cols-3 gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
             <button
               onClick={() => setAccountMode('child')}
               className={`py-2 rounded-lg font-medium text-xs transition-all ${
@@ -214,7 +240,7 @@ const Auth = () => {
                 accountMode === 'teacher' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600'
               }`}
             >
-              👨‍🏫 Teacher
+              👨‍🏫 {t('auth.teacherAccount')}
             </button>
           </div>
 
@@ -222,18 +248,18 @@ const Auth = () => {
           {isLogin ? (
             <div className="card p-6">
               <h2 className="font-display text-2xl text-slate-800 mb-1">
-                {accountMode === 'parent' ? 'Parent Sign In 👨‍👩‍👧' : accountMode === 'teacher' ? 'Teacher Sign In 👨‍🏫' : 'Welcome back! 👋'}
+                {accountMode === 'parent' ? t('authUi.signInParentTitle') : accountMode === 'teacher' ? t('authUi.signInTeacherTitle') : t('authUi.signInChildTitle')}
               </h2>
-              <p className="text-slate-600 text-sm mb-6">
-                {accountMode === 'parent' 
-                  ? 'Sign in to manage your children\'s accounts' 
+              <p className="text-slate-700 text-sm mb-6">
+                {accountMode === 'parent'
+                  ? t('authUi.signInParentSubtitle')
                   : accountMode === 'teacher'
-                  ? 'Sign in to manage your students'
-                  : 'Ready to continue your coding adventure?'}
+                  ? t('authUi.signInTeacherSubtitle')
+                  : t('authUi.signInChildSubtitle')}
               </p>
               
               {error && (
-                <div className="mb-4 p-3 bg-red-100 border-2 border-red-300 rounded-xl text-red-700 text-sm">
+                <div className="mb-4 p-3 bg-red-100 border-2 border-red-300 rounded-xl text-red-800 text-sm font-bold" role="alert">
                   {error}
                 </div>
               )}
@@ -249,7 +275,7 @@ const Auth = () => {
                     value={formData.email}
                     onChange={handleChange}
                     className="form-input"
-                    placeholder={accountMode === 'child' ? 'username or email' : 'your@email.com'}
+                    placeholder={accountMode === 'child' ? t('authUi.placeholderUsernameOrEmail') : t('authUi.placeholderEmail')}
                   />
                 </div>
                 <div>
@@ -268,26 +294,23 @@ const Auth = () => {
                 </button>
               </form>
 
-              <div className="mt-4 text-center text-slate-600 text-sm">
-                <div className="text-xs mt-2">Test: test@example.com / password123</div>
-              </div>
             </div>
           ) : (
             /* Register Form */
             <div className="card p-6">
               <h2 className="font-display text-2xl text-slate-800 mb-1">
-                {accountMode === 'parent' ? 'Create Parent Account 👨‍👩‍👧' : accountMode === 'teacher' ? 'Create Teacher Account 👨‍🏫' : 'Join the Adventure! 🌟'}
+                {accountMode === 'parent' ? t('authUi.registerParentTitle') : accountMode === 'teacher' ? t('authUi.registerTeacherTitle') : t('authUi.registerChildTitle')}
               </h2>
-              <p className="text-slate-600 text-sm mb-6">
-                {accountMode === 'parent' 
-                  ? 'Create an account to manage your children\'s learning' 
+              <p className="text-slate-700 text-sm mb-6">
+                {accountMode === 'parent'
+                  ? t('authUi.registerParentSubtitle')
                   : accountMode === 'teacher'
-                  ? 'Create an account to manage your students'
-                  : 'Create your account and start coding today!'}
+                  ? t('authUi.registerTeacherSubtitle')
+                  : t('authUi.registerChildSubtitle')}
               </p>
               
               {error && (
-                <div className="mb-4 p-3 bg-red-100 border-2 border-red-300 rounded-xl text-red-700 text-sm">
+                <div className="mb-4 p-3 bg-red-100 border-2 border-red-300 rounded-xl text-red-800 text-sm font-bold" role="alert">
                   {error}
                 </div>
               )}
@@ -305,7 +328,7 @@ const Auth = () => {
                           value={formData.firstName}
                           onChange={handleChange}
                           className="form-input"
-                          placeholder="Jane"
+                          placeholder={t('authUi.placeholderFirstName')}
                         />
                       </div>
                       <div>
@@ -316,7 +339,7 @@ const Auth = () => {
                           value={formData.lastName}
                           onChange={handleChange}
                           className="form-input"
-                          placeholder="Doe"
+                          placeholder={t('authUi.placeholderLastName')}
                         />
                       </div>
                     </div>
@@ -328,7 +351,7 @@ const Auth = () => {
                         value={formData.email}
                         onChange={handleChange}
                         className="form-input"
-                        placeholder="parent@email.com"
+                        placeholder={t('authUi.placeholderParentEmail')}
                       />
                     </div>
                     <div>
@@ -350,7 +373,7 @@ const Auth = () => {
                         value={formData.password}
                         onChange={handleChange}
                         className="form-input"
-                        placeholder="••••••••"
+                        placeholder={t('authUi.placeholderPassword')}
                       />
                     </div>
                   </>
@@ -365,7 +388,7 @@ const Auth = () => {
                         value={formData.username}
                         onChange={handleChange}
                         className="form-input"
-                        placeholder="CoolCoder42"
+                        placeholder={t('authUi.placeholderUsername')}
                       />
                     </div>
                     <div>
@@ -376,7 +399,7 @@ const Auth = () => {
                         value={formData.email}
                         onChange={handleChange}
                         className="form-input"
-                        placeholder="your@email.com"
+                        placeholder={t('authUi.placeholderEmail')}
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
@@ -388,7 +411,7 @@ const Auth = () => {
                           value={formData.password}
                           onChange={handleChange}
                           className="form-input"
-                          placeholder="Min. 6 chars"
+                          placeholder={t('authUi.placeholderMinChars', { n: 6 })}
                         />
                       </div>
                       <div>
@@ -408,7 +431,7 @@ const Auth = () => {
                     {showParentEmail && (
                       <div>
                         <label className="form-label">
-                          Parent's Email <span className="text-red-400">(required under 13)</span>
+                          {t('authUi.parentEmailLabel')} <span className="text-red-700 font-bold">{t('authUi.parentEmailRequired')}</span>
                         </label>
                         <input
                           type="email"
@@ -416,7 +439,7 @@ const Auth = () => {
                           value={formData.parent_email}
                           onChange={handleChange}
                           className="form-input"
-                          placeholder="parent@email.com"
+                          placeholder={t('authUi.placeholderParentEmail')}
                         />
                       </div>
                     )}

@@ -6,9 +6,10 @@
  * classes. Several public classes in one editor are allowed: "public" is removed from the
  * top-level types so they fit in one file, and the class with main() is the one started.
  *
- * The JDK is found through KIDSCODE_JAVA_HOME, JAVA_HOME or the PATH. On Java 17-23 the
+ * The JDK is found through KIDSCODE_JAVA_HOME, JAVA_HOME or the PATH. On Java 9-23 the
  * program runs under a security policy that grants nothing (no files, network or other
- * programs); newer Java versions no longer support that, so rely on the server setup there.
+ * programs). JDK 24+ removed the SecurityManager, so learner code is refused there rather
+ * than run without a sandbox; install JDK 17-23 until OS-level isolation is available.
  */
 const fs = require('fs').promises;
 const path = require('path');
@@ -200,6 +201,11 @@ async function runJava(code, { input = '' } = {}) {
   const tools = jdk();
   if (!tools) {
     return result({ language: 'java', error: { type: 'unavailable', name: 'JavaUnavailable', message: 'Java (the JDK) is not installed on the server yet, so Java code cannot run. Ask the administrator to install a JDK (version 17 or newer).' } });
+  }
+  // JDK 24+ removed the SecurityManager. We cannot safely run learner code
+  // without OS-level isolation, so fail closed instead of running unrestricted.
+  if (tools.major >= 24) {
+    return result({ language: 'java', error: { type: 'unavailable', name: 'JavaUnavailable', message: 'Java practice is temporarily unavailable on this server (JDK 24+ cannot be sandboxed safely). Ask the administrator to install JDK 17-23.' } });
   }
   const prepared = prepareJava(code);
   if (!prepared.mainClass) {

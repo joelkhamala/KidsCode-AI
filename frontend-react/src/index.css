@@ -9,6 +9,42 @@ body {
   overflow-x: hidden;
 }
 
+/* Skip link: hidden until keyboard-focused, then sits above the navbar. */
+.skip-link {
+  position: fixed;
+  top: -100px;
+  left: 12px;
+  z-index: 200;
+  background: #1e1e3a;
+  color: #ffffff;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-weight: 800;
+}
+.skip-link:focus { top: 12px; }
+#main-content:focus { outline: none; }
+
+/* Canvas drawings must shrink on small screens instead of overflowing. */
+canvas, .turtle-canvas { max-width: 100%; height: auto; }
+
+/* Small helper text needs at least 4.5:1 against white. */
+.text-slate-400, .text-slate-500 { color: #475569 !important; }
+
+/* Visible keyboard focus for every interactive control we own. */
+.nav-item:focus-visible,
+.tab-btn:focus-visible,
+.answer-btn:focus-visible,
+.lesson-row:focus-visible,
+.chat-input:focus-visible,
+.form-input:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 4px solid #4338ca;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.25);
+}
+
 /* ===== ANIMATIONS ===== */
 @keyframes float {
   0%, 100% { transform: translateY(0px); }
@@ -31,6 +67,16 @@ body {
 .animate-fade-in { animation: fadeIn 0.4s ease-out; }
 
 /* ===== NAVBAR ===== */
+.glass-bar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 1px 0 0 rgba(15, 23, 42, 0.04);
+}
+
 .navbar {
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(20px);
@@ -196,9 +242,12 @@ body {
   outline: none;
 }
 
-.form-input:focus {
-  border-color: #818cf8;
-  box-shadow: 0 0 0 4px #e0e7ff;
+.form-input:focus,
+.form-input:focus-visible {
+  border-color: #4338ca;
+  outline: 4px solid #4338ca;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.25);
 }
 
 .form-label {
@@ -745,6 +794,16 @@ a.kid-map-row:hover { border-color: #a5b4fc; background: #eef2ff; }
   .journey-path::before { left: 18px; }
 }
 @media (prefers-reduced-motion: reduce) { .journey-dot-open { animation: none; } }
+
+/* Global reduced-motion fallback for animations and transitions we do not own. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* ===== Adult certificate: print exactly one A4 landscape page ===== */
 @media print {

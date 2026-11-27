@@ -5,7 +5,8 @@ import { curriculumAPI, codeAPI, approvalAPI, lessonAPI, progressAPI } from '../
 import { useAuth } from '../context/AuthContext';
 import { useRestrictions } from '../context/RestrictionsContext';
 import { Play, RotateCcw, Lock } from 'feather-icons-react';
-import { getTranslatedLesson } from '../translations/lessons';
+import { getTranslatedLesson, getTranslatedModule } from '../translations/lessons';
+import { getTranslatedConcept } from '../translations/concepts';
 import CodeCheck from '../components/ai/CodeCheck';
 import CodeEditor from '../components/CodeEditor';
 import CoachChat from '../components/ai/CoachChat';
@@ -55,119 +56,19 @@ const Lesson = () => {
   const turtleColor = useRef('#6366f1');
   const turtlePenDown = useRef(true);
 
-  // Kid-friendly concept explanations
-  const conceptExplanations = {
-    // Module 1: JavaScript Basics
-    1: {
-      0: {
-        title: "What is Code? 🤖",
-        explanation: "Code is like a <strong>secret recipe</strong> or a <strong>special instruction manual</strong> that tells computers, tablets, and robots exactly what to do! Just like you use words to tell a friend a story, programmers use code (special languages) to tell machines how to play games, show videos, or turn on lights.<br><br>Think of it this way: When you want your friend to make a sandwich, you tell them step by step: 'First, get two slices of bread. Then, add peanut butter. Finally, put the slices together.' Code works the same way! You write instructions step by step, and the computer follows them exactly!",
-        example: "console.log('Hello, World!'); // This tells the computer to say hello!",
-        analogy: "Code is like giving directions to a robot friend who does exactly what you say! If you say 'turn left,' it turns left. If you say 'jump,' it jumps! But you have to be very clear and use the special words (code) that the robot understands."
-      },
-      1: {
-        title: "What is console.log? 🖨️",
-        explanation: "Think of <code>console.log()</code> as a magic printer! Whatever you put inside the parentheses () gets printed to the screen. It's like telling the computer to show you a message!",
-        example: "console.log('Hello!'); // This prints: Hello!",
-        analogy: "It's like writing a note and showing it to someone!"
-      },
-      2: {
-        title: "What are Variables? 📦",
-        explanation: "Variables are like <strong>labeled boxes</strong> where you can store things! Imagine you have a toy box with a label that says 'LEGO' - you know what's inside without opening it!<br><br>In coding, you create a box (variable), give it a name, and put something inside it. Later, whenever you need what's in that box, you just call it by its name! The computer remembers what you put in there.<br><br>For example, if you create a variable called <code>age</code> and put the number 10 inside, the computer will remember that <code>age</code> means 10. You can use it over and over again!",
-        example: "let age = 10; // A box named 'age' with 10 inside\nlet name = 'Alex'; // A box named 'name' with 'Alex' inside",
-        analogy: "Like a toy box with a label - you know what's inside by reading the label! You can have many boxes: one for toys, one for books, one for snacks. Each box has a name and holds something special."
-      },
-      3: {
-        title: "What are Numbers and Math? ➕",
-        explanation: "Computers are <strong>super fast calculators</strong>! They can do math problems in the blink of an eye. You can add (+), subtract (-), multiply (*), and divide (/) numbers, and the computer does it instantly!<br><br>Just like in school math, you can write <code>5 + 3</code> and the computer knows the answer is 8. But computers can do thousands of calculations per second! That's why they're so good at games, counting scores, and solving puzzles.",
-        example: "let total = 5 + 3; // total is now 8\nlet double = 10 * 2; // double is now 20\nlet half = 100 / 2; // half is now 50",
-        analogy: "Like using a calculator, but the computer does it for you automatically! Imagine having a super-smart friend who can solve any math problem instantly!"
-      },
-      4: {
-        title: "What are Strings (Text)? 📝",
-        explanation: "Strings are <strong>words and sentences</strong> in code! You put them in quotes (\"\") to tell the computer 'this is text, not a math problem or code command.'<br><br>For example, if you write <code>\"Hello\"</code>, the computer knows you mean the word 'Hello' - not a variable or command. You can join strings together like building with blocks! <code>\"Hello\" + \" \" + \"World\"</code> becomes <code>\"Hello World\"</code>!<br><br>Strings can be names, messages, stories, or anything you want to write!",
-        example: "let name = 'Alex'; // A string with the name Alex\nlet greeting = 'Hello, ' + name; // Joins strings: 'Hello, Alex'",
-        analogy: "Like writing words on paper - the quotes are like the paper edges that show where your words start and end! You can write anything: your name, a story, a joke, or a secret message!"
-      }
-    },
-    // Module 2: Control Flow
-    2: {
-      1: {
-        title: "What are If Statements? 🤔",
-        explanation: "If statements help the computer make decisions! It's like asking a question: 'IF this is true, THEN do this.' The computer checks and decides what to do!",
-        example: "if (age > 10) { console.log('You are old enough!'); }",
-        analogy: "Like a choose-your-own-adventure book - different choices lead to different outcomes!"
-      },
-      2: {
-        title: "What are Loops? 🔄",
-        explanation: "Loops make the computer repeat things! Instead of writing the same code 100 times, you tell the computer 'do this 100 times.' It's a shortcut!",
-        example: "for (let i = 0; i < 5; i++) { console.log('Hi!'); }",
-        analogy: "Like doing jumping jacks - you count and repeat the same action!"
-      },
-      3: {
-        title: "What are Comparisons? ⚖️",
-        explanation: "Comparisons check if things are equal, bigger, or smaller! Use == for 'equal to', > for 'greater than', < for 'less than'. The computer answers true or false!",
-        example: "5 > 3 // This is true! 5 is bigger than 3",
-        analogy: "Like comparing heights - who is taller?"
-      }
-    },
-    // Module 3: Functions
-    3: {
-      1: {
-        title: "What are Functions? 🎁",
-        explanation: "Functions are like recipes! You write the steps once, give it a name, and then you can use that recipe anytime by calling its name. No need to write the steps again!",
-        example: "function sayHello() { console.log('Hello!'); }",
-        analogy: "Like a recipe card - write it once, use it many times!"
-      },
-      2: {
-        title: "What are Parameters? 📥",
-        explanation: "Parameters are like ingredients for your function recipe! You can give different ingredients each time you use the function, and it will work with whatever you give it!",
-        example: "function greet(name) { console.log('Hi ' + name); }",
-        analogy: "Like making a sandwich - same recipe, but you can choose different fillings!"
-      },
-      3: {
-        title: "What is Return? 📤",
-        explanation: "Return is like getting an answer back! When a function finishes its job, it can give you a result. You can save that result and use it later!",
-        example: "function add(a, b) { return a + b; }",
-        analogy: "Like asking a friend to solve a math problem - they give you the answer!"
-      }
-    },
-    // Module 4: Arrays and Objects
-    4: {
-      1: {
-        title: "What are Arrays? 📚",
-        explanation: "Arrays are like a list or a row of boxes! Each box holds something, and they're numbered starting from 0. You can store many things in one array!",
-        example: "let colors = ['red', 'blue', 'green'];",
-        analogy: "Like a bookshelf - each book has a position (0, 1, 2...)"
-      },
-      2: {
-        title: "What are Objects? 🎒",
-        explanation: "Objects are like backpacks with labeled pockets! Each pocket has a name (key) and something inside (value). You can organize related information together!",
-        example: "let person = { name: 'Alex', age: 10 };",
-        analogy: "Like a backpack with labeled compartments - pencil case, lunch box, etc!"
-      }
-    },
-    // Module 5: Turtle Graphics
-    5: {
-      1: {
-        title: "What is Turtle Graphics? 🐢",
-        explanation: "Imagine a turtle with a pen! You tell the turtle to move forward, turn left or right, and it draws as it moves. You're the turtle's teacher!",
-        example: "forward(100); // Turtle walks forward 100 steps",
-        analogy: "Like remote-controlling a robot that draws!"
-      },
-      2: {
-        title: "What are Angles? 📐",
-        explanation: "Angles are how much the turtle turns! 90 degrees is a square corner (like the corner of a book). 180 degrees is turning around completely!",
-        example: "right(90); // Turn right like making a square corner",
-        analogy: "Like turning a steering wheel - small turns or big turns!"
-      }
-    }
-  };
+  // Kid-friendly concept explanations live in translations/concepts.js.
+  const currentConcept = useMemo(
+    () => getTranslatedConcept(moduleId, lessonId, i18n.language === 'sw' ? 'sw' : 'en'),
+    [moduleId, lessonId, i18n.language]
+  );
 
-  const getCurrentConcept = () => {
-    const moduleNum = parseInt(moduleId);
-    const lessonNum = parseInt(lessonId);
-    return conceptExplanations[moduleNum]?.[lessonNum] || null;
+  const formatRequested = (value) => {
+    const date = new Date(value);
+    try {
+      return date.toLocaleString(i18n.language === 'sw' ? 'sw-KE' : 'en-KE');
+    } catch {
+      return date.toLocaleString();
+    }
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -196,7 +97,7 @@ const Lesson = () => {
       if (foundModule && foundLesson) {
         setModule(foundModule);
         setLesson(foundLesson);
-        setCode(foundLesson.starter_code || '// Write your code here\nconsole.log("Hello, World!");');
+        setCode(foundLesson.starter_code || t('lessonUi.starterCode'));
         initTurtleCanvas();
       } else {
         navigate('/curriculum');
@@ -205,7 +106,7 @@ const Lesson = () => {
       console.error('Failed to load lesson:', err);
       navigate('/curriculum');
     }
-  }, [moduleId, lessonId, navigate]);
+  }, [moduleId, lessonId, navigate, t]);
 
   // Fresh start whenever the child moves to another lesson
   useEffect(() => {
@@ -367,7 +268,7 @@ const Lesson = () => {
       return;
     }
     setIsRunning(true);
-    setOutput('Running...');
+    setOutput(t('lesson.running'));
     setHasError(false);
     initTurtleCanvas();
     
@@ -394,7 +295,7 @@ const Lesson = () => {
       // Score it against the challenge (this also saves the code and the best score)
       await runCheck(code);
     } catch (err) {
-      setOutput('❌ Failed to run code. Please try again.');
+      setOutput(t('lessonUi.runFailed'));
       setHasError(true);
       setErrorCount(prev => prev + 1);
     } finally {
@@ -494,7 +395,7 @@ const Lesson = () => {
             ← {t('lessonUi.backToMap')}
           </button>
           <span className="mx-2" aria-hidden="true">/</span>
-          <span className="font-semibold">{module.icon} {module.title}</span>
+          <span className="font-semibold">{module.icon} {getTranslatedModule(moduleId, i18n.language)?.title || module.title}</span>
           {position && (
             <span className="ml-3 inline-block text-xs font-extrabold bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full">
               {t('kidHome.lessonOf', { n: position.n, total: position.total })}
@@ -504,7 +405,7 @@ const Lesson = () => {
         <h1 className="font-display text-3xl text-slate-800 mb-2">
           {translatedLesson?.title || lesson.title}
         </h1>
-        <p className="text-slate-600">{lesson.description}</p>
+        <p className="text-slate-700">{translatedLesson?.description || lesson.description}</p>
       </div>
 
       {/* Approval Required Notice */}
@@ -521,8 +422,8 @@ const Lesson = () => {
                   <p className="text-yellow-700 mb-3">
                     {t('lesson.approvalPending')}
                   </p>
-                  <div className="text-sm text-yellow-600">
-                    {t('lesson.requested')}: {new Date(approvalStatus.requestedAt).toLocaleString()}
+                  <div className="text-sm text-yellow-800">
+                    {t('lesson.requested')}: {formatRequested(approvalStatus.requestedAt)}
                   </div>
                 </div>
               ) : approvalStatus.status === 'denied' ? (
@@ -532,7 +433,7 @@ const Lesson = () => {
                   </p>
                   {approvalStatus.responseNote && (
                     <div className="p-3 bg-white rounded-lg border border-yellow-200 mb-3">
-                      <div className="text-xs text-yellow-600 font-bold mb-1">{t('lesson.parentNote')}:</div>
+                      <div className="text-xs text-yellow-800 font-bold mb-1">{t('lesson.parentNote')}:</div>
                       <div className="text-sm text-slate-700">{approvalStatus.responseNote}</div>
                     </div>
                   )}
@@ -567,14 +468,14 @@ const Lesson = () => {
         {/* Left - Instructions */}
         <div className="space-y-6">
           {/* Concept Explanation */}
-          {getCurrentConcept() && (
+          {currentConcept && (
             <div className="card p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-indigo-200">
               <button
                 onClick={() => setShowConcept(!showConcept)}
                 className="w-full flex justify-between items-center mb-3"
               >
                 <h2 className="font-display text-xl text-indigo-800 flex items-center gap-2">
-                  🎓 {getCurrentConcept().title}
+                  🎓 {currentConcept.title}
                 </h2>
                 <span className="text-2xl">{showConcept ? '▼' : '▶'}</span>
               </button>
@@ -583,17 +484,17 @@ const Lesson = () => {
                 <div className="space-y-3">
                   <div 
                     className="text-slate-700 leading-relaxed"
-                    dangerouslySetInnerHTML={{ __html: getCurrentConcept().explanation }}
+                    dangerouslySetInnerHTML={{ __html: currentConcept.explanation }}
                   />
                   
                   <div className="bg-white p-3 rounded-lg border border-indigo-200">
-                    <div className="text-xs text-indigo-600 font-bold mb-1">📝 Example:</div>
-                    <code className="text-sm text-slate-800">{getCurrentConcept().example}</code>
+                    <div className="text-xs text-indigo-700 font-bold mb-1">{t('lessonUi.exampleLabel')}</div>
+                    <code className="text-sm text-slate-800">{currentConcept.example}</code>
                   </div>
                   
                   <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-                    <div className="text-xs text-yellow-700 font-bold mb-1">💡 Think of it like:</div>
-                    <div className="text-sm text-slate-700">{getCurrentConcept().analogy}</div>
+                    <div className="text-xs text-yellow-800 font-bold mb-1">{t('lessonUi.thinkLike')}</div>
+                    <div className="text-sm text-slate-700">{currentConcept.analogy}</div>
                   </div>
                 </div>
               )}
@@ -696,7 +597,7 @@ const Lesson = () => {
           </div>
 
           {/* AI code check (works offline too) */}
-          <CodeCheck code={code} language={isHtmlLesson ? 'html_css' : 'javascript'} task={lesson.challenge} />
+          <CodeCheck code={code} language={isHtmlLesson ? 'html_css' : 'javascript'} task={translatedLesson?.challenge || lesson.challenge} />
 
           {/* Turtle Canvas (not used by HTML lessons) */}
           <div className="card p-6" style={isHtmlLesson ? { display: 'none' } : undefined}>
@@ -706,7 +607,7 @@ const Lesson = () => {
               width={400}
               height={300}
               id="turtleCanvas"
-              className="w-full"
+              className="turtle-canvas w-full"
             />
           </div>
 
@@ -764,7 +665,7 @@ const Lesson = () => {
           </div>
         </div>
       </div>
-      <CoachChat context={{ task: lesson.challenge, code, language: isHtmlLesson ? 'html_css' : 'javascript' }} />
+      <CoachChat context={{ task: translatedLesson?.challenge || lesson.challenge, code, language: isHtmlLesson ? 'html_css' : 'javascript' }} />
 
       {celebration && (
         <div className="modal-backdrop">

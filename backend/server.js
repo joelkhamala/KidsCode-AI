@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const path = require('path');
 require('./lib/loadEnv')(path.join(__dirname, '.env'));
 const { getDb, initializeDatabase } = require('./database');
@@ -18,6 +19,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
+// Render/most PaaS deployments terminate TLS at a reverse proxy. Trusting the
+// first hop keeps `req.ip` accurate for per-client rate limits and secure cookies.
+app.set('trust proxy', 1);
+
 // Secrets must come from the environment in production. The development
 // fallbacks keep `node server.js` working out of the box on a laptop.
 if (IS_PRODUCTION && (!process.env.JWT_SECRET || !process.env.SESSION_SECRET)) {
@@ -28,21 +33,80 @@ if (!process.env.JWT_SECRET) {
   console.warn('⚠️  JWT_SECRET not set - using an insecure development secret. Set it in backend/.env');
 }
 const JWT_SECRET = process.env.JWT_SECRET || 'kidscode_dev_only_jwt_secret_change_me';
+const BCRYPT_ROUNDS = 12;
+
+// Approved school domains for teacher registration. Empty = open (development).
+const teacherDomains = (process.env.TEACHER_EMAIL_DOMAINS || '')
+  .split(',').map((d) => d.trim().toLowerCase()).filter(Boolean);
+
+// ---------------------------------------------------------------------------
+// Lightweight in-memory rate limiter (no extra dependency). This protects a
+// single instance; use a shared store (e.g. Redis) when scaling horizontally.
+// ---------------------------------------------------------------------------
+const rateBuckets = new Map();
+function rateLimit({ windowMs = 60_000, max = 200, prefix = 'global' } = {}) {
+  // Throttling is a production concern; keep local dev and tests unthrottled.
+  if (!IS_PRODUCTION) return (req, res, next) => next();
+  return (req, res, next) => {
+    const key = `${prefix}:${req.ip || req.socket.remoteAddress || 'unknown'}`;
+    const now = Date.now();
+    let bucket = rateBuckets.get(key);
+    if (!bucket || now - bucket.start >= windowMs) {
+      bucket = { start: now, count: 0 };
+      rateBuckets.set(key, bucket);
+    }
+    bucket.count += 1;
+    if (bucket.count > max) {
+      res.set('Retry-After', String(Math.ceil((bucket.start + windowMs - now) / 1000)));
+      return res.status(429).json({ error: 'Too many requests. Please slow down.' });
+    }
+    next();
+  };
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, bucket] of rateBuckets) {
+    if (now - bucket.start >= 120_000) rateBuckets.delete(key);
+  }
+}, 60_000).unref?.();
+
+const authRateLimit = rateLimit({ prefix: 'auth', max: 100 });
+const runRateLimit = rateLimit({ prefix: 'run', max: 200 });
+const aiRateLimit = rateLimit({ prefix: 'ai', max: 200 });
 
 // Middleware
-// In production, restrict CORS to the configured frontend origin(s).
+// Production fails closed: Express serves the built frontend from the same
+// origin, so cross-origin requests are not needed. Only opt in via env var.
 const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean);
 app.use(cors({
-  origin: allowedOrigins.length ? allowedOrigins : true,
+  origin: allowedOrigins.length ? allowedOrigins : !IS_PRODUCTION,
   credentials: true,
 }));
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('X-Frame-Options', 'DENY');
+  res.set('Referrer-Policy', 'no-referrer');
+  res.set('Cross-Origin-Opener-Policy', 'same-origin');
+  next();
+});
+app.use('/api', rateLimit({ prefix: 'api', max: 2000 }), (req, res, next) => {
+  // Child profiles, progress and AI output must never be cached by proxies.
+  res.set('Cache-Control', 'no-store');
+  next();
+});
 app.use(bodyParser.json({ limit: '200kb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'kidscode_dev_only_session_secret',
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false, maxAge: 3600000 } // 1 hour
+  cookie: {
+    secure: IS_PRODUCTION,
+    httpOnly: true,
+    sameSite: 'strict',
+    maxAge: 3600000, // 1 hour
+  }
 }));
 
 // NOTE: Static files are served at the END of the file, after all API routes
@@ -107,7 +171,7 @@ function verifyParentChildAccess(req, res, next) {
 // =====================
 
 // Parent registration
-app.post('/api/parent/register', async (req, res) => {
+app.post('/api/parent/register', authRateLimit, async (req, res) => {
   const { email, password, firstName, lastName, phoneNumber } = req.body;
 
   if (!email || !password || !firstName || !lastName) {
@@ -125,7 +189,7 @@ app.post('/api/parent/register', async (req, res) => {
   }
 
   try {
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const db = getDb();
 
     db.run(
@@ -177,7 +241,7 @@ app.post('/api/parent/register', async (req, res) => {
 });
 
 // Parent login
-app.post('/api/parent/login', (req, res) => {
+app.post('/api/parent/login', authRateLimit, (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -228,7 +292,7 @@ app.post('/api/parent/login', (req, res) => {
 // =====================
 
 // Teacher registration
-app.post('/api/teacher/register', async (req, res) => {
+app.post('/api/teacher/register', authRateLimit, async (req, res) => {
   const { email, password, firstName, lastName, phoneNumber } = req.body;
 
   if (!email || !password || !firstName || !lastName) {
@@ -245,8 +309,18 @@ app.post('/api/teacher/register', async (req, res) => {
     return res.status(400).json({ error: 'Invalid email format' });
   }
 
+  // Teacher self-registration is disabled in production unless the operator
+  // configures approved school domains. Failing closed prevents unverified
+  // adults from gaining access to children's data.
+  if (IS_PRODUCTION && !teacherDomains.length) {
+    return res.status(503).json({ error: 'Teacher registration is not configured on this server' });
+  }
+  if (teacherDomains.length && !teacherDomains.some((d) => email.toLowerCase().endsWith('@' + d))) {
+    return res.status(403).json({ error: 'Teacher registration requires an approved school email address' });
+  }
+
   try {
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const db = getDb();
 
     db.run(
@@ -289,7 +363,7 @@ app.post('/api/teacher/register', async (req, res) => {
 });
 
 // Teacher login
-app.post('/api/teacher/login', (req, res) => {
+app.post('/api/teacher/login', authRateLimit, (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -336,7 +410,7 @@ app.post('/api/teacher/login', (req, res) => {
 });
 
 // Child registration (existing, updated for compatibility)
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', authRateLimit, async (req, res) => {
   const { username, email, password, age, parent_email } = req.body;
 
   if (!username || !email || !password) {
@@ -352,7 +426,7 @@ app.post('/api/register', async (req, res) => {
   }
 
   try {
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const db = getDb();
 
     db.run(
@@ -393,7 +467,7 @@ app.post('/api/register', async (req, res) => {
 });
 
 // Child login (existing, updated for compatibility)
-app.post('/api/login', (req, res) => {
+app.post('/api/login', authRateLimit, (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -401,8 +475,9 @@ app.post('/api/login', (req, res) => {
   }
 
   const db = getDb();
-  // Allow login with either email OR username
-  db.get('SELECT * FROM users WHERE email = ? OR username = ?', [email, email], async (err, user) => {
+  // Allow login with either email OR username, but ONLY for child accounts.
+  // Parents and teachers use their dedicated login endpoints.
+  db.get("SELECT * FROM users WHERE (email = ? OR username = ?) AND account_type = 'child'", [email, email], async (err, user) => {
     if (err || !user) {
       return res.status(401).json({ error: 'Wrong email/username or password. Try again! 🔒' });
     }
@@ -499,9 +574,10 @@ app.post('/api/parent/children', authenticateToken, requireParentAccount, async 
           }
         }
 
-        // Hash password if provided, otherwise use a default secure password
-        const defaultPassword = password || `${username}123`; // Simple default: username + 123
-        const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+        // Never derive a child password from the username. Generate a random
+        // one-time credential that the parent must store and hand to the child.
+        const childPassword = password || crypto.randomBytes(6).toString('base64url');
+        const hashedPassword = await bcrypt.hash(childPassword, BCRYPT_ROUNDS);
 
         // Create child account with password and optional email
         db.run(
@@ -563,7 +639,7 @@ app.post('/api/parent/children', authenticateToken, requireParentAccount, async 
                   loginCredentials: {
                     username: username,
                     email: email || null,
-                    password: defaultPassword
+                    password: childPassword
                   }
                 });
               }
@@ -573,6 +649,15 @@ app.post('/api/parent/children', authenticateToken, requireParentAccount, async 
       });
     }
   );
+});
+
+// Generate a consent code a parent can hand to a teacher to enrol their child.
+// The code is an HMAC of the child id, so it proves parent consent without
+// exposing the child's email to self-registered adults.
+app.get('/api/parent/children/:childId/enrollment-code', authenticateToken, requireParentAccount, verifyParentChildAccess, (req, res) => {
+  const childId = Number(req.params.childId);
+  const code = crypto.createHmac('sha256', JWT_SECRET).update(`enroll:${childId}`).digest('hex').slice(0, 12);
+  res.json({ success: true, childId, enrollmentCode: code });
 });
 
 // Get all children for a parent
@@ -1112,8 +1197,8 @@ app.get('/api/teacher/dashboard', authenticateToken, requireTeacherAccount, (req
 });
 
 // Add student to teacher's class (enrollment)
-app.post('/api/teacher/students/enroll', authenticateToken, requireTeacherAccount, (req, res) => {
-  const { studentEmail, className } = req.body;
+app.post('/api/teacher/students/enroll', authRateLimit, authenticateToken, requireTeacherAccount, (req, res) => {
+  const { studentEmail, className, enrollmentCode } = req.body;
   const teacherId = req.user.id;
   const db = getDb();
 
@@ -1128,6 +1213,12 @@ app.post('/api/teacher/students/enroll', authenticateToken, requireTeacherAccoun
     (err, student) => {
       if (err || !student) {
         return res.status(404).json({ error: 'Student not found with that email' });
+      }
+
+      // Require a parent-provided consent code. Never allow enrollment by email alone.
+      const expectedCode = crypto.createHmac('sha256', JWT_SECRET).update(`enroll:${student.id}`).digest('hex').slice(0, 12);
+      if (!enrollmentCode || enrollmentCode !== expectedCode) {
+        return res.status(403).json({ error: 'A parent-provided enrollment code is required to enrol this child' });
       }
 
       // Check if relationship already exists
@@ -1258,9 +1349,26 @@ app.get('/api/lesson/:lessonId/unlocked', authenticateToken, (req, res) => {
         // Find the current lesson's position
         const currentIndex = allLessons.findIndex(l => l.id === lessonId);
         
-        // First lesson is always unlocked
+        // First lesson of a module: verify the previous MODULE was completed.
+        // Resolve by order_num because module ids are not contiguous.
         if (currentIndex === 0) {
-          return res.json({ unlocked: true, reason: 'first_lesson' });
+          db.get('SELECT order_num FROM modules WHERE id = ?', [moduleId], (err, moduleRow) => {
+            if (err || !moduleRow) return res.json({ unlocked: true, reason: 'first_lesson' });
+            db.get('SELECT id FROM modules WHERE order_num < ? ORDER BY order_num DESC LIMIT 1', [moduleRow.order_num], (err, prevModule) => {
+              if (err || !prevModule) return res.json({ unlocked: true, reason: 'first_lesson' });
+              db.get(
+                'SELECT 1 FROM module_completions WHERE user_id = ? AND module_id = ? AND all_lessons_completed = 1 AND quiz_passed = 1',
+                [userId, prevModule.id],
+                (err, completion) => {
+                  if (!completion) {
+                    return res.json({ unlocked: false, reason: 'previous_module_incomplete', previousModuleId: prevModule.id });
+                  }
+                  return res.json({ unlocked: true, reason: 'progression_met' });
+                }
+              );
+            });
+          });
+          return;
         }
         
         // Check if previous lesson is completed
@@ -1279,29 +1387,7 @@ app.get('/api/lesson/:lessonId/unlocked', authenticateToken, (req, res) => {
               });
             }
             
-            // Check if previous module is completed (if this is first lesson of a module)
-            if (currentIndex === 0 && moduleId > 1) {
-              // This is the first lesson of a non-first module
-              // Check if previous module is completed
-              db.get(
-                `SELECT * FROM module_completions 
-                 WHERE user_id = ? AND module_id = ? AND all_lessons_completed = 1 AND quiz_passed = 1`,
-                [userId, moduleId - 1],
-                (err, prevModuleCompletion) => {
-                  if (!prevModuleCompletion) {
-                    return res.json({
-                      unlocked: false,
-                      reason: 'previous_module_incomplete',
-                      previousModuleId: moduleId - 1
-                    });
-                  }
-                  
-                  return res.json({ unlocked: true, reason: 'progression_met' });
-                }
-              );
-            } else {
-              return res.json({ unlocked: true, reason: 'progression_met' });
-            }
+            return res.json({ unlocked: true, reason: 'progression_met' });
           }
         );
       }
@@ -1481,46 +1567,50 @@ app.post('/api/quiz/submit', authenticateToken, (req, res) => {
             });
           }
           
-          // All lessons completed - proceed with quiz submission
-          const passed = percentage >= 70;
-          
+          // Clamp client-supplied values. The browser is untrusted input.
+          const num = (v, min, max, fallback) => {
+            const n = Number(v);
+            return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+          };
+          const safePercentage = num(percentage, 0, 100, 0);
+          const safeScore = num(score, 0, 100000, 0);
+          const safeTotal = num(totalQuestions, 1, 100000, 1);
+          const safeTime = num(timeTaken, 0, 86400, 0);
+          const passed = safePercentage >= 70;
+
           // Calculate XP based on quiz performance
           let xpEarned = 0;
           if (passed) {
-            // Base XP for passing
             xpEarned = 50;
-            
-            // Bonus for high scores
-            if (percentage >= 90) xpEarned += 30; // Perfect/near-perfect
-            else if (percentage >= 80) xpEarned += 20; // Excellent
-            else if (percentage >= 70) xpEarned += 10; // Good
-            
-            // Speed bonus (if completed in under 3 minutes)
-            if (timeTaken && timeTaken < 180) xpEarned += 10;
-            
-            // First attempt bonus
+            if (safePercentage >= 90) xpEarned += 30;
+            else if (safePercentage >= 80) xpEarned += 20;
+            else if (safePercentage >= 70) xpEarned += 10;
+            if (safeTime > 0 && safeTime < 180) xpEarned += 10;
+
             db.get(
-              'SELECT COUNT(*) as attempts FROM quiz_results WHERE user_id = ? AND module_id = ?',
+              'SELECT COUNT(*) as attempts, SUM(CASE WHEN passed = 1 THEN 1 ELSE 0 END) as passes FROM quiz_results WHERE user_id = ? AND module_id = ?',
               [userId, moduleId],
               (err, result) => {
                 const attemptNumber = (result?.attempts || 0) + 1;
-                if (attemptNumber === 1 && passed) xpEarned += 20; // First try bonus
-                
+                const alreadyPassed = (result?.passes || 0) > 0;
+                if (attemptNumber === 1) xpEarned += 20; // First try bonus
+                // XP is awarded only once per module; no repeat farming.
+                const award = alreadyPassed ? 0 : xpEarned;
+
                 // Save quiz result
                 db.run(
                   `INSERT INTO quiz_results 
                    (user_id, module_id, score, total_questions, percentage, passed, time_taken_seconds, answers_data, xp_earned, attempt_number)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                  [userId, moduleId, score, totalQuestions, percentage, passed ? 1 : 0, timeTaken || 0, JSON.stringify(answersData), xpEarned, attemptNumber],
+                  [userId, moduleId, safeScore, safeTotal, safePercentage, passed ? 1 : 0, safeTime, JSON.stringify(answersData), award, attemptNumber],
                   function(err) {
                     if (err) {
                       console.error('Failed to save quiz result:', err);
                       return res.status(500).json({ error: 'Failed to save quiz result' });
                     }
                     
-                    if (passed) {
-                      // Award XP
-                      db.run('UPDATE users SET xp = xp + ? WHERE id = ?', [xpEarned, userId]);
+                    if (passed && award > 0) {
+                      db.run('UPDATE users SET xp = xp + ? WHERE id = ?', [award, userId]);
                       
                       // Update module completion
                       updateModuleCompletion(userId, moduleId, db);
@@ -1532,11 +1622,11 @@ app.post('/api/quiz/submit', authenticateToken, (req, res) => {
                       updateLeaderboardCache(userId, db);
                     }
                     
-                    res.json({ 
-                      success: true, 
-                      passed, 
-                      xpEarned: passed ? xpEarned : 0,
-                      attemptNumber 
+                    res.json({
+                      success: true,
+                      passed,
+                      xpEarned: passed ? award : 0,
+                      attemptNumber
                     });
                   }
                 );
@@ -1554,7 +1644,7 @@ app.post('/api/quiz/submit', authenticateToken, (req, res) => {
                   `INSERT INTO quiz_results 
                    (user_id, module_id, score, total_questions, percentage, passed, time_taken_seconds, answers_data, xp_earned, attempt_number)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                  [userId, moduleId, score, totalQuestions, percentage, 0, timeTaken || 0, JSON.stringify(answersData), 0, attemptNumber],
+                  [userId, moduleId, safeScore, safeTotal, safePercentage, 0, safeTime, JSON.stringify(answersData), 0, attemptNumber],
                   function(err) {
                     if (err) {
                       console.error('Failed to save quiz result:', err);
@@ -2036,7 +2126,7 @@ app.delete('/api/code-history/:id', authenticateToken, (req, res) => {
 // CODE EXECUTION SANDBOX
 // =====================
 
-app.post('/api/run-code', async (req, res) => {
+app.post('/api/run-code', runRateLimit, async (req, res) => {
   const { code } = req.body || {};
 
   if (typeof code !== 'string' || code.trim().length === 0) {
@@ -2296,15 +2386,43 @@ app.post('/api/parent/approval-requests/:requestId/respond', authenticateToken, 
 // LEADERBOARD
 // =====================
 
-app.get('/api/leaderboard', (req, res) => {
+app.get('/api/leaderboard', authenticateToken, (req, res) => {
   const db = getDb();
   db.all(
-    'SELECT username, xp, streak FROM users ORDER BY xp DESC LIMIT 10',
+    "SELECT username, xp, streak FROM users WHERE account_type = 'child' ORDER BY xp DESC LIMIT 10",
     (err, users) => {
       if (err) return res.status(500).json({ error: 'Failed to load leaderboard' });
       res.json({ leaderboard: users });
     }
   );
+});
+
+// =====================
+// PRODUCT ANALYTICS (privacy-safe, best-effort)
+// =====================
+// Accepts batched, pseudonymous events. Never stores child text, code, email,
+// phone or answers. Events are written to a bounded table and ignored on error.
+app.post('/api/analytics/events', rateLimit({ prefix: 'analytics', max: 300 }), (req, res) => {
+  const events = Array.isArray(req.body?.events) ? req.body.events.slice(0, 25) : [];
+  if (!events.length) return res.json({ success: true });
+  const db = getDb();
+  const blocked = new Set(['email', 'password', 'code', 'answer', 'answers', 'text', 'phone', 'name', 'childname', 'parentemail']);
+  const stmt = db.prepare('INSERT INTO analytics_events (name, props_json, ts, session_id) VALUES (?, ?, ?, ?)');
+  for (const e of events) {
+    if (!e || typeof e.name !== 'string' || e.name.length > 80) continue;
+    const props = {};
+    for (const key of Object.keys(e.props || {}).slice(0, 12)) {
+      if (blocked.has(key.toLowerCase())) continue;
+      const value = e.props[key];
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        props[key] = typeof value === 'string' ? value.slice(0, 120) : value;
+      }
+    }
+    try {
+      stmt.run(e.name.slice(0, 80), JSON.stringify(props), Number(e.ts) || Date.now(), String(e.sessionId || '').slice(0, 40));
+    } catch { /* best effort */ }
+  }
+  stmt.finalize(() => res.json({ success: true }));
 });
 
 
@@ -2342,7 +2460,7 @@ app.post('/api/ai/activities/:id/submit', (req, res, next) => {
   if (user) achievements.noteCoding(user.id, { code: typeof req.body?.code === 'string' ? req.body.code : '' });
   next();
 });
-app.use('/api/ai', aiEngine.createRouter({ authenticateToken, getDb }));
+app.use('/api/ai', aiRateLimit, aiEngine.createRouter({ authenticateToken, getDb }));
 
 // Unknown API routes return JSON 404 instead of the React app.
 app.use('/api', (req, res) => res.status(404).json({ error: 'API route not found' }));

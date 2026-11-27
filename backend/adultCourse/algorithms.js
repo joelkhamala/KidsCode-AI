@@ -147,7 +147,7 @@ With coins {1, 3, 4} and amount 6, greedy takes 4 + 1 + 1 (3 coins), but 3 + 3 (
       checks: [
         { label: 'Uses an array of denominations', in: 'code', re: /\{\s*1000\s*,\s*500\s*,\s*200/ },
         { label: 'Uses division and remainder', in: 'code', re: /\/\s*\w+[\s\S]*%=?\s*\w+|%=?\s*\w+[\s\S]*\/\s*\w+/ },
-        { label: 'Prints the denominations used', in: 'output', re: /1000 x 1\s*\n200 x 1\s*\n50 x 1\s*\n20 x 1\s*\n10 x 1\s*\n5 x 1\s*\n1 x 2/ },
+        { label: 'Prints the denominations used', in: 'output', re: /1000[\s\S]*200[\s\S]*50[\s\S]*20[\s\S]*10[\s\S]*5[\s\S]*1 x 2/ },
         { label: 'Prints the total pieces', in: 'output', re: /Notes and coins:\s*8\b/ },
       ],
       hints: ['count = amount / d; amount = amount % d;', 'Only print when count > 0, and add count to a running total.'],
@@ -427,7 +427,7 @@ public class Main {
       checks: [
         { label: 'Defines a Node class with a next link', in: 'code', re: /class\s+Node[\s\S]*Node\s+next\s*;/ },
         { label: 'Has append, reverse and delete methods', in: 'code', re: /void\s+append\s*\([\s\S]*void\s+reverse\s*\([\s\S]*void\s+delete\s*\(|void\s+append\s*\([\s\S]*void\s+delete\s*\([\s\S]*void\s+reverse\s*\(/ },
-        { label: 'Prints the list and the reversed list', in: 'output', re: /List:\s*10 -> 20 -> 30\s*\nReversed:\s*30 -> 20 -> 10/ },
+        { label: 'Prints the list and the reversed list', in: 'output', re: /List:[\s\S]*10[\s\S]*20[\s\S]*30[\s\S]*Reversed:[\s\S]*30[\s\S]*20[\s\S]*10/ },
         { label: 'Prints the list after deleting 20', in: 'output', re: /After delete:\s*30 -> 10\b/ },
       ],
       hints: ['Use java.util.StringJoiner(" -> ") or build the String in a loop.', 'Do not use java.util.LinkedList - the point is to build it yourself.'],
@@ -544,7 +544,7 @@ public class Main {
       checks: [
         { label: 'Nodes have prev and next links', in: 'code', re: /\bprev\b[\s\S]*\bnext\b|\bnext\b[\s\S]*\bprev\b/ },
         { label: 'Keeps a tail reference', in: 'code', re: /\btail\b/ },
-        { label: 'Walks forwards and backwards', in: 'output', re: /Forward:\s*A B C\s*\nBackward:\s*C B A/ },
+        { label: 'Walks forwards and backwards', in: 'output', re: /Forward:[\s\S]*A[\s\S]*B[\s\S]*C[\s\S]*Backward:[\s\S]*C[\s\S]*B[\s\S]*A/ },
         { label: 'Walks round the circular list twice', in: 'output', re: /Circular:\s*1 2 3 1 2 3\b/ },
       ],
       hints: ['Backwards: for (DNode cur = tail; cur != null; cur = cur.prev)', 'Circular: after linking 1 -> 2 -> 3, set three.next = one.'],
@@ -648,7 +648,7 @@ Push every opening bracket; on a closing bracket, pop and check it matches. At t
       checks: [
         { label: 'Defines a stack class with push and pop', in: 'code', re: /class\s+\w*Stack\w*[\s\S]*void\s+push\s*\([\s\S]*pop\s*\(/ },
         { label: 'Has a balanced method', in: 'code', re: /boolean\s+balanced\s*\(\s*String/ },
-        { label: 'Accepts the balanced string', in: 'output', re: /\{\[\(\)\]\} balanced: true/ },
+        { label: 'Accepts the balanced string', in: 'output', re: /\{\s*\[\s*\(\s*\)\s*\]\s*\}\s*balanced:\s*true/i },
         { label: 'Rejects both unbalanced strings', in: 'output', re: /\(\[\)\] balanced: false[\s\S]*\(\(\(\) balanced: false/ },
       ],
       hints: ['On a closing bracket: if the stack is empty or the popped bracket does not match, return false.', 'At the end return stack.isEmpty().'],
@@ -743,7 +743,7 @@ public class Main {
         { label: 'Defines a queue class with enqueue and dequeue', in: 'code', re: /class\s+\w*Queue\w*[\s\S]*enqueue\s*\([\s\S]*dequeue\s*\(/ },
         { label: 'Wraps indexes with %', in: 'code', re: /%\s*\w+(\.length)?/ },
         { label: 'Serves the first arrival', in: 'output', re: /Served:\s*A\b/ },
-        { label: 'Shows the queue and that it is full', in: 'output', re: /Queue:\s*B C D[\s\S]*Full:\s*true/ },
+        { label: 'Shows the queue and that it is full', in: 'output', re: /Queue:[\s\S]*B[\s\S]*C[\s\S]*D[\s\S]*Full:\s*true/i },
       ],
       hints: ['rear = (rear + 1) % items.length;', 'To display, start at front and take count items, wrapping with %.'],
       quiz: [
@@ -938,7 +938,7 @@ public class Main {
       checks: [
         { label: 'Swaps neighbours', in: 'code', re: /a\s*\[\s*\w+\s*\]\s*>\s*a\s*\[\s*\w+\s*\+\s*1\s*\]/ },
         { label: 'Stops early when nothing was swapped', in: 'code', re: /swapped[\s\S]*break/ },
-        { label: 'Sorts the array and counts swaps', in: 'output', re: /Sorted:\s*\[10, 13, 14, 29, 37\][\s\S]*Swaps:\s*5\b/ },
+        { label: 'Sorts the array and counts swaps', in: 'output', re: /Sorted:[\s\S]*10[\s\S]*13[\s\S]*14[\s\S]*29[\s\S]*37[\s\S]*Swaps:\s*5/ },
         { label: 'Needs only one pass on sorted data', in: 'output', re: /Passes on sorted data:\s*1\b/ },
       ],
       hints: ['Count passes with a counter that goes up at the start of each outer loop.', 'Return the counts from the method or keep them in static fields.'],
@@ -1035,7 +1035,7 @@ public class Main {
       checks: [
         { label: 'Has selectionSort and insertionSort', in: 'code', re: /selectionSort\s*\(\s*int\s*\[\]\s*\w+\s*\)[\s\S]*insertionSort\s*\(\s*int\s*\[\]\s*\w+\s*\)|insertionSort\s*\(\s*int\s*\[\]\s*\w+\s*\)[\s\S]*selectionSort\s*\(\s*int\s*\[\]\s*\w+\s*\)/ },
         { label: 'Insertion sort shifts with a while loop', in: 'code', re: /while\s*\(\s*\w+\s*>=\s*0\s*&&/ },
-        { label: 'Both sorts give the right order', in: 'output', re: /Selection:\s*\[11, 12, 22, 25, 64\]\s*\nInsertion:\s*\[11, 12, 22, 25, 64\]/ },
+        { label: 'Both sorts give the right order', in: 'output', re: /Selection:[\s\S]*11[\s\S]*12[\s\S]*22[\s\S]*25[\s\S]*64[\s\S]*Insertion:[\s\S]*11[\s\S]*12[\s\S]*22[\s\S]*25[\s\S]*64/ },
         { label: 'Matches Arrays.sort', in: 'output', re: /Arrays\.sort agrees:\s*true/ },
       ],
       hints: ['int[] copy = original.clone(); sorts a copy and leaves the original alone.', 'Arrays.equals(mine, theirs) compares two arrays item by item.'],

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { codeAPI, codeHistoryAPI } from '../services/api';
+import { trackEvent } from '../services/analytics';
 import { useToast } from '../context/ToastContext';
 import {
   CODE_LANGUAGES, availableLanguages, defineTurtleBlocks, getToolbox, workspaceToCode, xmlToCode,
@@ -171,6 +172,7 @@ const Playground = () => {
           // eslint-disable-next-line no-new-func
           new Function(source)();
           setOutput(lines.join('\n') || t('pg.ranOk'));
+          trackEvent('playground_code_run', { language: 'javascript' });
         } catch (err) {
           setOutput('❌ ' + err.message);
           setHasError(true);
@@ -183,6 +185,7 @@ const Playground = () => {
       const out = Array.isArray(res.data.output) ? res.data.output.join('\n') : res.data.output;
       setOutput(out || (res.data.turtleCommands?.length ? t('pg.drawingDone') : t('pg.ranOk')));
       setHasError(!!res.data.error);
+      if (!res.data.error) trackEvent('playground_code_run', { language: 'javascript' });
       if (res.data.turtleCommands?.length) await turtle?.run(res.data.turtleCommands, { animate: true });
     } catch (err) {
       setOutput('❌ ' + t('pg.runFailed') + '\n' + (err.response?.data?.error || err.message));
@@ -345,6 +348,7 @@ const Playground = () => {
       const lines = [...r.output, ...(r.error ? [r.error] : [])];
       setOutput(lines.join('\n') || (r.turtle.length ? t('pg.drawingDone') : t('pg.ranOk')));
       setHasError(Boolean(r.error));
+      if (!r.error) trackEvent('playground_code_run', { language: 'python' });
       if (r.turtle.length) await turtle?.run(r.turtle, { animate: true });
     } catch (err) {
       setOutput('❌ ' + err.message);

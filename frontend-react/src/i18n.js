@@ -3,6 +3,7 @@ import { initReactI18next } from 'react-i18next';
 import coachTranslations from './translations/coach';
 import uiTranslations from './translations/ui';
 import adultTranslations from './translations/adult';
+import p1Translations from './translations/p1';
 
 // Translation resources
 const resources = {
@@ -452,7 +453,7 @@ const resources = {
       "teacher.gatheringData": "Inakusanya data ya maendeleo ya wanafunzi wako",
       "teacher.backToProfile": "Rudi kwa Wasifu",
       "teacher.noPendingApprovals": "Hakuna idhini zinazongoja",
-      "teacher.approvalsInfo": "Wanafunzi watakapoomb a idhini za masomo, zitaonekana hapa kwa ukaguzi wako",
+      "teacher.approvalsInfo": "Wanafunzi watakapoomba idhini za masomo, zitaonekana hapa kwa ukaguzi wako",
       
       // Curriculum
       "curriculum.title": "Moduli za Kujifunza",
@@ -637,6 +638,20 @@ Object.assign(resources.en.translation, uiTranslations.en);
 Object.assign(resources.sw.translation, uiTranslations.sw);
 Object.assign(resources.en.translation, adultTranslations.en);
 Object.assign(resources.sw.translation, adultTranslations.sw);
+Object.assign(resources.en.translation, p1Translations.en);
+Object.assign(resources.sw.translation, p1Translations.sw);
+
+// Keep the document language in sync even on pages without the language switcher.
+// Kiswahili uses Latin script, so both supported languages are left-to-right.
+const applyDocumentLanguage = (lng) => {
+  if (typeof document === 'undefined') return;
+  const language = lng === 'sw' ? 'sw' : 'en';
+  document.documentElement.lang = language;
+  document.documentElement.dir = 'ltr';
+  document.querySelectorAll('[data-i18n]').forEach((element) => {
+    element.textContent = i18n.t(element.getAttribute('data-i18n'));
+  });
+};
 
 i18n
   .use(initReactI18next)
@@ -651,5 +666,11 @@ i18n
       useSuspense: false // Disable suspense to prevent flickering
     }
   });
+
+applyDocumentLanguage(i18n.language);
+i18n.on('languageChanged', applyDocumentLanguage);
+if (typeof document !== 'undefined' && document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => applyDocumentLanguage(i18n.language));
+}
 
 export default i18n;

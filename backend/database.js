@@ -1,5 +1,4 @@
 const sqlite3 = require('sqlite3').verbose();
-const bcrypt = require('bcryptjs');
 const path = require('path');
 
 // KIDSCODE_DB_PATH lets tests or deployments use a different database file.
@@ -299,6 +298,156 @@ function initializeDatabase() {
         )
       `);
 
+      // Adult friends: requests, mutual friendships, privacy, messaging and social history.
+      // These are separate from the child tables because adult accounts must never appear
+      // in a child's search results (and vice versa).
+      database.run(`
+        CREATE TABLE IF NOT EXISTS adult_friend_requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          from_user_id INTEGER NOT NULL,
+          to_user_id INTEGER NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'accepted', 'declined', 'cancelled')),
+          note TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          responded_at DATETIME,
+          FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (to_user_id) REFERENCES users(id) ON DELETE CASCADE,
+          UNIQUE(from_user_id, to_user_id)
+        )
+      `);
+
+      database.run(`
+        CREATE TABLE IF NOT EXISTS adult_friendships (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_a_id INTEGER NOT NULL,
+          user_b_id INTEGER NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_a_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_b_id) REFERENCES users(id) ON DELETE CASCADE,
+          UNIQUE(user_a_id, user_b_id),
+          CHECK(user_a_id < user_b_id)
+        )
+      `);
+
+      database.run(`
+        CREATE TABLE IF NOT EXISTS adult_blocks (
+          blocker_id INTEGER NOT NULL,
+          blocked_id INTEGER NOT NULL,
+          reason TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE,
+          PRIMARY KEY (blocker_id, blocked_id)
+        )
+      `);
+
+      database.run(`
+        CREATE TABLE IF NOT EXISTS adult_friend_privacy (
+          user_id INTEGER PRIMARY KEY,
+          allow_search INTEGER DEFAULT 1,
+          show_progress INTEGER DEFAULT 1,
+          show_activity INTEGER DEFAULT 1,
+          allow_messages INTEGER DEFAULT 1,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+
+      database.run(`
+        CREATE TABLE IF NOT EXISTS adult_friend_messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          conversation_id TEXT NOT NULL,
+          sender_id INTEGER NOT NULL,
+          recipient_id INTEGER NOT NULL,
+          body TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          edited_at DATETIME,
+          read_at DATETIME,
+          deleted_by_sender INTEGER DEFAULT 0,
+          deleted_by_recipient INTEGER DEFAULT 0,
+          FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+
+      database.run(`
+        CREATE TABLE IF NOT EXISTS adult_friend_cheers (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          from_user_id INTEGER NOT NULL,
+          to_user_id INTEGER NOT NULL,
+          kind TEXT NOT NULL CHECK(kind IN ('high_five', 'star', 'keep_going', 'well_done', 'code_today')),
+          note TEXT,
+          event_key TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          read_at DATETIME,
+          FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (to_user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+
+      database.run(`
+        CREATE TABLE IF NOT EXISTS adult_friend_goals (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          week_start DATE NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT,
+          target_minutes INTEGER NOT NULL DEFAULT 300,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          UNIQUE(user_id, week_start)
+        )
+      `);
+
+      database.run(`
+        CREATE TABLE IF NOT EXISTS adult_study_checkins (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          day DATE NOT NULL,
+          note TEXT,
+          minutes INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          UNIQUE(user_id, day)
+        )
+      `);
+
+      database.run(`
+        CREATE TABLE IF NOT EXISTS adult_friend_notifications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          type TEXT NOT NULL,
+          actor_id INTEGER,
+          data_json TEXT DEFAULT '{}',
+          read_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+
+      database.run(`
+        CREATE TABLE IF NOT EXISTS adult_friend_reports (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          reporter_id INTEGER NOT NULL,
+          reported_id INTEGER NOT NULL,
+          reason TEXT NOT NULL,
+          details TEXT,
+          status TEXT DEFAULT 'open' CHECK(status IN ('open', 'reviewed', 'closed')),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (reported_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+
+      database.run('CREATE INDEX IF NOT EXISTS idx_adult_req_to ON adult_friend_requests(to_user_id, status)');
+      database.run('CREATE INDEX IF NOT EXISTS idx_adult_friend_a ON adult_friendships(user_a_id)');
+      database.run('CREATE INDEX IF NOT EXISTS idx_adult_friend_b ON adult_friendships(user_b_id)');
+      database.run('CREATE INDEX IF NOT EXISTS idx_adult_msg_conv ON adult_friend_messages(conversation_id, id)');
+      database.run('CREATE INDEX IF NOT EXISTS idx_adult_msg_unread ON adult_friend_messages(recipient_id, read_at)');
+      database.run('CREATE INDEX IF NOT EXISTS idx_adult_notify_user ON adult_friend_notifications(user_id, read_at)');
+
       // Leaderboard entries table (cached for performance)
       database.run(`
         CREATE TABLE IF NOT EXISTS leaderboard_cache (
@@ -365,6 +514,23 @@ function initializeDatabase() {
           UNIQUE(user_id, module_id)
         )
       `);
+
+      // Privacy-safe product analytics (pseudonymous event metadata only).
+      database.run(`
+        CREATE TABLE IF NOT EXISTS analytics_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          props_json TEXT NOT NULL DEFAULT '{}',
+          ts INTEGER NOT NULL,
+          session_id TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Hot-path indexes for leaderboards and progress lookups.
+      database.run('CREATE INDEX IF NOT EXISTS idx_users_xp ON users(xp DESC)');
+      database.run('CREATE INDEX IF NOT EXISTS idx_progress_user_lesson ON progress(user_id, lesson_id)');
+      database.run('CREATE INDEX IF NOT EXISTS idx_analytics_ts ON analytics_events(ts)');
 
       // Insert sample modules
       database.get('SELECT COUNT(*) as count FROM modules', (err, row) => {
@@ -435,37 +601,8 @@ function initializeDatabase() {
         achievements.forEach(a => achievementStmt.run(a));
         achievementStmt.finalize();
 
-        // Create test user with pre-populated progress
-        bcrypt.hash('password123', 10, (err, hash) => {
-          if (err) return;
-          database.run(
-            'INSERT OR IGNORE INTO users (username, email, password, age, xp, streak, account_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            ['codemaster_alex', 'test@example.com', hash, 11, 850, 3, 'child'],
-            function(err) {
-              if (err) return;
-              const userId = this.lastID;
-
-              // Pre-populate 8 completed lessons
-              const completedLessons = [1, 2, 3, 4, 5, 6, 7, 8];
-              const progressStmt = database.prepare(
-                'INSERT OR IGNORE INTO progress (user_id, module_id, lesson_id, completed, score) VALUES (?, ?, ?, ?, ?)'
-              );
-              completedLessons.forEach(lessonId => {
-                const moduleId = lessonId <= 4 ? 1 : lessonId <= 7 ? 2 : 3;
-                progressStmt.run(userId, moduleId, lessonId, 1, Math.floor(Math.random() * 30) + 70);
-              });
-              progressStmt.finalize();
-
-              // Unlock 3 achievements
-              const unlockedAchievements = [1, 2, 3];
-              const achStmt = database.prepare(
-                'INSERT OR IGNORE INTO user_achievements (user_id, achievement_id) VALUES (?, ?)'
-              );
-              unlockedAchievements.forEach(achId => achStmt.run(userId, achId));
-              achStmt.finalize();
-            }
-          );
-        });
+        // No seeded accounts: a fresh database must contain no child personal
+        // data or credentials. Accounts are created through the API only.
       });
     });
 
