@@ -116,6 +116,12 @@ const Navbar = () => {
               >
                 💻 {t('nav.playground')}
               </Link>
+              <Link
+                to="/arena"
+                className={`nav-item ${isActive('/arena') ? 'active' : ''}`}
+              >
+                ⚔️ {t('nav.arena')}
+              </Link>
               <Link 
                 to="/profile" 
                 className={`nav-item ${isActive('/profile') ? 'active' : ''}`}

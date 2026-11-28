@@ -339,6 +339,10 @@ const Dashboard = () => {
                 <span className="text-4xl" aria-hidden="true">🏅</span>
                 <span>{t('kidHome.tileFriends')}</span>
               </Link>
+              <Link to="/arena" className="kid-tile kid-tile-orange">
+                <span className="text-4xl" aria-hidden="true">⚔️</span>
+                <span>{t('kidHome.tileArena')}</span>
+              </Link>
               <Link to="/profile" className="kid-tile kid-tile-orange">
                 <span className="text-4xl" aria-hidden="true">🏆</span>
                 <span>{t('kidHome.tileBadges')}</span>

@@ -13,7 +13,6 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
-  const [currentToken, setCurrentToken] = useState(null);
   const [userProgress, setUserProgress] = useState({});
   const [userXP, setUserXP] = useState(0);
   const [userStreak, setUserStreak] = useState(0);
@@ -26,48 +25,28 @@ export const AuthProvider = ({ children }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const clearLegacyTokens = () => {
+    // One-time migration: older builds kept JWTs in client-readable storage.
+    ['codequest_token', 'codequest_parent_session', 'adult_token'].forEach((key) => localStorage.removeItem(key));
+  };
+
   const checkAuth = async () => {
-    const token = localStorage.getItem('codequest_token');
-    const user = localStorage.getItem('codequest_user');
-
-    // Validate token isn't corrupted (basic check)
-    if (token && token.length > 8000) {
-      console.warn('Token too large, clearing...');
-      localStorage.removeItem('codequest_token');
-      localStorage.removeItem('codequest_user');
-      setLoading(false);
-      return;
-    }
-
-    if (token && user) {
-      try {
-        const parsedUser = JSON.parse(user);
-
-        // Safety net: adult_learner accounts must NEVER hydrate the kids AuthContext.
-        // This prevents cross-contamination if a legacy key was written incorrectly.
-        if (parsedUser.accountType === 'adult_learner') {
-          console.warn('[AuthContext] Rejected adult_learner user from kids context. Clearing.');
-          localStorage.removeItem('codequest_token');
-          localStorage.removeItem('codequest_user');
-          setLoading(false);
-          return;
-        }
-
-        setCurrentToken(token);
-        setCurrentUser(parsedUser);
-        setAccountType(parsedUser.accountType || 'child');
-
-        // Only load progress for child accounts
-        if (parsedUser.accountType === 'child' || !parsedUser.accountType) {
-          await loadProgress();
-        }
-      } catch (err) {
-        console.error('Failed to restore session:', err);
-        localStorage.removeItem('codequest_token');
-        localStorage.removeItem('codequest_user');
+    clearLegacyTokens();
+    try {
+      const res = await authAPI.me();
+      const user = res.data.user;
+      if (user.accountType === 'adult_learner') {
+        setLoading(false);
+        return;
       }
+      setCurrentUser(user);
+      setAccountType(user.accountType || 'child');
+      if (user.accountType === 'child' || !user.accountType) await loadProgress();
+    } catch {
+      setCurrentUser(null);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const loadProgress = async () => {
@@ -91,17 +70,10 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      // Clear any existing corrupted tokens first
-      localStorage.removeItem('codequest_token');
-      localStorage.removeItem('codequest_user');
-      
       const res = await authAPI.login(email, password);
-      setCurrentToken(res.data.token);
       setCurrentUser(res.data.user);
       setAccountType(res.data.user.accountType || 'child');
-      localStorage.setItem('codequest_token', res.data.token);
-      localStorage.setItem('codequest_user', JSON.stringify(res.data.user));
-      
+
       // Only load progress for child accounts
       if (res.data.user.accountType === 'child' || !res.data.user.accountType) {
         await loadProgress();
@@ -118,16 +90,9 @@ export const AuthProvider = ({ children }) => {
 
   const parentLogin = async (email, password) => {
     try {
-      localStorage.removeItem('codequest_token');
-      localStorage.removeItem('codequest_user');
-      
       const res = await authAPI.parentLogin(email, password);
-      setCurrentToken(res.data.token);
       setCurrentUser(res.data.user);
       setAccountType('parent');
-      localStorage.setItem('codequest_token', res.data.token);
-      localStorage.setItem('codequest_user', JSON.stringify(res.data.user));
-      
       return { success: true };
     } catch (err) {
       return { 
@@ -140,11 +105,8 @@ export const AuthProvider = ({ children }) => {
   const register = async (userData) => {
     try {
       const res = await authAPI.register(userData);
-      setCurrentToken(res.data.token);
       setCurrentUser(res.data.user);
       setAccountType(res.data.user.accountType || 'child');
-      localStorage.setItem('codequest_token', res.data.token);
-      localStorage.setItem('codequest_user', JSON.stringify(res.data.user));
       return { success: true };
     } catch (err) {
       return { 
@@ -157,11 +119,8 @@ export const AuthProvider = ({ children }) => {
   const parentRegister = async (parentData) => {
     try {
       const res = await authAPI.parentRegister(parentData);
-      setCurrentToken(res.data.token);
       setCurrentUser(res.data.user);
       setAccountType('parent');
-      localStorage.setItem('codequest_token', res.data.token);
-      localStorage.setItem('codequest_user', JSON.stringify(res.data.user));
       return { success: true };
     } catch (err) {
       return { 
@@ -173,16 +132,9 @@ export const AuthProvider = ({ children }) => {
 
   const teacherLogin = async (email, password) => {
     try {
-      localStorage.removeItem('codequest_token');
-      localStorage.removeItem('codequest_user');
-      
       const res = await authAPI.teacherLogin(email, password);
-      setCurrentToken(res.data.token);
       setCurrentUser(res.data.user);
       setAccountType('teacher');
-      localStorage.setItem('codequest_token', res.data.token);
-      localStorage.setItem('codequest_user', JSON.stringify(res.data.user));
-      
       return { success: true };
     } catch (err) {
       return { 
@@ -195,11 +147,8 @@ export const AuthProvider = ({ children }) => {
   const teacherRegister = async (teacherData) => {
     try {
       const res = await authAPI.teacherRegister(teacherData);
-      setCurrentToken(res.data.token);
       setCurrentUser(res.data.user);
       setAccountType('teacher');
-      localStorage.setItem('codequest_token', res.data.token);
-      localStorage.setItem('codequest_user', JSON.stringify(res.data.user));
       return { success: true };
     } catch (err) {
       return { 
@@ -211,41 +160,26 @@ export const AuthProvider = ({ children }) => {
 
   const switchToChild = async (childId) => {
     try {
-      const res = await parentAPI.switchToChild(childId);
-      // Keep the parent session so the child can return without logging in again.
-      const parentSession = {
-        token: res.data.returnToken || currentToken,
-        user: currentUser?.accountType === 'parent' ? currentUser : null,
-      };
-      if (parentSession.user) {
-        localStorage.setItem('codequest_parent_session', JSON.stringify(parentSession));
-      }
-      setCurrentToken(res.data.token);
-      setCurrentUser({ ...res.data.child, switchedByParent: true });
+      // The server swaps the HttpOnly cookies and keeps the parent JWT server-side.
+      await parentAPI.switchToChild(childId);
+      const me = await authAPI.me();
+      setCurrentUser(me.data.user);
       setAccountType('child');
-      localStorage.setItem('codequest_token', res.data.token);
-      localStorage.setItem('codequest_user', JSON.stringify({ ...res.data.child, switchedByParent: true }));
       await loadProgress();
       return { success: true };
     } catch (err) {
-      return { 
-        success: false, 
-        error: err.response?.data?.error || 'Failed to switch to child account' 
+      return {
+        success: false,
+        error: err.response?.data?.error || 'Failed to switch to child account'
       };
     }
   };
 
   const restoreParent = async () => {
     try {
-      const raw = localStorage.getItem('codequest_parent_session');
-      if (!raw) return { success: false, error: 'No parent session to restore' };
-      const session = JSON.parse(raw);
-      setCurrentToken(session.token);
-      setCurrentUser(session.user);
+      const res = await parentAPI.restore();
+      setCurrentUser(res.data.user);
       setAccountType('parent');
-      localStorage.setItem('codequest_token', session.token);
-      localStorage.setItem('codequest_user', JSON.stringify(session.user));
-      localStorage.removeItem('codequest_parent_session');
       setUserProgress({});
       setUserXP(0);
       setUserStreak(0);
@@ -255,17 +189,15 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try { await authAPI.logout(); } catch { /* clear local state either way */ }
     setCurrentUser(null);
-    setCurrentToken(null);
     setUserProgress({});
     setUserXP(0);
     setUserStreak(0);
     setAccountType('child');
-    // Only clear kids keys — adult session remains untouched
-    localStorage.removeItem('codequest_token');
+    clearLegacyTokens();
     localStorage.removeItem('codequest_user');
-    localStorage.removeItem('codequest_parent_session');
   };
 
   const updateProgress = async (moduleId, lessonId, completed, lastCode, score, learningMetrics = null) => {
@@ -292,7 +224,6 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     currentUser,
-    currentToken,
     userProgress,
     userXP,
     userStreak,

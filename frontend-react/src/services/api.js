@@ -121,27 +121,15 @@ function trackApiAnalytics(response) {
 }
 
 // Create axios instance
+// Auth JWTs live in HttpOnly cookies. `withCredentials` is only meaningful
+// when REACT_APP_API_URL points at another origin; same-origin requests send the
+// cookie automatically.
 const api = axios.create({
   baseURL: API_BASE,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
-});
-
-// Add token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('codequest_token');
-  if (token) {
-    // Check if token is too large (might cause 431 error)
-    if (token.length > 8000) {
-      console.error('Token too large, clearing localStorage');
-      localStorage.clear();
-      window.location.href = '/auth';
-      return Promise.reject(new Error('Token too large'));
-    }
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
 });
 
 // Handle 431 errors globally
@@ -156,8 +144,7 @@ api.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 431) {
-      console.error('431 Error: Request headers too large. Clearing localStorage...');
-      localStorage.clear();
+      console.error('431 Error: Request headers too large.');
       window.location.href = '/auth';
     }
     return Promise.reject(error);
@@ -172,6 +159,15 @@ export const authAPI = {
   parentRegister: (parentData) => api.post('/parent/register', parentData),
   teacherLogin: (email, password) => api.post('/teacher/login', { email, password }),
   teacherRegister: (teacherData) => api.post('/teacher/register', teacherData),
+  me: () => api.get('/me'),
+  logout: () => api.post('/logout'),
+};
+
+// Quiz endpoints used directly by the Quiz page; cookie auth no longer needs
+// a header assembled from a localStorage token.
+export const quizAPI = {
+  completion: (moduleId) => api.get(`/module/completion/${moduleId}`),
+  submit: (data) => api.post('/quiz/submit', data),
 };
 
 // Curriculum API
@@ -241,21 +237,35 @@ export const socialAPI = {
   unshareProject: (id) => api.delete(`/social/projects/${id}`),
 };
 
+// Coding Arena - real coding duels. Scores, timers and rewards are always
+// calculated by the server; the browser only sends code or answer indexes.
+export const duelAPI = {
+  getModes: () => api.get('/duels/modes'),
+  queue: (mode, difficulty) => api.post('/duels/queue', { mode, difficulty }),
+  invite: (friendId, mode, difficulty) => api.post('/duels/invites', { friendId, mode, difficulty }),
+  invites: () => api.get('/duels/invites'),
+  acceptInvite: (id) => api.post(`/duels/${id}/accept`),
+  declineInvite: (id) => api.post(`/duels/${id}/decline`),
+  getMatch: (id) => api.get(`/duels/${id}`),
+  getChallenge: (id) => api.get(`/duels/${id}/challenge`),
+  submit: (id, payload) => api.post(`/duels/${id}/submit`, payload),
+  leave: (id) => api.post(`/duels/${id}/leave`),
+  heartbeat: (id) => api.post(`/duels/${id}/heartbeat`),
+  history: () => api.get('/duels/history'),
+  leaderboard: (period = 'all') => api.get('/duels/leaderboard', { params: { period } }),
+  profile: () => api.get('/duels/profile'),
+};
+
 // ---------------------------------------------------------------------------
-// Adult learners - a separate client that uses the adult login (adult_token), so an
-// adult session and a children's session can be open in the same browser.
+// Adult learners - a separate cookie so an adult session and a children's
+// session can coexist in the same browser.
 // ---------------------------------------------------------------------------
-const adultHttp = axios.create({ baseURL: API_BASE, headers: { 'Content-Type': 'application/json' } });
-adultHttp.interceptors.request.use((config) => {
-  const token = localStorage.getItem('adult_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+const adultHttp = axios.create({ baseURL: API_BASE, withCredentials: true, headers: { 'Content-Type': 'application/json' } });
 adultHttp.interceptors.response.use((r) => r, (error) => {
   const url = error.config?.url || '';
   // Expired or invalid login: go back to the adult sign-in page.
   if (error.response?.status === 401 && !/\/adult\/(login|register)$/.test(url)) {
-    localStorage.removeItem('adult_token');
+    localStorage.removeItem('adult_token'); // one-time legacy cleanup
     localStorage.removeItem('adult_user');
     if (!window.location.pathname.startsWith('/adult/auth')) window.location.href = '/adult/auth';
   }
@@ -266,6 +276,7 @@ export const adultAPI = {
   register: (data) => adultHttp.post('/adult/register', data),
   login: (email, password) => adultHttp.post('/adult/login', { email, password }),
   me: () => adultHttp.get('/adult/me'),
+  logout: () => adultHttp.post('/adult/logout'),
   overview: () => adultHttp.get('/adult/overview'),
   updateProfile: (data) => adultHttp.put('/adult/profile', data),
   changePassword: (currentPassword, newPassword) => adultHttp.put('/adult/password', { currentPassword, newPassword }),
@@ -291,8 +302,8 @@ export const adultAPI = {
   codeStatus: () => adultHttp.get('/adult/code/status'),
 };
 
-// Adult friends: separate from socialAPI because this must use adult_token,
-// never a child's codequest_token.
+// Adult friends: separate from socialAPI because this must use the adult cookie,
+// never the children's session.
 export const adultSocialAPI = {
   summary: () => adultHttp.get('/adult/friends/summary'),
   search: (q) => adultHttp.get('/adult/friends/search', { params: { q } }),
@@ -375,6 +386,7 @@ export const parentAPI = {
   changePassword: (currentPassword, newPassword) => api.put('/parent/password', { currentPassword, newPassword }),
   getDashboard: () => api.get('/parent/dashboard'),
   switchToChild: (childId) => api.post(`/parent/switch-child/${childId}`),
+  restore: () => api.post('/parent/restore'),
 };
 
 export const childAPI = {

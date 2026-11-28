@@ -566,6 +566,112 @@ function initializeDatabase() {
         )
       `);
 
+      // Coding Arena: authoritative match state, submissions, ratings and payouts.
+      database.run(`
+        CREATE TABLE IF NOT EXISTS duel_matches (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          mode TEXT NOT NULL CHECK(mode IN ('code_race','bug_busters','code_maze','code_quiz')),
+          difficulty TEXT NOT NULL CHECK(difficulty IN ('easy','medium','hard')),
+          format TEXT NOT NULL DEFAULT 'quick' CHECK(format IN ('quick','friend')),
+          status TEXT NOT NULL DEFAULT 'waiting' CHECK(status IN ('waiting','active','finished','cancelled','expired')),
+          challenge_json TEXT NOT NULL,
+          created_by INTEGER NOT NULL,
+          winner_id INTEGER,
+          end_reason TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          starts_at DATETIME,
+          ends_at DATETIME,
+          finished_at DATETIME,
+          FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+      `);
+
+      database.run(`
+        CREATE TABLE IF NOT EXISTS duel_participants (
+          match_id INTEGER NOT NULL,
+          user_id INTEGER NOT NULL,
+          joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          ready_at DATETIME,
+          submitted_at DATETIME,
+          left_at DATETIME,
+          last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          score INTEGER DEFAULT 0,
+          attempts INTEGER DEFAULT 0,
+          breakdown_json TEXT,
+          rewarded_at DATETIME,
+          PRIMARY KEY (match_id, user_id),
+          FOREIGN KEY (match_id) REFERENCES duel_matches(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+
+      database.run(`
+        CREATE TABLE IF NOT EXISTS duel_submissions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          match_id INTEGER NOT NULL,
+          user_id INTEGER NOT NULL,
+          attempt INTEGER NOT NULL,
+          payload TEXT NOT NULL,
+          verdict_json TEXT NOT NULL,
+          score INTEGER NOT NULL DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(match_id, user_id, attempt),
+          FOREIGN KEY (match_id) REFERENCES duel_matches(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+
+      database.run(`
+        CREATE TABLE IF NOT EXISTS duel_ratings (
+          user_id INTEGER PRIMARY KEY,
+          rating INTEGER NOT NULL DEFAULT 1000,
+          wins INTEGER NOT NULL DEFAULT 0,
+          losses INTEGER NOT NULL DEFAULT 0,
+          ties INTEGER NOT NULL DEFAULT 0,
+          duels INTEGER NOT NULL DEFAULT 0,
+          coins INTEGER NOT NULL DEFAULT 0,
+          gems INTEGER NOT NULL DEFAULT 0,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+
+      // One payout per player per match: the uniqueness constraint is the reward guard.
+      database.run(`
+        CREATE TABLE IF NOT EXISTS duel_payouts (
+          match_id INTEGER NOT NULL,
+          user_id INTEGER NOT NULL,
+          xp INTEGER NOT NULL DEFAULT 0,
+          coins INTEGER NOT NULL DEFAULT 0,
+          gems INTEGER NOT NULL DEFAULT 0,
+          rating_delta INTEGER NOT NULL DEFAULT 0,
+          breakdown_json TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (match_id, user_id),
+          FOREIGN KEY (match_id) REFERENCES duel_matches(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+
+      // Shared state for SSE and rate limits: any backend instance using this
+      // database sees the same events and request counters.
+      database.run(`
+        CREATE TABLE IF NOT EXISTS duel_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          match_id INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          FOREIGN KEY (match_id) REFERENCES duel_matches(id) ON DELETE CASCADE
+        )
+      `);
+      database.run(`
+        CREATE TABLE IF NOT EXISTS rate_buckets (
+          key TEXT PRIMARY KEY,
+          start_ms INTEGER NOT NULL,
+          count INTEGER NOT NULL
+        )
+      `);
+
       // Privacy-safe product analytics (pseudonymous event metadata only).
       database.run(`
         CREATE TABLE IF NOT EXISTS analytics_events (
@@ -583,6 +689,10 @@ function initializeDatabase() {
       database.run('CREATE INDEX IF NOT EXISTS idx_progress_user_lesson ON progress(user_id, lesson_id)');
       database.run('CREATE INDEX IF NOT EXISTS idx_analytics_ts ON analytics_events(ts)');
       database.run('CREATE INDEX IF NOT EXISTS idx_parent_notifications ON parent_notifications(parent_id, read_at, created_at)');
+      database.run('CREATE INDEX IF NOT EXISTS idx_duel_queue ON duel_matches(status, mode, difficulty, created_at)');
+      database.run('CREATE INDEX IF NOT EXISTS idx_duel_participant_user ON duel_participants(user_id, match_id)');
+      database.run('CREATE INDEX IF NOT EXISTS idx_duel_payout_user ON duel_payouts(user_id, created_at)');
+      database.run('CREATE INDEX IF NOT EXISTS idx_duel_events_match ON duel_events(match_id, id)');
 
       // Insert sample modules
       database.get('SELECT COUNT(*) as count FROM modules', (err, row) => {

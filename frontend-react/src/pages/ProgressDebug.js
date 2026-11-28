@@ -1,31 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import axios from 'axios';
-
-// Same-origin by default (the dev server proxies /api to the backend).
-const API_URL = (process.env.REACT_APP_API_URL || '').replace(/\/api\/?$/, '');
+import { curriculumAPI, progressAPI } from '../services/api';
 
 const ProgressDebug = () => {
-  const { currentToken, userProgress } = useAuth();
+  const { currentUser, userProgress } = useAuth();
   const [rawProgress, setRawProgress] = useState(null);
   const [lessons, setLessons] = useState([]);
 
   useEffect(() => {
     loadData();
-  }, [currentToken]);
+  }, [currentUser]);
 
   const loadData = async () => {
-    if (!currentToken) return;
+    if (!currentUser) return;
 
     try {
       // Get raw progress from API
-      const progressRes = await axios.get(`${API_URL}/api/progress`, {
-        headers: { Authorization: `Bearer ${currentToken}` }
-      });
+      const progressRes = await progressAPI.getProgress();
       setRawProgress(progressRes.data);
 
       // Get curriculum to see all lessons
-      const currRes = await axios.get(`${API_URL}/api/curriculum`);
+      const currRes = await curriculumAPI.getCurriculum();
       const allLessons = [];
       currRes.data.curriculum.forEach(module => {
         module.lessons.forEach(lesson => {
@@ -42,7 +37,7 @@ const ProgressDebug = () => {
     }
   };
 
-  if (!currentToken) {
+  if (!currentUser) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="card p-8 text-center">

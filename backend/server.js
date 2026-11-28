@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
@@ -12,6 +11,7 @@ const { runJavaScript } = require('./sandbox/runJs');
 const lessonChallenges = require('./lessonChallenges');
 const achievements = require('./achievements');
 const { createSocialRouter, createParentSocialRouter } = require('./social');
+const { createDuelRouter } = require('./duel');
 const { createAdultRouter, createCertificateVerifyRouter, ensureReady: ensureAdultCourse } = require('./adult');
 const aiEngine = require('./ai');
 const parentSupport = require('./parent-support');
@@ -27,8 +27,8 @@ app.set('trust proxy', 1);
 
 // Secrets must come from the environment in production. The development
 // fallbacks keep `node server.js` working out of the box on a laptop.
-if (IS_PRODUCTION && (!process.env.JWT_SECRET || !process.env.SESSION_SECRET)) {
-  console.error('FATAL: JWT_SECRET and SESSION_SECRET must be set when NODE_ENV=production.');
+if (IS_PRODUCTION && !process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET must be set when NODE_ENV=production.');
   process.exit(1);
 }
 if (!process.env.JWT_SECRET) {
@@ -42,34 +42,41 @@ const teacherDomains = (process.env.TEACHER_EMAIL_DOMAINS || '')
   .split(',').map((d) => d.trim().toLowerCase()).filter(Boolean);
 
 // ---------------------------------------------------------------------------
-// Lightweight in-memory rate limiter (no extra dependency). This protects a
-// single instance; use a shared store (e.g. Redis) when scaling horizontally.
+// SQLite-backed rate limiter. Counters live in the same database as match
+// state, so every backend instance sharing that database shares the limits.
+// An atomic UPSERT avoids explicit transactions, which cannot nest with the
+// arena's own transactions on the same connection.
 // ---------------------------------------------------------------------------
-const rateBuckets = new Map();
 function rateLimit({ windowMs = 60_000, max = 200, prefix = 'global' } = {}) {
   // Throttling is a production concern; keep local dev and tests unthrottled.
   if (!IS_PRODUCTION) return (req, res, next) => next();
   return (req, res, next) => {
     const key = `${prefix}:${req.ip || req.socket.remoteAddress || 'unknown'}`;
     const now = Date.now();
-    let bucket = rateBuckets.get(key);
-    if (!bucket || now - bucket.start >= windowMs) {
-      bucket = { start: now, count: 0 };
-      rateBuckets.set(key, bucket);
-    }
-    bucket.count += 1;
-    if (bucket.count > max) {
-      res.set('Retry-After', String(Math.ceil((bucket.start + windowMs - now) / 1000)));
-      return res.status(429).json({ error: 'Too many requests. Please slow down.' });
-    }
-    next();
+    const db = getDb();
+    db.run(
+      `INSERT INTO rate_buckets (key, start_ms, count) VALUES (?, ?, 1)
+       ON CONFLICT(key) DO UPDATE SET
+         start_ms = CASE WHEN excluded.start_ms - start_ms >= ? THEN excluded.start_ms ELSE start_ms END,
+         count = CASE WHEN excluded.start_ms - start_ms >= ? THEN 1 ELSE count + 1 END`,
+      [key, now, windowMs, windowMs],
+      (writeErr) => {
+        if (writeErr) return res.status(503).json({ error: 'Service temporarily unavailable.' });
+        db.get('SELECT start_ms, count FROM rate_buckets WHERE key = ?', [key], (err, row) => {
+          if (err || !row) return res.status(503).json({ error: 'Service temporarily unavailable.' });
+          if (row.count > max) {
+            const retry = Math.max(1, Math.ceil((row.start_ms + windowMs - now) / 1000));
+            res.set('Retry-After', String(retry));
+            return res.status(429).json({ error: 'Too many requests. Please slow down.' });
+          }
+          next();
+        });
+      },
+    );
   };
 }
 setInterval(() => {
-  const now = Date.now();
-  for (const [key, bucket] of rateBuckets) {
-    if (now - bucket.start >= 120_000) rateBuckets.delete(key);
-  }
+  try { getDb().run('DELETE FROM rate_buckets WHERE start_ms < ?', [Date.now() - 120_000]); } catch { /* ignore */ }
 }, 60_000).unref?.();
 
 const authRateLimit = rateLimit({ prefix: 'auth', max: 100 });
@@ -92,6 +99,18 @@ app.use((req, res, next) => {
   res.set('Cross-Origin-Opener-Policy', 'same-origin');
   next();
 });
+
+// Ambient cookies need an Origin check: SameSite blocks most cross-site sends,
+// but this also covers same-site subdomains and non-browser edge cases.
+app.use((req, res, next) => {
+  if (!IS_PRODUCTION || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
+  const origin = req.headers.origin;
+  if (!origin) return next(); // curl, mobile clients
+  const ownOrigin = `${req.protocol}://${req.headers.host}`;
+  if (allowedOrigins.includes(origin) || (!allowedOrigins.length && origin === ownOrigin)) return next();
+  return res.status(403).json({ error: 'Cross-origin request blocked' });
+});
+
 app.use('/api', rateLimit({ prefix: 'api', max: 2000 }), (req, res, next) => {
   // Child profiles, progress and AI output must never be cached by proxies.
   res.set('Cache-Control', 'no-store');
@@ -99,24 +118,49 @@ app.use('/api', rateLimit({ prefix: 'api', max: 2000 }), (req, res, next) => {
 });
 app.use(bodyParser.json({ limit: '200kb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'kidscode_dev_only_session_secret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: IS_PRODUCTION,
-    httpOnly: true,
-    sameSite: 'strict',
-    maxAge: 3600000, // 1 hour
-  }
-}));
 
 // NOTE: Static files are served at the END of the file, after all API routes
 
+// ---------------------------------------------------------------------------
+// Cookie auth. JWTs live only in HttpOnly cookies; Bearer tokens remain
+// supported for native clients and the existing API tests.
+// ---------------------------------------------------------------------------
+const KIDS_COOKIE = 'kids_session';
+const ADULT_COOKIE = 'adult_session';
+const PARENT_COOKIE = 'kids_parent_session';
+const COOKIE_BASE = { httpOnly: true, sameSite: 'strict', secure: IS_PRODUCTION, path: '/' };
+const KIDS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const ADULT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+function setAuthCookie(res, name, token, maxAge) {
+  res.cookie(name, token, { ...COOKIE_BASE, maxAge });
+}
+function clearAuthCookie(res, name) {
+  res.clearCookie(name, COOKIE_BASE);
+}
+function parseCookies(req) {
+  const out = Object.create(null);
+  for (const part of String(req.headers.cookie || '').split(';')) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    const key = part.slice(0, eq).trim();
+    if (!key) continue;
+    const value = part.slice(eq + 1).trim();
+    try { out[key] = decodeURIComponent(value); } catch { out[key] = value; }
+  }
+  return out;
+}
+function tokenFrom(req) {
+  const header = req.headers.authorization;
+  if (header && /^Bearer\s+/i.test(header)) return header.split(/\s+/)[1];
+  const cookies = parseCookies(req);
+  const preferred = req.baseUrl === '/api/adult' ? ADULT_COOKIE : KIDS_COOKIE;
+  return cookies[preferred] || cookies[ADULT_COOKIE] || cookies[KIDS_COOKIE];
+}
+
 // Auth middleware
 function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const token = tokenFrom(req);
   if (!token) return res.status(401).json({ error: 'No token provided' });
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
@@ -128,7 +172,7 @@ function authenticateToken(req, res, next) {
 
 /** The logged-in user if a valid token was sent, else null (never rejects the request). */
 function optionalUser(req) {
-  const token = (req.headers['authorization'] || '').split(' ')[1];
+  const token = tokenFrom(req);
   if (!token) return null;
   try { return jwt.verify(token, JWT_SECRET); } catch { return null; }
 }
@@ -253,6 +297,7 @@ app.post('/api/parent/register', authRateLimit, async (req, res) => {
           JWT_SECRET,
           { expiresIn: '7d' }
         );
+        setAuthCookie(res, KIDS_COOKIE, token, KIDS_TTL_MS);
 
         res.json({
           success: true,
@@ -303,6 +348,7 @@ app.post('/api/parent/login', authRateLimit, (req, res) => {
         JWT_SECRET,
         { expiresIn: '7d' }
       );
+      setAuthCookie(res, KIDS_COOKIE, token, KIDS_TTL_MS);
 
       res.json({
         success: true,
@@ -375,6 +421,7 @@ app.post('/api/teacher/register', authRateLimit, async (req, res) => {
           JWT_SECRET,
           { expiresIn: '7d' }
         );
+        setAuthCookie(res, KIDS_COOKIE, token, KIDS_TTL_MS);
 
         res.json({
           success: true,
@@ -425,6 +472,7 @@ app.post('/api/teacher/login', authRateLimit, (req, res) => {
         JWT_SECRET,
         { expiresIn: '7d' }
       );
+      setAuthCookie(res, KIDS_COOKIE, token, KIDS_TTL_MS);
 
       res.json({
         success: true,
@@ -479,6 +527,7 @@ app.post('/api/register', authRateLimit, async (req, res) => {
           JWT_SECRET,
           { expiresIn: '7d' }
         );
+        setAuthCookie(res, KIDS_COOKIE, token, KIDS_TTL_MS);
         res.json({
           success: true,
           token,
@@ -541,6 +590,7 @@ app.post('/api/login', authRateLimit, (req, res) => {
       JWT_SECRET,
       { expiresIn: '7d' }
     );
+    setAuthCookie(res, KIDS_COOKIE, token, KIDS_TTL_MS);
 
     res.json({
       success: true,
@@ -556,6 +606,64 @@ app.post('/api/login', authRateLimit, (req, res) => {
       }
     });
   });
+});
+
+// Rehydrate the browser session from the HttpOnly cookie. User JSON in
+// localStorage is only a cache; this endpoint is the source of truth.
+app.get('/api/me', authenticateToken, (req, res) => {
+  getDb().get(
+    'SELECT id, username, email, first_name, last_name, age, xp, streak, account_type FROM users WHERE id = ?',
+    [req.user.id],
+    (err, row) => {
+      if (err) return res.status(500).json({ error: 'Could not load account' });
+      if (!row) return res.status(401).json({ error: 'Account not found' });
+      res.json({
+        user: {
+          id: row.id,
+          username: row.username,
+          email: row.email,
+          firstName: row.first_name,
+          lastName: row.last_name,
+          age: row.age,
+          xp: row.xp,
+          streak: row.streak,
+          accountType: row.account_type,
+          ...(req.user.switchedByParent ? { switchedByParent: true, parentId: req.user.parentId } : {}),
+        },
+      });
+    },
+  );
+});
+
+app.post('/api/logout', (req, res) => {
+  clearAuthCookie(res, KIDS_COOKIE);
+  clearAuthCookie(res, PARENT_COOKIE);
+  res.json({ success: true });
+});
+
+// Restore the parent after "view as child" without exposing the parent JWT to JS.
+app.post('/api/parent/restore', (req, res) => {
+  const token = parseCookies(req)[PARENT_COOKIE];
+  if (!token) return res.status(401).json({ error: 'No parent session to restore' });
+  let claims;
+  try { claims = jwt.verify(token, JWT_SECRET); } catch { return res.status(403).json({ error: 'Invalid token' }); }
+  if (claims.accountType !== 'parent') return res.status(403).json({ error: 'Parent account required' });
+  setAuthCookie(res, KIDS_COOKIE, token, KIDS_TTL_MS);
+  clearAuthCookie(res, PARENT_COOKIE);
+  getDb().get(
+    'SELECT id, email, first_name, last_name, phone_number FROM users WHERE id = ?',
+    [claims.id],
+    (err, row) => {
+      if (err || !row) return res.status(404).json({ error: 'Parent account not found' });
+      res.json({
+        success: true,
+        user: {
+          id: row.id, email: row.email, firstName: row.first_name,
+          lastName: row.last_name, phoneNumber: row.phone_number, accountType: 'parent',
+        },
+      });
+    },
+  );
 });
 
 // =====================
@@ -1239,6 +1347,9 @@ app.post('/api/parent/switch-child/:childId', authenticateToken, requireParentAc
       JWT_SECRET,
       { expiresIn: '24h' }
     );
+    const SWITCH_TTL_MS = 24 * 60 * 60 * 1000;
+    setAuthCookie(res, KIDS_COOKIE, token, SWITCH_TTL_MS);
+    setAuthCookie(res, PARENT_COOKIE, tokenreturn, SWITCH_TTL_MS);
 
     res.json({
       success: true,
@@ -1659,7 +1770,11 @@ app.post('/api/teacher/notifications/read-all', authenticateToken, requireTeache
 // =====================
 // ADULT LEARNERS - Professional Web Development course (see adult.js and adultCourse/)
 // =====================
-app.use('/api/adult', createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }));
+app.use('/api/adult', createAdultRouter({
+  authenticateToken, jwt, JWT_SECRET, bcrypt,
+  setAuthCookie: (res, token) => setAuthCookie(res, ADULT_COOKIE, token, ADULT_TTL_MS),
+  clearAuthCookie: (res) => clearAuthCookie(res, ADULT_COOKIE),
+}));
 app.use('/api/certificates', createCertificateVerifyRouter());
 
 // =====================
@@ -2918,6 +3033,7 @@ app.post('/api/analytics/events', rateLimit({ prefix: 'analytics', max: 300 }), 
 // SOCIAL FEATURES - friends, leaderboards and activity feed (see social.js)
 // Built from the real learning records so the numbers match the rest of KidsCode.
 // =====================
+app.use('/api/duels', rateLimit({ prefix: 'duels', max: 300 }), createDuelRouter({ authenticateToken }));
 app.use('/api/social', createSocialRouter({ authenticateToken }));
 // Parents: see their child's friends, remove one, switch friends/sharing on or off.
 app.use('/api/parent/social', createParentSocialRouter({ authenticateToken, requireParentAccount }));

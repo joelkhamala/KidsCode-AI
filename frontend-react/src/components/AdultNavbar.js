@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getAdultUser, clearAdultAuth } from '../utils/authStorage';
-import { adultSocialAPI } from '../services/api';
+import { adultAPI, adultSocialAPI } from '../services/api';
 import LanguageSwitcher from './LanguageSwitcher';
 
 /** Top navigation for adult learners (hidden when printing the certificate). */
@@ -37,7 +37,8 @@ const AdultNavbar = () => {
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [open]);
 
-  const logout = () => {
+  const logout = async () => {
+    try { await adultAPI.logout(); } catch { /* clear local state either way */ }
     clearAdultAuth();
     navigate('/adult/auth', { replace: true });
   };

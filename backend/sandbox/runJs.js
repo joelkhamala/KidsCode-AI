@@ -39,7 +39,7 @@ function release() {
 
 /**
  * @param {string} code
- * @param {{timeoutMs?: number, maxOutputLines?: number, maxTurtleCommands?: number}} [opts]
+ * @param {{timeoutMs?: number, maxOutputLines?: number, maxTurtleCommands?: number, harness?: string}} [opts]
  * @returns {Promise<{output: string[], turtleCommands: object[], truncated: boolean, error: null|{name: string, message: string}}>}
  */
 async function runJavaScript(code, opts = {}) {
@@ -59,6 +59,7 @@ async function runJavaScript(code, opts = {}) {
       const worker = new Worker(WORKER_PATH, {
         workerData: {
           code,
+          harness: typeof opts.harness === 'string' ? opts.harness.slice(0, MAX_CODE_LENGTH) : '',
           timeoutMs,
           maxOutputLines: opts.maxOutputLines || 500,
           maxTurtleCommands: opts.maxTurtleCommands || 5000,

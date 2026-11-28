@@ -169,16 +169,8 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: '/api',
+  withCredentials: true, // sends the HttpOnly cookie on cross-origin deployments
   headers: { 'Content-Type': 'application/json' }
-});
-
-// Auto-attach JWT token
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('codequest_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
 });
 
 export const curriculumAPI = {
@@ -189,11 +181,11 @@ export const curriculumAPI = {
 
 ## Authentication Flow
 
-1. User logs in via `Auth.js`
-2. JWT token stored in localStorage
-3. `AuthContext` provides user state globally
-4. Protected routes check authentication
-5. API requests auto-include token
+1. User logs in via `Auth.js` or `AdultAuth.js`
+2. Server sets an HttpOnly, SameSite=Strict, Secure (production) cookie
+3. `AuthContext` rehydrates the user from `GET /api/me`
+4. Protected routes check that user state
+5. API requests send the cookie automatically; no token is stored in localStorage
 
 ## Technologies Used
 

@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { RestrictionsProvider, useRestrictions } from './context/RestrictionsContext';
 import { ToastProvider } from './context/ToastContext';
-import { getAdultToken, getAdultUser, isAdultUser } from './utils/authStorage';
+import { isAdultSignedIn } from './utils/authStorage';
 import Navbar from './components/Navbar';
 import AdultNavbar from './components/AdultNavbar';
 import BlockedAccess from './components/BlockedAccess';
@@ -21,6 +21,7 @@ import TeacherDashboard from './pages/TeacherDashboard';
 import Quiz from './pages/Quiz';
 import CodeHistory from './pages/CodeHistory';
 import Social from './pages/Social';
+import CodingArena from './pages/CodingArena';
 import ProgressDebug from './pages/ProgressDebug';
 import AdultAuth from './pages/AdultAuth';
 import AdultDashboard from './pages/AdultDashboard';
@@ -61,17 +62,10 @@ const TeacherRoute = ({ children }) => {
     : <Navigate to="/auth" replace />;
 };
 
-// Adult Protected Route — reads ONLY from adult_token/adult_user
-// Kids tokens are never accepted here.
+// Adult Protected Route — reads ONLY the adult user cache; the adult JWT is in
+// its own HttpOnly cookie and kids sessions are never accepted here.
 const AdultProtectedRoute = ({ children }) => {
-  const token = getAdultToken();
-  const user  = getAdultUser();
-
-  // Must have a token AND the user must be an adult_learner account
-  if (!token || !user || !isAdultUser(user)) {
-    return <Navigate to="/adult/auth" replace />;
-  }
-
+  if (!isAdultSignedIn()) return <Navigate to="/adult/auth" replace />;
   return children;
 };
 
@@ -140,8 +134,7 @@ function AppRoutes({ currentUser }) {
   }, [location.pathname]);
 
   const isAdultPage = location.pathname.startsWith('/adult');
-  const adultUser = getAdultUser();
-  const showAdultNavbar = isAdultPage && adultUser && location.pathname !== '/adult/auth';
+  const showAdultNavbar = isAdultPage && isAdultSignedIn() && location.pathname !== '/adult/auth';
 
   return (
     <div className={`min-h-screen ${isAdultPage || location.pathname.startsWith('/verify') ? 'bg-slate-50' : ''}`}>
@@ -247,6 +240,15 @@ function AppRoutes({ currentUser }) {
             element={
               <ParentRoute>
                 <Social />
+              </ParentRoute>
+            }
+          />
+
+          <Route
+            path="/arena"
+            element={
+              <ParentRoute>
+                <CodingArena />
               </ParentRoute>
             }
           />
@@ -365,7 +367,7 @@ function AppRoutes({ currentUser }) {
             }
           />
           <Route path="/adult/social" element={<Navigate to="/adult/friends" replace />} />
-          <Route path="/adult" element={<Navigate to={getAdultToken() ? '/adult/dashboard' : '/adult/auth'} replace />} />
+          <Route path="/adult" element={<Navigate to={isAdultSignedIn() ? '/adult/dashboard' : '/adult/auth'} replace />} />
 
           {/* Public: anyone can check a certificate */}
           <Route path="/verify" element={<CertificateVerify />} />

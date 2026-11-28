@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { adultAPI } from '../services/api';
-import { getAdultToken, setAdultAuth } from '../utils/authStorage';
+import { setAdultAuth } from '../utils/authStorage';
 import { Page, PageHeader, Card, Loading, Button } from '../components/AdultUi';
 
 /** Adult learner profile (name on the certificate, contact, goals) and password change. */
@@ -27,7 +27,7 @@ const AdultProfile = () => {
     setBusy('profile'); setMsg(null);
     try {
       const r = await adultAPI.updateProfile(form);
-      setAdultAuth(getAdultToken(), r.data.user);
+      setAdultAuth(null, r.data.user);
       setMsg({ ok: true, text: t('ad.profileSaved') });
     } catch (err) {
       setMsg({ ok: false, text: err.response?.data?.error || t('ad.somethingWrong') });

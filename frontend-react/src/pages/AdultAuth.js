@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { adultAPI } from '../services/api';
-import { setAdultAuth, getAdultToken, getAdultUser, isAdultUser } from '../utils/authStorage';
+import { setAdultAuth, isAdultSignedIn } from '../utils/authStorage';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 
 /** The six courses (ids match the backend's COURSES); numbers come from GET /api/adult/overview. */
@@ -75,7 +75,7 @@ const AdultAuth = () => {
   const set = (k) => (e) => setReg({ ...reg, [k]: e.target.value });
 
   // Already signed in: go straight to the course.
-  if (getAdultToken() && isAdultUser(getAdultUser())) return <Navigate to="/adult/dashboard" replace />;
+  if (isAdultSignedIn()) return <Navigate to="/adult/dashboard" replace />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-900 to-violet-900 px-4 py-8 flex flex-col">

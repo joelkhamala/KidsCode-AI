@@ -252,7 +252,7 @@ function runtimeStatus() {
 
 const lastBeat = new Map();
 
-function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
+function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt, setAuthCookie, clearAuthCookie }) {
   const router = express.Router();
   const wrap = (fn) => async (req, res) => {
     try {
@@ -268,7 +268,7 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
   const sign = (u) => jwt.sign({ id: u.id, email: u.email, accountType: 'adult_learner' }, JWT_SECRET, { expiresIn: '30d' });
 
   // ---- account ----
-  router.post('/register', wrap(async (req) => {
+  router.post('/register', wrap(async (req, res) => {
     const b = req.body || {};
     const email = clean(b.email, 120);
     const firstName = clean(b.firstName, 60);
@@ -289,10 +289,12 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
       [r.lastID, clean(b.occupation, 80), clean(b.educationLevel, 80), clean(b.learningGoals, 500)]);
     const user = await get('SELECT * FROM users WHERE id = ?', [r.lastID]);
     const profile = await get('SELECT * FROM adult_learner_profiles WHERE user_id = ?', [r.lastID]);
-    return { success: true, token: sign(user), user: publicUser(user, profile) };
+    const token = sign(user);
+    setAuthCookie(res, token);
+    return { success: true, token, user: publicUser(user, profile) };
   }));
 
-  router.post('/login', wrap(async (req) => {
+  router.post('/login', wrap(async (req, res) => {
     const email = clean((req.body || {}).email, 120);
     const password = String((req.body || {}).password || '');
     if (!email || !password) throw fail(400, 'Email and password required');
@@ -301,8 +303,15 @@ function createAdultRouter({ authenticateToken, jwt, JWT_SECRET, bcrypt }) {
     await run("UPDATE users SET last_active = date('now') WHERE id = ?", [user.id]);
     await run('INSERT OR IGNORE INTO adult_learner_profiles (user_id) VALUES (?)', [user.id]);
     const profile = await get('SELECT * FROM adult_learner_profiles WHERE user_id = ?', [user.id]);
-    return { success: true, token: sign(user), user: publicUser(user, profile) };
+    const token = sign(user);
+    setAuthCookie(res, token);
+    return { success: true, token, user: publicUser(user, profile) };
   }));
+
+  router.post('/logout', (req, res) => {
+    clearAuthCookie(res);
+    res.json({ success: true });
+  });
 
   /** Public: what the programme offers right now (shown on the sign-in pages). */
   router.get('/overview', (req, res) => {

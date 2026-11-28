@@ -19,7 +19,7 @@
 const { parentPort, workerData } = require('worker_threads');
 const vm = require('vm');
 
-const { code, timeoutMs, maxOutputLines, maxTurtleCommands } = workerData;
+const { code, harness, timeoutMs, maxOutputLines, maxTurtleCommands } = workerData;
 
 // Everything below is evaluated INSIDE the sandbox, using the sandbox's own
 // built-ins (its own Object, JSON, Math...). Nothing from the host leaks in.
@@ -28,10 +28,22 @@ const prelude = `
   const __out = [];
   const __turtle = [];
   let __truncated = false;
+  // Arena grading uses a serializer captured before learner code runs. Learner
+  // code cannot replace it, and it lives in prelude scope so a same-name shadow
+  // inside the learner function cannot affect the separately executed harness.
+  const __safeStringify = JSON.stringify.bind(JSON);
+  Object.freeze(JSON);
+  Object.defineProperty(globalThis, '__safeStringify', { value: __safeStringify, writable: false, configurable: false });
+  const __arenaFn = { solve: null };
+  Object.defineProperty(globalThis, '__duelSolve', {
+    configurable: false,
+    get: () => __arenaFn.solve,
+    set: (fn) => { __arenaFn.solve = fn; },
+  });
   const __fmt = (a) => {
     if (typeof a === 'string') return a;
     if (typeof a === 'object' && a !== null) {
-      try { return JSON.stringify(a, null, 2); } catch (e) { return String(a); }
+      try { return __safeStringify(a, null, 2); } catch (e) { return String(a); }
     }
     return String(a);
   };
@@ -63,7 +75,7 @@ const prelude = `
   globalThis.penDown = () => __cmd({ type: 'penDown' });
   globalThis.clear = () => __cmd({ type: 'clear' });
   globalThis.arc = (radius, angle) => __cmd({ type: 'arc', radius: __num(radius, 'arc'), angle: __num(angle, 'arc') });
-  globalThis.__result = () => JSON.stringify({ output: __out, turtleCommands: __turtle, truncated: __truncated });
+  globalThis.__result = () => __safeStringify({ output: __out, turtleCommands: __turtle, truncated: __truncated });
 `;
 
 function run() {
@@ -77,9 +89,15 @@ function run() {
   let error = null;
   try {
     // Wrap learner code in its own function scope so `let`/`const` declarations
-    // cannot clash with the prelude helpers.
-    const wrapped = `(function () {\n"use strict";\n${code}\n})();`;
+    // cannot clash with the prelude helpers. The final assign publishes the
+    // learner's function through a property whose setter the prelude owns.
+    const wrapped = `(function () {\n"use strict";\n${code}\n;globalThis.__duelSolve = typeof solve === 'function' ? solve : undefined;\n})();`;
     vm.runInContext(wrapped, context, { timeout: timeoutMs, filename: 'your-code.js', lineOffset: -2 });
+    if (harness) {
+      // The harness runs at top level in the same context: it can use the
+      // prelude's frozen serializer but cannot be shadowed by learner locals.
+      vm.runInContext(harness, context, { timeout: timeoutMs, filename: 'arena-harness.js' });
+    }
   } catch (err) {
     error = {
       name: (err && err.name) || 'Error',

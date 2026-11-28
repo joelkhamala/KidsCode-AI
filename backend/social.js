@@ -182,7 +182,8 @@ async function xpSince(days) {
          AND NOT EXISTS (SELECT 1 FROM learning_metrics lm WHERE lm.user_id = p.user_id AND lm.lesson_id = p.lesson_id)
        UNION ALL SELECT from_id, ${DUEL_XP_FINISH} + CASE WHEN winner_id = from_id OR winner_id = 0 THEN ${DUEL_XP_WIN} ELSE 0 END FROM friend_duels WHERE status = 'done' AND finished_at >= datetime('now', ?)
        UNION ALL SELECT to_id, ${DUEL_XP_FINISH} + CASE WHEN winner_id = to_id OR winner_id = 0 THEN ${DUEL_XP_WIN} ELSE 0 END FROM friend_duels WHERE status = 'done' AND finished_at >= datetime('now', ?)
-     ) GROUP BY user_id`, [since, since, since, since, since, since, since],
+        UNION ALL SELECT user_id, xp FROM duel_payouts WHERE created_at >= datetime('now', ?)
+     ) GROUP BY user_id`, [since, since, since, since, since, since, since, since],
   ).catch(() => []);
   return Object.fromEntries(rows.map((r) => [r.user_id, r.xp || 0]));
 }
@@ -839,4 +840,4 @@ function createParentSocialRouter({ authenticateToken, requireParentAccount }) {
   return router;
 }
 
-module.exports = { createSocialRouter, createParentSocialRouter, ranking, statsFor, xpSince, feedFor, STICKERS, ensureTables };
+module.exports = { createSocialRouter, createParentSocialRouter, ranking, statsFor, xpSince, feedFor, STICKERS, ensureTables, friendIds };

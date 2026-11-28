@@ -8,7 +8,7 @@ import { Bar, Button, Card, ErrorBox, Loading, Page, PageHeader, studyTime } fro
 /**
  * Adult friends & study circle.
  *
- * Every request uses adultSocialAPI (the adult_token client), so adult social data
+ * Every request uses adultSocialAPI (the adult cookie client), so adult social data
  * can never be mixed with a child's session. The page shows real learning records
  * from the server: lessons, assessments, certificates and study time.
  */

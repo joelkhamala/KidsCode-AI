@@ -2,20 +2,16 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
-import axios from 'axios';
-import { curriculumAPI } from '../services/api';
+import { curriculumAPI, quizAPI } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { nextAfterQuiz } from '../utils/learningPath';
 import { getTranslatedQuiz, localizeQuiz } from '../translations/quiz';
-
-// Same-origin by default (the dev server proxies /api to the backend).
-const API_URL = (process.env.REACT_APP_API_URL || '').replace(/\/api\/?$/, '');
 
 const Quiz = () => {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const { moduleId } = useParams();
-  const { currentToken, loadProgress } = useAuth();
+  const { currentUser, loadProgress } = useAuth();
 
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -48,10 +44,7 @@ const Quiz = () => {
   const checkModuleCompletion = useCallback(async () => {
     setCompletionError(false);
     try {
-      const response = await axios.get(
-        `${API_URL}/api/module/completion/${moduleId}`,
-        { headers: { Authorization: `Bearer ${currentToken}` } }
-      );
+      const response = await quizAPI.completion(moduleId);
 
       if (response.data && typeof response.data.totalLessons === 'number') {
         setModuleCompletion(response.data);
@@ -67,13 +60,13 @@ const Quiz = () => {
     } finally {
       setLoading(false);
     }
-  }, [moduleId, currentToken]);
+  }, [moduleId]);
 
   useEffect(() => {
-    if (currentToken && moduleId) {
+    if (currentUser && moduleId) {
       checkModuleCompletion();
     }
-  }, [moduleId, currentToken, checkModuleCompletion]);
+  }, [moduleId, currentUser, checkModuleCompletion]);
 
   const handleStartQuiz = () => {
     // Double-check that all lessons are completed before starting
@@ -122,18 +115,14 @@ const Quiz = () => {
     const percentage = Math.round((finalScore / quiz.questions.length) * 100);
 
     try {
-      const response = await axios.post(
-        `${API_URL}/api/quiz/submit`,
-        {
-          moduleId: parseInt(moduleId),
-          score: finalScore,
-          totalQuestions: quiz.questions.length,
-          percentage,
-          timeTaken,
-          answersData: finalAnswers
-        },
-        { headers: { Authorization: `Bearer ${currentToken}` } }
-      );
+      const response = await quizAPI.submit({
+        moduleId: parseInt(moduleId),
+        score: finalScore,
+        totalQuestions: quiz.questions.length,
+        percentage,
+        timeTaken,
+        answersData: finalAnswers
+      });
 
       setSubmitError(null);
       setXpEarned(response.data.xpEarned || 0);
