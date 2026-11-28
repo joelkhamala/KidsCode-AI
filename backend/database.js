@@ -706,11 +706,9 @@ function initializeDatabase() {
           [5, 'Python Explorers 🐍', 'Discover Python, one of the most popular coding languages!', '🐍', '#8b5cf6', 5, 'advanced'],
         ];
 
-        const moduleStmt = database.prepare(
-          'INSERT INTO modules (id, title, description, icon, color, order_num, difficulty) VALUES (?, ?, ?, ?, ?, ?, ?)'
-        );
-        modules.forEach(m => moduleStmt.run(m));
-        moduleStmt.finalize();
+        // A nested serialize block keeps module inserts ahead of the lessons
+        // that reference them; sqlite3 does not order statements queued from a callback.
+        const insertModule = 'INSERT OR IGNORE INTO modules (id, title, description, icon, color, order_num, difficulty) VALUES (?, ?, ?, ?, ?, ?, ?)';
 
         // Insert lessons for each module
         const lessons = [
@@ -739,11 +737,7 @@ function initializeDatabase() {
           [14, 5, 'Data Structures: Lists & Dicts 📊', 'Python has powerful ways to store data:\n\nLists: [1, 2, 3] - like JS arrays\nDictionaries: {"name": "Alex"} - like JS objects\n\nIn JavaScript, these are arrays and objects. The concepts are the same, just different names!', 'console.log("=== Python Lists & Dicts in JS ===");\n\n// In Python: my_list = [1, 2, 3]\nlet myList = [1, 2, 3, 4, 5];\nconsole.log("List:", myList);\nconsole.log("First item:", myList[0]);\n\n// In Python: person = {"name": "Alex", "age": 10}\nlet person = { name: "Alex", age: 10, hobby: "coding" };\nconsole.log("\\nDictionary/Object:");\nfor (let key in person) {\n  console.log(key + ": " + person[key]);\n}\n\nconsole.log("\\nThese concepts work in all languages! 🌍");', 'Create an array of 5 of your favorite things. Then create an object with 3 facts about yourself. Print them all!', '["Arrays: let favorites = [\\"pizza\\", \\"games\\"]", "Objects: let me = { name: \\"...\\" }", "Use for loops to print arrays", "Use for...in to print objects"]', 2],
         ];
 
-        const lessonStmt = database.prepare(
-          'INSERT INTO lessons (id, module_id, title, content, example_code, challenge, hints, order_num) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        );
-        lessons.forEach(l => lessonStmt.run(l));
-        lessonStmt.finalize();
+        const insertLesson = 'INSERT OR IGNORE INTO lessons (id, module_id, title, content, example_code, challenge, hints, order_num) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
 
         // Insert achievements
         const achievements = [
@@ -757,11 +751,13 @@ function initializeDatabase() {
           [8, 'Consistent Coder 📅', 'Code for 3 days in a row', '📅', 200, 'streak_3'],
         ];
 
-        const achievementStmt = database.prepare(
-          'INSERT INTO achievements (id, name, description, icon, xp_reward, condition) VALUES (?, ?, ?, ?, ?, ?)'
-        );
-        achievements.forEach(a => achievementStmt.run(a));
-        achievementStmt.finalize();
+        const insertAchievement = 'INSERT OR IGNORE INTO achievements (id, name, description, icon, xp_reward, condition) VALUES (?, ?, ?, ?, ?, ?)';
+
+        database.serialize(() => {
+          modules.forEach((m) => database.run(insertModule, m));
+          lessons.forEach((l) => database.run(insertLesson, l));
+          achievements.forEach((a) => database.run(insertAchievement, a));
+        });
 
         // No seeded accounts: a fresh database must contain no child personal
         // data or credentials. Accounts are created through the API only.
