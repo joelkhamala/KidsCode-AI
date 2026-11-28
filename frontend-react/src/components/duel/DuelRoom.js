@@ -24,10 +24,10 @@ const StatusBar = ({ match, remaining, connected }) => {
         <span className="font-display text-lg text-slate-800 truncate">{match.opponent?.name || '—'}</span>
       </div>
       <div className="rounded-xl bg-slate-50 p-3">
-        <span className="block text-[11px] font-bold uppercase tracking-wide text-slate-500">Status</span>
+        <span className="block text-[11px] font-bold uppercase tracking-wide text-slate-500">{t('duel.status')}</span>
         <span className={`text-sm font-extrabold ${connected ? 'text-emerald-600' : 'text-slate-500'}`}>
           {match.opponent?.submitted ? '✅ ' : connected ? '🟢 ' : '⚪ '}
-          {match.opponent?.submitted ? t('duel.submitted') : connected ? 'Online' : 'Away'}
+          {match.opponent?.submitted ? t('duel.submitted') : connected ? t('duel.online') : t('duel.away')}
         </span>
       </div>
     </div>
@@ -181,7 +181,7 @@ const DuelRoom = ({ match, challenge, challengeLoading, busy, notice, onSubmit, 
           <>
             <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
               <div>
-                <p className="text-xs font-extrabold uppercase tracking-wide text-indigo-600">{match.modeName} · {match.difficulty}</p>
+                <p className="text-xs font-extrabold uppercase tracking-wide text-indigo-600">{t(`duel.mode.${match.mode}`)} · {t(`duel.${match.difficulty}`)}</p>
                 <h2 className="font-display text-2xl sm:text-3xl text-slate-800">{challenge.title}</h2>
               </div>
               <button type="button" className="btn-secondary text-xs" onClick={onLeave}>{t('duel.cancel')}</button>
@@ -193,7 +193,7 @@ const DuelRoom = ({ match, challenge, challengeLoading, busy, notice, onSubmit, 
             ) : (
               <>
                 {challenge.grid && (
-                  <pre className="mb-4 inline-block rounded-xl bg-slate-900 p-3 font-mono text-sm text-emerald-300" aria-label="Maze map">
+                  <pre className="mb-4 inline-block rounded-xl bg-slate-900 p-3 font-mono text-sm text-emerald-300" aria-label={t('duel.mazeMap')}>
                     {challenge.grid.join('\n')}
                   </pre>
                 )}

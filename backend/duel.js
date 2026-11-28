@@ -42,12 +42,12 @@ const BADGES = [
   [102, 'Bug Hunter', 'Win a Bug Busters duel.', '🐞', 40],
   [103, 'Speed Coder', 'Score 80+ in under 30 seconds.', '⚡', 50],
   [104, 'Logic Master', 'Score 90+ in a Code Quiz.', '🧠', 50],
-  [105, 'Creative Genius', 'Impress the AI referee in a creative duel.', '🎨', 60],
+  [105, 'Creative Genius', 'Coming soon - creative duels with an AI referee.', '🎨', 60],
   [106, 'Perfect Programmer', 'Score 100 in any duel.', '💯', 60],
   [107, 'Comeback Champion', 'Win after a weak first attempt.', '🔥', 50],
-  [108, 'Team Player', 'Win a team battle.', '🤝', 40],
+  [108, 'Team Player', 'Win a duel against a friend.', '🤝', 40],
   [109, 'Consistency King', 'Play 5 duels and win 3.', '👑', 70],
-  [110, 'Tournament Champion', 'Win a knockout tournament.', '🥇', 100],
+  [110, 'Tournament Champion', 'Coming soon - knockout tournaments.', '🥇', 100],
   [111, 'Master Debugger', 'Score 90+ in Bug Busters.', '🔧', 60],
 ];
 
@@ -57,7 +57,8 @@ function ensureBadges() {
     badgesReady = (async () => {
       for (const [id, name, description, icon, xp] of BADGES) {
         await run(
-          'INSERT OR IGNORE INTO achievements (id, name, description, icon, xp_reward, `condition`) VALUES (?, ?, ?, ?, ?, ?)',
+          `INSERT INTO achievements (id, name, description, icon, xp_reward, \`condition\`) VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET description = excluded.description`,
           [id, name, description, icon, xp, `duel:${id}`],
         );
       }

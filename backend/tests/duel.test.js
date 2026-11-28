@@ -342,3 +342,13 @@ test('friend duel accepts, scores, awards Team Player and can be declined on rem
   const noReward = await dbGet('SELECT * FROM duel_payouts WHERE match_id = ?', [rematch.body.matchId]);
   assert.equal(noReward, undefined, 'a declined invite pays nobody');
 });
+
+test('badge catalogue describes friend wins and marks future badges as coming soon', async () => {
+  const { token } = await child('arena_badge_catalogue');
+  const res = await http('GET', '/api/duels/modes', null, token);
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  const badges = new Map(res.body.achievements.map((b) => [b.id, b]));
+  assert.match(badges.get(105).description, /coming soon/i, 'AI referee badge is not presented as playable');
+  assert.match(badges.get(108).description, /friend/i, 'Team Player description matches how it is earned');
+  assert.match(badges.get(110).description, /coming soon/i, 'tournament badge is not presented as playable');
+});

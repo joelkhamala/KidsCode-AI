@@ -17,7 +17,8 @@ It is separate from the older multiple-choice social duel under `/api/social/due
 Private friend duels follow the same flow. The inviter picks an accepted friend in
 the Arena, the invitee sees it in their Arena inbox, and accepting starts the clock
 for both players. Declining or ignoring an invite pays nobody. Winning a friend duel
-unlocks the `Team Player` badge.
+unlocks the `Team Player` badge. The AI-referee and tournament badges are shown as
+"Coming soon"; those features are not part of this release.
 
 Modes:
 

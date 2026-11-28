@@ -1,6 +1,8 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
+const PERIOD_LABELS = { all: 'duel.periodAll', week: 'duel.periodWeek', month: 'duel.periodMonth' };
+
 export const Leaderboard = ({ board, period, onPeriod }) => {
   const { t } = useTranslation();
   return (
@@ -11,11 +13,11 @@ export const Leaderboard = ({ board, period, onPeriod }) => {
           <p className="text-xs font-semibold text-slate-500">{t('duel.subtitle')}</p>
         </div>
         <fieldset className="flex gap-1 rounded-xl bg-slate-100 p-1">
-          <legend className="sr-only">Period</legend>
-          {['all', 'week', 'month'].map((p) => (
+          <legend className="sr-only">{t('duel.period')}</legend>
+          {Object.entries(PERIOD_LABELS).map(([p, label]) => (
             <button key={p} type="button" aria-pressed={period === p} onClick={() => onPeriod(p)}
               className={`px-3 py-1.5 rounded-lg text-xs font-extrabold ${period === p ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-white'}`}>
-              {p === 'all' ? 'All time' : p === 'week' ? 'This week' : 'This month'}
+              {t(label)}
             </button>
           ))}
         </fieldset>
@@ -26,11 +28,11 @@ export const Leaderboard = ({ board, period, onPeriod }) => {
           <table className="min-w-full text-left text-sm">
             <thead><tr className="text-xs uppercase tracking-wide text-slate-500">
               <th scope="col" className="py-2 pr-4">#</th>
-              <th scope="col" className="py-2 pr-4">Player</th>
-              <th scope="col" className="py-2 pr-4">Rank</th>
-              <th scope="col" className="py-2 pr-4">Rating</th>
-              {period !== 'all' && <th scope="col" className="py-2 pr-4">XP</th>}
-              <th scope="col" className="py-2 pr-4">W-L-T</th>
+              <th scope="col" className="py-2 pr-4">{t('duel.colPlayer')}</th>
+              <th scope="col" className="py-2 pr-4">{t('duel.colRank')}</th>
+              <th scope="col" className="py-2 pr-4">{t('duel.colRating')}</th>
+              {period !== 'all' && <th scope="col" className="py-2 pr-4">{t('duel.colXp')}</th>}
+              <th scope="col" className="py-2 pr-4">{t('duel.colRecord')}</th>
             </tr></thead>
             <tbody>
               {board.map((p) => (
@@ -52,6 +54,10 @@ export const Leaderboard = ({ board, period, onPeriod }) => {
 };
 
 const RESULT_ICON = { won: '🏆', lost: '💪', tie: '🤝', cancelled: '—' };
+const RESULT_LABELS = {
+  won: 'duel.result.won', lost: 'duel.result.lost', tie: 'duel.result.tie',
+  cancelled: 'duel.result.cancelled', queued: 'duel.result.queued', active: 'duel.result.active',
+};
 
 export const History = ({ rows }) => {
   const { t } = useTranslation();
@@ -66,13 +72,13 @@ export const History = ({ rows }) => {
               <span className="flex items-center gap-3">
                 <span className="text-xl" aria-hidden="true">{RESULT_ICON[row.result] || '⏳'}</span>
                 <span>
-                  <span className="block font-extrabold text-slate-800">{row.mode.replace('_', ' ')} · {row.difficulty}</span>
-                  <span className="block text-xs font-semibold text-slate-500">vs {row.opponent || '—'} · {row.finished_at ? new Date(row.finished_at).toLocaleDateString() : 'live'}</span>
+                  <span className="block font-extrabold text-slate-800">{t(`duel.mode.${row.mode}`)} · {t(`duel.${row.difficulty}`)}</span>
+                  <span className="block text-xs font-semibold text-slate-500">{t('duel.vs')} {row.opponent || '—'} · {row.finished_at ? new Date(row.finished_at).toLocaleDateString() : t('duel.live')}</span>
                 </span>
               </span>
               <span className="text-right">
                 <span className="block font-display text-lg text-slate-800">{row.score || 0}</span>
-                <span className="block text-xs font-bold text-indigo-600">{row.result}</span>
+                <span className="block text-xs font-bold text-indigo-600">{t(RESULT_LABELS[row.result] || 'duel.live')}</span>
               </span>
             </li>
           ))}
@@ -92,10 +98,10 @@ export const ArenaProfile = ({ profile }) => {
         <h2 className="font-display text-3xl text-slate-800">#{profile.globalRank} {t('duel.tabProfile')}</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
           {[
-            ['Rating', profile.rating], ['Wins', profile.wins], ['Coins', profile.coins], ['Gems', profile.gems],
+            ['duel.colRating', profile.rating], ['duel.statWins', profile.wins], ['duel.statCoins', profile.coins], ['duel.statGems', profile.gems],
           ].map(([label, value]) => (
             <div key={label} className="rounded-xl bg-slate-50 p-3">
-              <span className="block text-[11px] font-bold uppercase text-slate-500">{label}</span>
+              <span className="block text-[11px] font-bold uppercase text-slate-500">{t(label)}</span>
               <span className="font-display text-xl text-slate-800">{value}</span>
             </div>
           ))}
